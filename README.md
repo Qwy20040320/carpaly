@@ -107,7 +107,7 @@ CarPaly 是 [shihabal3amri/DiPlay](https://github.com/shihabal3amri/DiPlay) 的�
 ## APK 下载与安装
 
 - **GitHub Releases：**[打开发布页](https://github.com/Qwy20040320/carpaly/releases)
-- 当前仓库没有已发布的正式 APK Release。CI 生成的是开发/诊断构建产物，不是稳定下载渠道，也不代表车型实测结果。
+- 当前已有 [v0.1.1 预览版](https://github.com/Qwy20040320/carpaly/releases/tag/v0.1.1)，唯一的二进制附件为 `CarPaly-XingyueL.apk`。它是 Debug/HUD-test 构建，包名为 `com.shihab.diplay.hudtest`，使用 Android Debug 签名；通过 CI 的 APK 结构和签名检查，但不是生产签名版，也不代表 CarPlay 或车辆功能已实测。
 - **暂无经过实车验证的正式版本。**
 
 ### 安装要求
@@ -216,11 +216,11 @@ CarPaly is a community Android CarPlay receiver derived from [DiPlay](https://gi
 - USB and Wi-Fi receiver paths, media/audio handling, and generic CarPlay cluster-related code are present, but no Geely in-car integration is confirmed.
 - The read-only diagnostic center, opt-in bounded logs, filtering, redaction, and user-triggered ZIP export are implemented and covered by software tests.
 - Reverse-camera/360 takeover and Geely-specific HUD integration are not implemented.
-- A debug/HUD-test APK can be built and signature-checked; it has not been installed or validated in a Geely vehicle.
+- Release [v0.1.1](https://github.com/Qwy20040320/carpaly/releases/tag/v0.1.1) provides `CarPaly-XingyueL.apk`, a Debug/HUD-test build signed with an Android debug key; CI verifies its package structure and signature. It has not been installed or validated in a Geely vehicle and is not a production-signed release.
 
 ### Download and setup
 
-See [GitHub Releases](https://github.com/Qwy20040320/carpaly/releases). There is no verified production release yet: **暂无经过实车验证的正式版本。** The project requires Android API 25 or later. For source builds, use JDK 25, Gradle Wrapper 9.5, Android SDK Platform 37, and NDK 28.2.13676358, then run:
+Download the [v0.1.1 preview APK](https://github.com/Qwy20040320/carpaly/releases/tag/v0.1.1) from [GitHub Releases](https://github.com/Qwy20040320/carpaly/releases). It is a Debug/HUD-test build, not production-signed and not vehicle-validated: **暂无经过实车验证的正式版本。** The project requires Android API 25 or later. For source builds, use JDK 25, Gradle Wrapper 9.5, Android SDK Platform 37, and NDK 28.2.13676358, then run:
 
 ~~~powershell
 .\gradlew.bat :mobile:assembleDebug
