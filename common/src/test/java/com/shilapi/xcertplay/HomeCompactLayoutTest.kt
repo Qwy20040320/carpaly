@@ -2,6 +2,7 @@ package com.shilapi.xcertplay
 
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.TextView
 import com.shilapi.xcertplay.host.R
 import org.junit.Assert.*
@@ -39,7 +40,7 @@ class HomeCompactLayoutTest {
         root.layout(0, 0, width, height)
         fun text(id: Int) = descendants(root).filterIsInstance<TextView>()
             .single { it.text == activity.getString(id) }
-        val connect = text(R.string.connect_phone)
+        val connect = ReflectionHelpers.getField<Button>(activity, "connectButton")
         val usb = text(R.string.connect_with_usb)
         val connectPosition = IntArray(2).also(connect::getLocationOnScreen)
         val usbPosition = IntArray(2).also(usb::getLocationOnScreen)

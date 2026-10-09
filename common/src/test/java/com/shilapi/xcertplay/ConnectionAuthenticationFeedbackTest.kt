@@ -28,6 +28,7 @@ class ConnectionAuthenticationFeedbackTest {
             val button = ReflectionHelpers.getField<Button>(activity, "connectButton")
             assertNotNull(button)
             assertTrue("The button must stay actionable to explain the blocker", button.isEnabled)
+            assertEquals(activity.getString(R.string.setup_needs_attention), button.text.toString())
             button.performClick()
 
             val dialog = ShadowAlertDialog.getLatestAlertDialog() as? AlertDialog

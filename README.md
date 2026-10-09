@@ -51,6 +51,7 @@ CarPaly 是 [shihabal3amri/DiPlay](https://github.com/shihabal3amri/DiPlay) 的�
 | --- | --- | --- | --- |
 | 车型自动识别 | 已实现保守的构建身份识别和候选年型映射 | 合成身份规则有单元测试 | **NOT_TESTED** |
 | 手动车型选择 | 已实现候选配置选择与本机持久化 | 未做车机端到端验证 | **NOT_TESTED** |
+| Geely CarPlay 车辆按钮 | 活跃 Geely 配置显示 “Geely” 名称和吉利标志；自定义图标优先，其他配置保留上游图标 | Geely 选择逻辑有单测 | **NOT_TESTED** |
 | 视频显示 | 接收端视频解码/显示代码保留；KX11 配置检查实际视口，不伪造屏幕尺寸 | 有软件级单元/组件测试 | **NOT_TESTED** |
 | 有线 CarPlay | USB、iAP2/USBMux 等接收路径代码存在 | 有协议/组件测试；认证与设备互通未验证 | **NOT_TESTED** |
 | 无线 CarPlay | Wi-Fi/网络发现及连接路径代码存在 | 有网络状态和组件测试 | **NOT_TESTED** |
@@ -215,6 +216,7 @@ CarPaly is a community Android CarPlay receiver derived from [DiPlay](https://gi
 ### Current status
 
 - Candidate model-year profiles, conservative build-identity detection, and manual profile selection are implemented.
+- An active Geely profile selects the “Geely” vehicle label and Geely return icon; user-selected icons retain priority. This UI has not been validated in a Geely vehicle.
 - USB and Wi-Fi receiver paths, media/audio handling, and generic CarPlay cluster-related code are present, but no Geely in-car integration is confirmed.
 - The read-only diagnostic center, opt-in bounded logs, filtering, redaction, and user-triggered ZIP export are implemented and covered by software tests.
 - Reverse-camera/360 takeover and Geely-specific HUD integration are not implemented.

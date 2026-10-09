@@ -790,9 +790,15 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         card.addView(label(getString(R.string.wireless_carplay), 12, ACCENT, true).apply { letterSpacing = .12f })
         status = label(getString(R.string.ready_when_you_are), 24, TEXT, true).apply { setPadding(0, dp(10), 0, dp(16)) }
         card.addView(status)
-        connectButton = homeButton(getString(R.string.connect_phone), true) {
-            if (CarPlayBackgroundSession.hasSession()) openProjection()
-            else connect(true)
+        connectButton = homeButton(
+            getString(if (setupError != null) R.string.setup_needs_attention else R.string.connect_phone),
+            true,
+        ) {
+            when {
+                setupError != null -> showAuthenticationSetupError()
+                CarPlayBackgroundSession.hasSession() -> openProjection()
+                else -> connect(true)
+            }
         }
         card.addView(connectButton, matchButton(height = if (compact) 54 else 68))
         val connectionHint = when (AirPlayPersistence.loadWirelessHotspotMode(this)) {
@@ -4595,8 +4601,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             DiPlayPreferences.phoneAddress(this) != null -> "${getString(R.string.status_ready_for_prefix)}${DiPlayPreferences.phoneName(this)}"
             else -> getString(R.string.ready_when_you_are)
         }
+        connectButton?.text = when {
+            setupError != null -> getString(R.string.setup_needs_attention)
+            running -> getString(R.string.open_carplay)
+            else -> getString(R.string.connect_phone)
+        }
         if (lastRunning != running) {
-            connectButton?.text = if (running) getString(R.string.open_carplay) else getString(R.string.connect_phone)
             disconnectButton?.visibility = if (running) View.VISIBLE else View.GONE
             disconnectButton?.isEnabled = true
             lastRunning = running

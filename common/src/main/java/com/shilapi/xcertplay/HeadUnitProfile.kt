@@ -73,7 +73,7 @@ internal object GeelyXingyueLProfile {
     const val VIEWPORT_HEIGHT = 720
     const val CARPLAY_MANUFACTURER = "Geely"
     const val CARPLAY_MODEL = "Xingyue L"
-    const val CARPLAY_OEM_LABEL = "GEELY"
+    const val CARPLAY_OEM_LABEL = "Geely"
 
     /** The app must use its actual window dimensions; the profile must never fabricate a 1920 x 720 surface. */
     fun matchesViewport(width: Int, height: Int): Boolean =

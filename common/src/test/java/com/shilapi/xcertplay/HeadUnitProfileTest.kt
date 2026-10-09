@@ -29,6 +29,7 @@ class HeadUnitProfileTest {
     }
 
     @Test fun `only the active Geely profile selects the Geely CarPlay icon`() {
+        assertEquals("Geely", GeelyXingyueLProfile.CARPLAY_OEM_LABEL)
         assertTrue(CarPlayVehicleBranding.usesGeelyIcon(HeadUnitProfile.GEELY_XINGYUE_L))
         assertFalse(CarPlayVehicleBranding.usesGeelyIcon(HeadUnitProfile.AUTOMATIC))
         assertFalse(CarPlayVehicleBranding.usesGeelyIcon(HeadUnitProfile.GENERIC))
