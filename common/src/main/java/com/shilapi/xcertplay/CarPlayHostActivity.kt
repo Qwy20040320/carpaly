@@ -10,6 +10,7 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.SurfaceTexture
@@ -101,6 +102,7 @@ import com.shilapi.xcertplay.transport.IphoneUsbMatcher
 import com.shilapi.xcertplay.transport.UsbDeviceId
 import com.shilapi.xcertplay.transport.VehicleSpeedLocationProvider
 import java.io.File
+import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.ArrayDeque
 import java.util.Date
@@ -3784,9 +3786,26 @@ class CarPlayHostActivity : ComponentActivity() {
         return AirPlayIcon(bounds.outWidth, bounds.outHeight, encoded)
     }
 
-    private fun defaultAirPlayIconBytes(): ByteArray =
-        // Shown in CarPlay's app list as the "back to the car" button.
-        resources.openRawResource(R.raw.ic_car_home).use { it.readBytes() }
+    private fun defaultAirPlayIconBytes(): ByteArray {
+        // The default app-list icon is shown as CarPlay's "back to the car" button.
+        if (!CarPlayVehicleBranding.usesGeelyIcon(activeHeadUnitProfile)) {
+            return resources.openRawResource(R.raw.ic_car_home).use { it.readBytes() }
+        }
+        val bitmap = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888)
+        return try {
+            resources.getDrawable(R.drawable.ic_geely_auto_2023, theme)
+                .apply { setBounds(0, 0, bitmap.width, bitmap.height) }
+                .draw(Canvas(bitmap))
+            ByteArrayOutputStream().use { output ->
+                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) {
+                    "Could not encode the Geely CarPlay icon"
+                }
+                output.toByteArray()
+            }
+        } finally {
+            bitmap.recycle()
+        }
+    }
 
     private fun updateAirPlayIconPreview() {
         val preview = iconPreviewView ?: return
@@ -3798,8 +3817,15 @@ class CarPlayHostActivity : ComponentActivity() {
                 AirPlayPersistence.clearCustomAirPlayIcon(this)
             }
         }
-        val bitmap = customBitmap ?: BitmapFactory.decodeResource(resources, R.raw.placeholder_icon)
-        preview.setImageBitmap(bitmap)
+        if (customBitmap != null) {
+            preview.setImageBitmap(customBitmap)
+        } else {
+            preview.setImageResource(if (CarPlayVehicleBranding.usesGeelyIcon(activeHeadUnitProfile)) {
+                R.drawable.ic_geely_auto_2023
+            } else {
+                R.raw.ic_car_home
+            })
+        }
         iconStatusView?.text =
             if (customBitmap != null) getString(R.string.custom_1_1_icon) else getString(R.string.default_placeholder_icon)
     }

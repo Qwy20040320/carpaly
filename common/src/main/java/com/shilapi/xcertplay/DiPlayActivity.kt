@@ -4361,9 +4361,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun carButtonControls(parent: LinearLayout) {
         val custom = AirPlayPersistence.loadCustomAirPlayIconFile(this)?.let { BitmapFactory.decodeFile(it.absolutePath) }
+        val geelyBranding = CarPlayVehicleBranding.usesGeelyIcon(HeadUnitProfile.active(this))
+        val defaultIcon = if (geelyBranding) R.drawable.ic_geely_auto_2023 else R.raw.ic_car_home
         val preview = row().apply { gravity = Gravity.CENTER_VERTICAL }
         preview.addView(ImageView(this).apply {
-            setImageBitmap(custom ?: BitmapFactory.decodeResource(resources, R.raw.ic_car_home))
+            if (custom != null) setImageBitmap(custom) else setImageResource(defaultIcon)
             scaleType = ImageView.ScaleType.CENTER_CROP
             background = rounded(SURFACE, BORDER)
             clipToOutline = true
@@ -4386,7 +4388,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             refreshCarButton()
             carButtonSaved()
         }, matchButton(10, 60))
-        val name = AirPlayPersistence.loadOemLabel(this)
+        val name = if (geelyBranding) GeelyXingyueLProfile.CARPLAY_OEM_LABEL
+            else AirPlayPersistence.loadOemLabel(this)
         parent.addView(button("${getString(R.string.car_button_name)} · $name", false) {
             textInput(getString(R.string.car_button_name), name, secret = false) {
                 AirPlayPersistence.saveOemLabel(this, it)

@@ -79,3 +79,9 @@ internal object GeelyXingyueLProfile {
     fun matchesViewport(width: Int, height: Int): Boolean =
         width == VIEWPORT_WIDTH && height == VIEWPORT_HEIGHT
 }
+
+/** Preserve the upstream vehicle icon except when a Geely receiver profile is actually selected. */
+internal object CarPlayVehicleBranding {
+    fun usesGeelyIcon(profile: HeadUnitProfile?): Boolean =
+        profile == HeadUnitProfile.GEELY_XINGYUE_L
+}

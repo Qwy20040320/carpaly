@@ -28,6 +28,13 @@ class HeadUnitProfileTest {
         assertFalse(GeelyXingyueLProfile.matchesViewport(3840, 720))
     }
 
+    @Test fun `only the active Geely profile selects the Geely CarPlay icon`() {
+        assertTrue(CarPlayVehicleBranding.usesGeelyIcon(HeadUnitProfile.GEELY_XINGYUE_L))
+        assertFalse(CarPlayVehicleBranding.usesGeelyIcon(HeadUnitProfile.AUTOMATIC))
+        assertFalse(CarPlayVehicleBranding.usesGeelyIcon(HeadUnitProfile.GENERIC))
+        assertFalse(CarPlayVehicleBranding.usesGeelyIcon(null))
+    }
+
     @Test fun `vehicle adapter never identifies KX11 from screen or platform evidence alone`() {
         val platformOnly = GeelyVehicleAdapter.detect(GeelyVehicleEvidence(
             manufacturer = "Geely", brand = "Geely", product = "ivi", model = "unknown",

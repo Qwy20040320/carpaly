@@ -202,6 +202,8 @@ Debug APK 输出位置：mobile/build/outputs/apk/debug/mobile-debug.apk。该�
 
 项目主体按 [GNU GPL-3.0](LICENSE) 发布，并保留原 DiPlay 项目的版权与许可信息。第三方组件和资源可能采用不同条款；请同时查看仓库中的许可证与 NOTICE 文件。BYD HUD 图标资源尤其采用单独的 PolyForm Noncommercial 许可，见 shared/src/main/assets/byd-hud-icons/LICENSE-BYDMate.txt 和 NOTICE.txt；这些资源不因项目主体采用 GPL-3.0 而重新许可。
 
+Geely CarPlay 返回图标采用 [Geely Auto 2023 标志](https://commons.wikimedia.org/wiki/File:Geely_Auto_2023.svg)制作；该文件页将其列为 PD-textlogo，同时提示可能存在商标等其他限制。此标志仅用于标识接收端品牌兼容性，CarPaly 不隶属或获吉利官方认可。
+
 感谢 [DiPlay](https://github.com/shihabal3amri/DiPlay) 原作者和贡献者。CarPaly 与 Apple、吉利、ECARX 及 BYD 均无官方隶属关系。
 
 ---
@@ -231,3 +233,5 @@ Logging is off by default and is never uploaded automatically. Exported diagnost
 ### License and support
 
 The project code is GPL-3.0; third-party components/assets may have separate terms. See [LICENSE](LICENSE) and the relevant NOTICE files. Report bugs or request features through [GitHub Issues](https://github.com/Qwy20040320/carpaly/issues/new/choose).
+
+The Geely CarPlay return icon is adapted from [Geely Auto 2023.svg](https://commons.wikimedia.org/wiki/File:Geely_Auto_2023.svg), which its file page lists as PD-textlogo and notes may still have trademark restrictions. It identifies receiver-brand compatibility only; CarPaly is not affiliated with or endorsed by Geely.
