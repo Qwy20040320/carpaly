@@ -2,6 +2,7 @@ name: Android checks
 on:
   push:
     branches: [main, 'feature/**']
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 permissions:
@@ -74,3 +75,69 @@ jobs:
             samples/maphost/build/outputs/apk/debug/*.apk
             apk-sha256.txt
             apk-metadata.txt
+  release:
+    name: Publish verified CarPaly APK
+    needs: check
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: debug-apks-and-sha256
+          path: dist
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: build-tools;36.0.0
+      - name: Verify the main app APK
+        id: apk
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "Release tags must use vMAJOR.MINOR.PATCH (for example v0.1.1)." >&2
+            exit 1
+          }
+          apk="dist/mobile/build/outputs/apk/debug/mobile-debug.apk"
+          test -s "$apk"
+          unzip -tq "$apk"
+          build_tools="$ANDROID_HOME/build-tools/36.0.0"
+          "$build_tools/apksigner" verify --verbose --print-certs "$apk"
+          badging="$("$build_tools/aapt" dump badging "$apk")"
+          grep -Fq "package: name='com.shihab.diplay.hudtest'" <<<"$badging"
+          grep -Fq "package: name='com.shihab.diplay.hudtest'" dist/apk-metadata.txt
+          expected_sha="$(awk '$2 == "mobile/build/outputs/apk/debug/mobile-debug.apk" { print $1 }' dist/apk-sha256.txt)"
+          actual_sha="$(sha256sum "$apk" | awk '{ print $1 }')"
+          test -n "$expected_sha"
+          test "$expected_sha" = "$actual_sha"
+          size="$(stat -c '%s' "$apk")"
+          if (( size > 50 * 1024 * 1024 )); then
+            echo "APK is larger than the 50 MiB release ceiling ($size bytes)." >&2
+            exit 1
+          fi
+          if (( size > 30 * 1024 * 1024 )); then
+            echo "::warning::APK exceeds the 30 MiB target ($size bytes)."
+          fi
+          release_dir="$RUNNER_TEMP/carpaly-release"
+          mkdir -p "$release_dir"
+          release_apk="$release_dir/CarPaly-XingyueL.apk"
+          cp "$apk" "$release_apk"
+          test "$(sha256sum "$release_apk" | awk '{ print $1 }')" = "$actual_sha"
+          echo "path=$release_apk" >> "$GITHUB_OUTPUT"
+          echo "sha256=$actual_sha" >> "$GITHUB_OUTPUT"
+          echo "size=$size" >> "$GITHUB_OUTPUT"
+      - name: Create or safely update GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          APK_PATH: ${{ steps.apk.outputs.path }}
+          APK_SHA256: ${{ steps.apk.outputs.sha256 }}
+          APK_SIZE: ${{ steps.apk.outputs.size }}
+        run: bash .github/scripts/publish-apk-release.sh
