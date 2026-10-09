@@ -6,6 +6,9 @@ plugins {
 // Optional local-only input. CI and ordinary source builds contain no accessory identity.
 val localAuthenticationAssets = providers.environmentVariable("DIPLAY_AUTH_ASSETS_DIR")
     .orNull?.let { file(it).canonicalFile }
+val gitCommit = providers.exec {
+    commandLine("git", "rev-parse", "--short=12", "HEAD")
+}.standardOutput.asText.map { it.trim() }
 
 android {
     namespace = "com.shilapi.xcertplay"
@@ -19,6 +22,7 @@ android {
         targetSdk = 37
         versionCode = 34
         versionName = "0.2.15"
+        buildConfigField("String", "GIT_COMMIT", "\"${gitCommit.get()}\"")
 
     }
 
@@ -55,6 +59,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

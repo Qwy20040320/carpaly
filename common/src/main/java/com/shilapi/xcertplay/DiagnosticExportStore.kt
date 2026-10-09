@@ -11,6 +11,7 @@ import androidx.annotation.RequiresApi
 import androidx.core.content.FileProvider
 import java.io.File
 import java.io.IOException
+import java.io.OutputStream
 
 /** Saves an app-owned report without depending on an OEM's document-picker activity. */
 internal object DiagnosticExportStore {
@@ -40,6 +41,78 @@ internal object DiagnosticExportStore {
             // A missing, read-only or full external volume must not prevent export.
         }
         return saveInDirectory(context, File(context.filesDir, "diagnostic-reports"), fileName, report, savedInApp = true)
+    }
+
+    /** Saves a user-requested ZIP when an OEM has no working SAF document picker. */
+    fun saveArchiveWithoutPicker(context: Context, fileName: String, writeArchive: (OutputStream) -> Unit): SavedReport {
+        require(fileName.matches(Regex("[A-Za-z0-9_.-]{1,120}\\.zip")) && ".." !in fileName) {
+            "Invalid export file name"
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                val uri = saveArchiveToDownloads(context.contentResolver, fileName, writeArchive)
+                return SavedReport(uri)
+            } catch (_: Exception) {
+                // Fall back to a package-owned directory when the OEM Downloads provider is absent.
+            }
+        }
+        val externalFiles = runCatching { context.getExternalFilesDir(null) }.getOrNull()
+        if (externalFiles != null) {
+            runCatching { return saveArchiveInDirectory(context, File(externalFiles, "diagnostic-reports"), fileName, writeArchive) }
+        }
+        return saveArchiveInDirectory(context, File(context.filesDir, "diagnostic-reports"), fileName, writeArchive, savedInApp = true)
+    }
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun saveArchiveToDownloads(resolver: ContentResolver, fileName: String,
+        writeArchive: (OutputStream) -> Unit): Uri {
+        val values = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+            put(MediaStore.Downloads.MIME_TYPE, "application/zip")
+            put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/CarPaly")
+            put(MediaStore.Downloads.IS_PENDING, 1)
+        }
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            ?: throw IOException("Downloads could not create the archive")
+        try {
+            val stream = resolver.openOutputStream(uri, "w") ?: throw IOException("Downloads output is unavailable")
+            stream.use(writeArchive)
+            val published = resolver.update(uri, ContentValues().apply {
+                put(MediaStore.Downloads.IS_PENDING, 0)
+            }, null, null)
+            if (published != 1) throw IOException("Downloads could not publish the archive")
+            return uri
+        } catch (error: Exception) {
+            runCatching { resolver.delete(uri, null, null) }
+            throw error
+        }
+    }
+
+    private fun saveArchiveInDirectory(context: Context, directory: File, fileName: String,
+        writeArchive: (OutputStream) -> Unit,
+        savedInApp: Boolean = false): SavedReport {
+        if (!directory.isDirectory && !directory.mkdirs()) throw IOException("Archive storage is unavailable")
+        val target = uniqueArchiveFile(directory, fileName)
+        try {
+            target.outputStream().use(writeArchive)
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.diagnostic-reports", target)
+            directory.listFiles()?.filter { it != target && it.isFile && it.extension.equals("zip", ignoreCase = true) }
+                ?.sortedByDescending { it.lastModified() }?.drop(7)?.forEach { it.delete() }
+            return SavedReport(uri, savedInApp = savedInApp, savedPath = if (savedInApp) null else target.absolutePath)
+        } catch (error: Exception) {
+            target.delete()
+            throw error
+        }
+    }
+
+    private fun uniqueArchiveFile(directory: File, fileName: String): File {
+        val base = fileName.removeSuffix(".zip")
+        var index = 0
+        while (true) {
+            val candidate = File(directory, if (index == 0) fileName else "$base-$index.zip")
+            if (!candidate.exists()) return candidate
+            index++
+        }
     }
 
     private fun saveInDirectory(

@@ -689,4 +689,11 @@
     <string name="setup_badge_adb">Requiere ADB por red</string>
     <string name="setup_done_title">Todo listo</string>
     <string name="setup_done_description">Conecta tu iPhone ahora. Puedes volver a abrir esta guía desde Ajustes.</string>
+    <string name="head_unit_profile">Perfil de unidad principal</string>
+    <string name="head_unit_profile_automatic">Automático</string>
+    <string name="head_unit_profile_generic">Unidad principal Android genérica</string>
+    <string name="head_unit_profile_geely_xingyue_l">Geely Xingyue L / KX11</string>
+    <string name="head_unit_profile_description">El perfil Xingyue L usa la geometría publicada de la pantalla central de 1920 × 720, 300 mm de ancho físico, pantalla completa, H.264 y 60 fps. No accede a datos del vehículo, al cuadro de instrumentos ni a los mandos. Vuelve a conectar CarPlay tras cambiarlo.</string>
+    <string name="geely_kx11_candidate_profile">Perfil candidato Geely KX11</string>
+    <string name="geely_kx11_detection_evidence">Detección KX11: %1$s · %2$s</string>
 </resources>

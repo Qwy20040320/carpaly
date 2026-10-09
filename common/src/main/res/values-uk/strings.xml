@@ -701,4 +701,11 @@
     <string name="setup_badge_adb">Потрібен ADB через мережу</string>
     <string name="setup_done_title">Усе готово</string>
     <string name="setup_done_description">Під’єднайте iPhone зараз. Цей майстер можна знову відкрити в налаштуваннях.</string>
+    <string name="head_unit_profile">Профіль головного пристрою</string>
+    <string name="head_unit_profile_automatic">Автоматично</string>
+    <string name="head_unit_profile_generic">Універсальний головний пристрій Android</string>
+    <string name="head_unit_profile_geely_xingyue_l">Geely Xingyue L / KX11</string>
+    <string name="head_unit_profile_description">Профіль Xingyue L використовує опубліковану геометрію центрального екрана 1920 × 720, фізичну ширину 300 мм, повний екран, H.264 і 60 кадрів/с. Він не звертається до даних автомобіля, панелі приладів або органів керування. Після зміни перепідключіть CarPlay.</string>
+    <string name="geely_kx11_candidate_profile">Профіль-кандидат Geely KX11</string>
+    <string name="geely_kx11_detection_evidence">Виявлення KX11: %1$s · %2$s</string>
 </resources>

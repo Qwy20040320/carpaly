@@ -10,7 +10,7 @@ internal object AsyncDiagnosticLog {
     private val writer = BoundedDiagnosticWriter<Entry> { it.target.append(it.line) }
 
     fun append(target: SessionLogFile?, message: String, nowMillis: Long = System.currentTimeMillis()) {
-        if (target == null) return
+        if (target == null || !target.isLoggingEnabled()) return
         val safe = DiagnosticRedactor.redact(message) ?: return
         val timestamp = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date(nowMillis))
         runCatching { writer.enqueue(Entry(target, "$timestamp  $safe")) }

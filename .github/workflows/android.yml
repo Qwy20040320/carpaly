@@ -1,7 +1,7 @@
 name: Android checks
 on:
   push:
-    branches: [main]
+    branches: [main, 'feature/**']
   pull_request:
   workflow_dispatch:
 permissions:
@@ -12,8 +12,17 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Reject credential files in public source
         run: python3 scripts/check_public_tree.py
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+      - name: Scan complete Git history for secrets
+        run: |
+          go install github.com/zricethezav/gitleaks/v8@v8.30.0
+          "$(go env GOPATH)/bin/gitleaks" git --redact .
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -36,3 +45,32 @@ jobs:
             samples/home/build/reports/tests/
             samples/home/build/reports/lint-results-debug.html
             samples/maphost/build/reports/lint-results-debug.html
+      - name: Verify APK signatures and Android package metadata
+        if: success()
+        run: |
+          set -euo pipefail
+          build_tools="$ANDROID_HOME/build-tools/36.0.0"
+          : > apk-metadata.txt
+          mapfile -d '' apks < <(find mobile samples/home samples/maphost -path '*/build/outputs/apk/debug/*.apk' -type f -print0 | sort -z)
+          test "${#apks[@]}" -gt 0
+          for apk in "${apks[@]}"; do
+            "$build_tools/apksigner" verify --verbose "$apk"
+            echo "APK: $apk" | tee -a apk-metadata.txt
+            "$build_tools/aapt" dump badging "$apk" | sed -n '1,2p' | tee -a apk-metadata.txt
+          done
+      - name: Calculate debug APK SHA-256
+        if: success()
+        run: |
+          find mobile samples/home samples/maphost -path '*/build/outputs/apk/debug/*.apk' -type f -print0 | sort -z | xargs -0 -r sha256sum | tee apk-sha256.txt
+          test -s apk-sha256.txt
+      - name: Debug APKs and checksums
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-apks-and-sha256
+          path: |
+            mobile/build/outputs/apk/debug/*.apk
+            samples/home/build/outputs/apk/debug/*.apk
+            samples/maphost/build/outputs/apk/debug/*.apk
+            apk-sha256.txt
+            apk-metadata.txt

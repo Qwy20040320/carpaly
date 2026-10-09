@@ -749,4 +749,11 @@
     <string name="setup_badge_adb">需要网络 ADB</string>
     <string name="setup_done_title">准备就绪</string>
     <string name="setup_done_description">现在连接你的 iPhone。之后可在设置中再次打开本向导。</string>
+    <string name="head_unit_profile">车机配置</string>
+    <string name="head_unit_profile_automatic">自动</string>
+    <string name="head_unit_profile_generic">通用 Android 车机</string>
+    <string name="head_unit_profile_geely_xingyue_l">吉利星越 L / KX11</string>
+    <string name="head_unit_profile_description">星越 L 配置使用已公布的 1920 × 720 中控屏几何尺寸、300 mm 物理宽度、全屏、H.264 和 60 fps。它不会访问车辆数据、仪表盘或车辆控制。更改后请重新连接 CarPlay。</string>
+    <string name="geely_kx11_candidate_profile">吉利 KX11 候选车型配置</string>
+    <string name="geely_kx11_detection_evidence">KX11 识别：%1$s · %2$s</string>
 </resources>

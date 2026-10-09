@@ -689,4 +689,11 @@
     <string name="setup_badge_adb">يتطلب ADB عبر الشبكة</string>
     <string name="setup_done_title">أنت جاهز</string>
     <string name="setup_done_description">اتصل بـ iPhone الآن. يمكنك فتح هذا الدليل مرة أخرى من الإعدادات.</string>
+    <string name="head_unit_profile">ملف تعريف وحدة الرأس</string>
+    <string name="head_unit_profile_automatic">تلقائي</string>
+    <string name="head_unit_profile_generic">وحدة رأس Android عامة</string>
+    <string name="head_unit_profile_geely_xingyue_l">جيلي Xingyue L / KX11</string>
+    <string name="head_unit_profile_description">يستخدم ملف Xingyue L أبعاد الشاشة الوسطية المنشورة 1920 × 720، وعرضاً فعلياً 300 مم، ووضع ملء الشاشة وH.264 و60 إطار/ث. ولا يصل إلى بيانات المركبة أو لوحة العدادات أو عناصر التحكم. أعد توصيل CarPlay بعد تغييره.</string>
+    <string name="geely_kx11_candidate_profile">ملف مرشح Geely KX11</string>
+    <string name="geely_kx11_detection_evidence">اكتشاف KX11: %1$s · %2$s</string>
 </resources>

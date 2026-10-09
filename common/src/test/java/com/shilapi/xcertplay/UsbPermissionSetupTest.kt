@@ -8,6 +8,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.CopyOnWriteArrayList
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -193,9 +194,34 @@ class UsbPermissionSetupTest {
     )
 
     private fun runShell(script: String): String {
-        val process = ProcessBuilder("sh", "-c", script).redirectErrorStream(true).start()
+        // The command is POSIX shell syntax. Linux CI runs it directly; Windows-only builds skip
+        // these contract tests when no POSIX shell is installed instead of failing with Win32
+        // ERROR_FILE_NOT_FOUND before the command is exercised.
+        val shell = posixShell() ?: run {
+            assumeTrue("POSIX shell is required for this command-contract test", false)
+            error("unreachable")
+        }
+        val process = ProcessBuilder(shell, "-c", script).redirectErrorStream(true).start()
         assertTrue(process.waitFor(3, TimeUnit.SECONDS))
         return process.inputStream.bufferedReader().readText()
+    }
+
+    private fun posixShell(): String? {
+        val candidates = listOfNotNull(
+            System.getenv("SHELL"),
+            "C:/Program Files/Git/usr/bin/sh.exe",
+            "C:/msys64/usr/bin/sh.exe",
+            "sh",
+        )
+        return candidates.firstOrNull { candidate ->
+            runCatching {
+                val process = ProcessBuilder(candidate, "-c", "printf '%s' __carpaly_posix_probe__")
+                    .redirectErrorStream(true)
+                    .start()
+                process.waitFor(2, TimeUnit.SECONDS) && process.exitValue() == 0 &&
+                    process.inputStream.bufferedReader().readText() == "__carpaly_posix_probe__"
+            }.getOrDefault(false)
+        }
     }
 
     private class FakeClient : UsbPermissionSetup.Client {

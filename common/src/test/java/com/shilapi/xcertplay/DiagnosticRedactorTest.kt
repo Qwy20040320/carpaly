@@ -74,22 +74,37 @@ class DiagnosticRedactorTest {
             assertNull(line, DiagnosticRedactor.redact(line))
         }
     }
+    @Test fun localFilesystemPathsAreRedactedBeforeLogsCanBeExported() {
+        val safe = DiagnosticRedactor.redact("log header path=C:\\Users\\Alice\\AppData\\CarPaly\\logs\\diplay.log")!!
+        assertTrue(safe.contains("[local-path]"))
+        assertFalse(safe.contains("Alice"))
+    }
     @Test fun stateTransitionsSurviveWithoutAddressesOrIdentifiers() {
         val line = DiagnosticRedactor.redact("connected peer=C0:A6:00:29:58:0A ip=192.168.31.71 id=0123456789abcdef0123456789abcdef ipv6=fe80::1234:5678:abcd:9%p2p0")!!
         assertTrue(line.contains("connected"))
         assertFalse(line.contains("C0:A6")); assertFalse(line.contains("192.168")); assertFalse(line.contains("012345")); assertFalse(line.contains("fe80"))
     }
+    @Test fun vehicleAndPersonalIdentifiersAreRemovedFromExportableLines() {
+        assertNull(DiagnosticRedactor.redact("vehicle VIN=1HGCM82633A004352 read failed"))
+        assertNull(DiagnosticRedactor.redact("phone_number=+1-202-555-0147"))
+        val safe = DiagnosticRedactor.redact("trace id 490154203237518 email=not-exported@example.org")
+        assertNull("sensitive field assignment must drop the entire line", safe)
+        val unlabelled = DiagnosticRedactor.redact("observed vehicle 1HGCM82633A004352 contact 202-555-0147")!!
+        assertFalse(unlabelled.contains("1HGCM82633A004352"))
+        assertFalse(unlabelled.contains("202-555-0147"))
+    }
     @Test fun logRotationIsBoundedAndRedactionHappensBeforeDisk() {
         val folder = Files.createTempDirectory("diplay-log-test").toFile()
         try {
-            val log = SessionLogFile(folder.resolve("diplay.log"))
+            val maxFileBytes = 8 * 1024L
+            val log = SessionLogFile(folder.resolve("diplay.log"), maxFileBytes = maxFileBytes)
             log.reset("started")
             log.append("password=secret")
             repeat(1600) { log.append("connection state " + "x".repeat(690)) }
             log.append("CarPlay connected")
             log.close()
-            assertTrue(folder.resolve("diplay.log").length() <= SessionLogFile.MAX_BYTES + 701)
-            assertTrue(folder.resolve("previous.log").length() <= SessionLogFile.MAX_BYTES + 701)
+            assertTrue(folder.resolve("diplay.log").length() <= maxFileBytes)
+            assertTrue(folder.resolve("previous.log").length() <= maxFileBytes)
             assertTrue(folder.resolve("diplay.log").readText().contains("CarPlay connected"))
             assertFalse(folder.listFiles()!!.any { it.readText().contains("secret") })
         } finally { folder.deleteRecursively() }
@@ -104,9 +119,10 @@ class DiagnosticRedactorTest {
                     it.append("password=secret")
                 }
             }
-            val history = SessionLogFile.REPORT_NAMES.map { folder.resolve(it).readText() }
-            assertEquals(8, folder.listFiles()!!.size)
-            assertTrue(history.first().contains("session=2"))
+            val history = SessionLogFile.REPORT_NAMES.filter { folder.resolve(it).isFile }
+                .map { folder.resolve(it).readText() }
+            assertEquals(10, folder.listFiles()!!.size)
+            assertTrue(history.first().contains("session=0"))
             assertTrue(history.last().contains("session=9"))
             assertTrue(history.any { it.contains("rejected code=0") })
             assertFalse(history.any { it.contains("secret") })

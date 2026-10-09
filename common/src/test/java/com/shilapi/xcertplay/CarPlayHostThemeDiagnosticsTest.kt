@@ -48,6 +48,7 @@ class CarPlayHostThemeDiagnosticsTest {
     @Test fun undefinedSignalKeepsThePreviousModeAndIsRecordedWithoutASend() {
         refresh(Configuration.UI_MODE_TYPE_CAR, ThemeModeDiagnostics.Source.POLL)
         commands.runAll()
+        assertTrue(AsyncDiagnosticLog.awaitIdle(2_000))
 
         assertEquals(true, getField("darkMode"))
         assertTrue(logFile.readText().contains("reported=undefined applied=dark sessionActive=false"))
@@ -61,6 +62,7 @@ class CarPlayHostThemeDiagnosticsTest {
         commands.runAll()
         refresh(Configuration.UI_MODE_NIGHT_NO, ThemeModeDiagnostics.Source.POLL)
         commands.runAll()
+        assertTrue(AsyncDiagnosticLog.awaitIdle(2_000))
 
         assertEquals(false, getField("darkMode"))
         verify(session, times(1)).setNightMode(false)
@@ -80,6 +82,7 @@ class CarPlayHostThemeDiagnosticsTest {
         refresh(Configuration.UI_MODE_NIGHT_NO, ThemeModeDiagnostics.Source.CALLBACK)
         refresh(Configuration.UI_MODE_NIGHT_YES, ThemeModeDiagnostics.Source.CALLBACK)
         commands.runAll()
+        assertTrue(AsyncDiagnosticLog.awaitIdle(2_000))
         assertEquals(false, getField("darkMode"))
         verify(session, times(1)).setNightMode(false)
         verify(session, times(0)).setNightMode(true)

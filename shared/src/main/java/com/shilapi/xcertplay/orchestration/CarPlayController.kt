@@ -21,6 +21,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.provider.Settings
 import android.util.Log
+import com.shilapi.xcertplay.VideoFrameRateTracker
 import com.shilapi.xcertplay.airplay.AirPlayListenerIdentity
 import com.shilapi.xcertplay.airplay.AirPlayTcpAccepted
 import com.shilapi.xcertplay.airplay.AirPlayConfig
@@ -1554,6 +1555,8 @@ class CarPlayController(
             override fun onVideoFrameRendered(session: AirPlaySession) {
                 if (isStaleWirelessRun(generation) || activeSession !== session) return
                 if (!watchdog.sessionEstablished()) return
+                // This callback is per rendered frame; the UI callback below is first-frame only.
+                VideoFrameRateTracker.recordFrame(android.os.SystemClock.elapsedRealtime())
                 wirelessConnectionProof.rendered(generation, session)
                 val firstFrame = synchronized(this) {
                     if (reportedFrameSession === session) false else {

@@ -23,6 +23,7 @@ class CarPlayConnectionDiagnosticLogTest {
 
     @Before fun prepareOldControllerListener() {
         activity = Robolectric.buildActivity(CarPlayHostActivity::class.java).get()
+        DiagnosticLogManager.setEnabled(activity, true)
         activity.javaClass.getDeclaredMethod("initializeSessionLog").apply { isAccessible = true }.invoke(activity)
         activity.javaClass.getDeclaredField("restartGeneration").apply { isAccessible = true }.set(activity, 2)
         listener = activity.javaClass.getDeclaredMethod("createSessionListener", Int::class.javaPrimitiveType)
@@ -37,6 +38,7 @@ class CarPlayConnectionDiagnosticLogTest {
             (activity.javaClass.getDeclaredField(field).apply { isAccessible = true }
                 .get(activity) as ExecutorService).shutdownNow()
         }
+        DiagnosticLogManager.setEnabled(activity, false)
     }
 
     @Test fun oldTeardownEvidenceSurvivesWithoutAcceptingOtherOldControllerLogs() {

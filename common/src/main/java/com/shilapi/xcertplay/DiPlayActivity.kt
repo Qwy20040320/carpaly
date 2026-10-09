@@ -83,6 +83,7 @@ internal enum class SettingsCategory {
 /** A settings card. Every entry needs one category in [SettingsInformationArchitecture]; see AGENTS.md. */
 internal enum class SettingsSection {
     CARPLAY_CONTROLS,
+    GEELY_DIAGNOSTICS,
     WHEEL_KEYS,
     CONNECTION_SETUP,
     DIAGNOSTICS,
@@ -116,6 +117,7 @@ internal object SettingsInformationArchitecture {
         SettingsCategory.NAVIGATION to setOf(SettingsSection.LOCATION, SettingsSection.BYD_NAVIGATION),
         SettingsCategory.VEHICLE to setOf(
             SettingsSection.CARPLAY_CONTROLS,
+            SettingsSection.GEELY_DIAGNOSTICS,
             SettingsSection.WHEEL_KEYS,
             SettingsSection.CAR_BUTTON,
         ),
@@ -1410,8 +1412,57 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun allSettingsSections(content: LinearLayout) {
+        filteredSection(content, SettingsSection.GEELY_DIAGNOSTICS,
+            "吉利车机诊断中心", R.drawable.ic_dp_diagnostics) { card ->
+            card.addView(label("只读检查星越 L 接收端状态；不会访问车辆总线或读取车辆识别码。", 14, MUTED))
+            card.addView(button("打开吉利车机诊断中心", false) {
+                startActivity(Intent(this, GeelyDiagnosticCenterActivity::class.java))
+            }, matchButton(12, 60))
+        }
         filteredSection(content, SettingsSection.CARPLAY_CONTROLS,
             getString(R.string.carplay_controls), R.drawable.ic_dp_controls) { card ->
+            val profiles = HeadUnitProfile.entries
+            choice(
+                card,
+                getString(R.string.head_unit_profile),
+                profiles.map { profile -> getString(when (profile) {
+                    HeadUnitProfile.AUTOMATIC -> R.string.head_unit_profile_automatic
+                    HeadUnitProfile.GENERIC -> R.string.head_unit_profile_generic
+                    HeadUnitProfile.GEELY_XINGYUE_L -> R.string.head_unit_profile_geely_xingyue_l
+                }) },
+                profiles.indexOf(HeadUnitProfile.selected(this)),
+            ) { index ->
+                val profile = profiles[index]
+                HeadUnitProfile.save(this, profile)
+                if (profile != HeadUnitProfile.GEELY_XINGYUE_L) {
+                    GeelyVehicleAdapter.saveManualProfile(this, null)
+                }
+                markReconnectNeeded()
+                render()
+            }
+            card.addView(label(getString(R.string.head_unit_profile_description), 14, MUTED).apply {
+                setPadding(0, dp(10), 0, dp(10))
+            })
+            val kx11Profiles = listOf<GeelyKx11Profile?>(null) + GeelyKx11Profile.entries
+            choice(
+                card,
+                getString(R.string.geely_kx11_candidate_profile),
+                kx11Profiles.map { profile -> profile?.let(GeelyVehicleAdapter::label)
+                    ?: getString(R.string.head_unit_profile_automatic) },
+                kx11Profiles.indexOf(GeelyVehicleAdapter.manualProfile(this)).coerceAtLeast(0),
+            ) { index ->
+                val profile = kx11Profiles[index]
+                GeelyVehicleAdapter.saveManualProfile(this, profile)
+                if (profile != null) HeadUnitProfile.save(this, HeadUnitProfile.GEELY_XINGYUE_L)
+                markReconnectNeeded()
+                render()
+            }
+            val detection = GeelyVehicleAdapter.currentBuild()
+            card.addView(label(getString(
+                R.string.geely_kx11_detection_evidence,
+                detection.confidence.name,
+                detection.evidence.joinToString(" · "),
+            ), 14, MUTED).apply { setPadding(0, dp(2), 0, dp(10)) })
             val gestureFingers = listOf(2, 3, 4)
             choice(card, getString(R.string.settings_gesture_fingers_label),
                 gestureFingers.map { getString(R.string.settings_gesture_fingers_option, it) },

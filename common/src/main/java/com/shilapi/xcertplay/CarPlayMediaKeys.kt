@@ -66,6 +66,11 @@ internal object CarPlayMediaKeys {
     private val artworkCache = LinkedHashMap<Int, Bitmap?>()
     private var placeholder: Bitmap? = null
 
+    internal data class DiagnosticState(val focusHeld: Boolean, val mediaActive: Boolean)
+
+    @Synchronized
+    fun diagnosticState(): DiagnosticState = DiagnosticState(focusHeld, mediaAudioActive)
+
     @Synchronized
     fun attach(context: Context, next: CarPlayController) {
         if (controller !== next) {
