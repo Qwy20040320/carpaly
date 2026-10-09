@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail CI if credential containers or private-key blocks enter the source tree."""
+"""Reject non-home Markdown, credential containers, and private-key blocks in the public tree."""
 from pathlib import Path
 import re
 import subprocess
@@ -11,6 +11,9 @@ private_block = re.compile(rb'-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----\s+[A-Z
 failures = []
 for name in filter(None, names):
     path = root / name
+    if path.suffix.lower() == '.md' and name != 'README.md':
+        failures.append(name)
+        continue
     if not path.is_file():
         continue
     if '.private' in path.relative_to(root).parts or path.suffix.lower() in blocked_suffixes:
