@@ -38,7 +38,7 @@
     <string name="clipboard_usage_access">Доступ DiPlay до даних використання</string>
     <string name="report_clip_label">Діагностичний звіт</string>
     <string name="share_diagnostic_report">Поділитися діагностичним звітом</string>
-    <string name="setup_error_auth">Не вдалося завантажити автентифікацію CarPlay. Установіть повну збірку DiPlay поверх цього застосунку. Видаляти його чи змінювати точку доступу не потрібно.</string>
+    <string name="setup_error_auth">У цій збірці CarPaly немає доступних ресурсів автентифікації MFi. Перезбирайте застосунок лише з матеріалами, які дозволено використовувати; облікові дані не витягуються з інших APK. Див. Налаштування → Діагностика.</string>
     <string name="hotspot_state_stopped">зупинено</string>
     <string name="hotspot_state_off">вимкнено</string>
     <string name="hotspot_wireless_prefix">Бездротова точка доступу:\u0020</string>
@@ -308,7 +308,7 @@
     <string name="report_android_location_to_the_iphone">Передавати геопозицію Android на iPhone</string>
     <string name="report_location_to_iphone">Передавати геопозицію на iPhone</string>
     <string name="report_saved_open_it_from_your_file_manager_to_share_it">Звіт збережено. Щоб поділитися ним, відкрийте його у файловому менеджері.</string>
-    <string name="reports_save_to_downloads_diplay">Звіти зберігаються в Downloads/DiPlay.\u0020</string>
+    <string name="reports_save_to_downloads_diplay">Звіти зберігаються в Downloads/CarPaly.\u0020</string>
     <string name="requesting_iphone_usb_permission">Запит дозволу на USB-доступ до iPhone</string>
     <string name="requesting_mfi_usb_permission">Запит дозволу на USB-доступ до MFi</string>
     <string name="reset">Скинути</string>
@@ -708,4 +708,5 @@
     <string name="head_unit_profile_description">Профіль Xingyue L використовує опубліковану геометрію центрального екрана 1920 × 720, фізичну ширину 300 мм, повний екран, H.264 і 60 кадрів/с. Він не звертається до даних автомобіля, панелі приладів або органів керування. Після зміни перепідключіть CarPlay.</string>
     <string name="geely_kx11_candidate_profile">Профіль-кандидат Geely KX11</string>
     <string name="geely_kx11_detection_evidence">Виявлення KX11: %1$s · %2$s</string>
+    <string name="settings_open_diagnostics">Відкрити діагностику та журнали</string>
 </resources>

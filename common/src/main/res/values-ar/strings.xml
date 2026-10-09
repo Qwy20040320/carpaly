@@ -37,7 +37,7 @@
     <string name="clipboard_usage_access">وصول استخدام DiPlay</string>
     <string name="report_clip_label">تقرير التشخيص</string>
     <string name="share_diagnostic_report">مشاركة تقرير التشخيص</string>
-    <string name="setup_error_auth">تعذّر تحميل مصادقة CarPlay. ثبّت نسخة DiPlay الكاملة فوق هذا التطبيق. لا حاجة لإلغاء التثبيت أو تغيير إعدادات نقطة الاتصال.</string>
+    <string name="setup_error_auth">لا تتوفر في بناء CarPaly هذا بيانات اعتماد MFi صالحة. أعد البناء باستخدام مواد مصادقة مخوّلًا باستخدامها فقط؛ لن تُستخرج بيانات الاعتماد من ملفات APK أخرى. راجع الإعدادات ← التشخيص.</string>
     <string name="hotspot_state_stopped">متوقفة</string>
     <string name="hotspot_state_off">مُغلقة</string>
     <string name="hotspot_wireless_prefix">نقطة اتصال لاسلكية:\u0020</string>
@@ -301,7 +301,7 @@
     <string name="report_android_location_to_the_iphone">إرسال موقع Android إلى iPhone</string>
     <string name="report_location_to_iphone">إرسال الموقع إلى iPhone</string>
     <string name="report_saved_open_it_from_your_file_manager_to_share_it">تم حفظ التقرير. افتحه من مدير الملفات لمشاركته.</string>
-    <string name="reports_save_to_downloads_diplay">تُحفظ التقارير في Downloads/DiPlay.\u0020</string>
+    <string name="reports_save_to_downloads_diplay">تُحفظ التقارير في Downloads/CarPaly.\u0020</string>
     <string name="requesting_iphone_usb_permission">جارٍ طلب إذن USB لـ iPhone</string>
     <string name="requesting_mfi_usb_permission">جارٍ طلب إذن USB لـ MFi</string>
     <string name="reset">إعادة ضبط</string>
@@ -696,4 +696,5 @@
     <string name="head_unit_profile_description">يستخدم ملف Xingyue L أبعاد الشاشة الوسطية المنشورة 1920 × 720، وعرضاً فعلياً 300 مم، ووضع ملء الشاشة وH.264 و60 إطار/ث. ولا يصل إلى بيانات المركبة أو لوحة العدادات أو عناصر التحكم. أعد توصيل CarPlay بعد تغييره.</string>
     <string name="geely_kx11_candidate_profile">ملف مرشح Geely KX11</string>
     <string name="geely_kx11_detection_evidence">اكتشاف KX11: %1$s · %2$s</string>
+    <string name="settings_open_diagnostics">فتح التشخيص والسجلات</string>
 </resources>

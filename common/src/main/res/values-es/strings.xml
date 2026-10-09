@@ -37,7 +37,7 @@
     <string name="clipboard_usage_access">Acceso al uso de DiPlay</string>
     <string name="report_clip_label">Informe de diagnóstico</string>
     <string name="share_diagnostic_report">Compartir informe de diagnóstico</string>
-    <string name="setup_error_auth">No se pudo cargar la autenticación de CarPlay. Instala la compilación completa de DiPlay sobre esta aplicación. No es necesario desinstalar ni cambiar la configuración del punto de acceso.</string>
+    <string name="setup_error_auth">Esta compilación de CarPaly no contiene recursos MFi utilizables. Reconstruye solo con materiales de autenticación que tengas autorización para usar; no se extraen credenciales de otros APK. Consulta Ajustes → Diagnóstico.</string>
     <string name="hotspot_state_stopped">detenido</string>
     <string name="hotspot_state_off">apagado</string>
     <string name="hotspot_wireless_prefix">Punto de acceso inalámbrico:\u0020</string>
@@ -301,7 +301,7 @@
     <string name="report_android_location_to_the_iphone">Informar la ubicación de Android al iPhone</string>
     <string name="report_location_to_iphone">Informar la ubicación al iPhone</string>
     <string name="report_saved_open_it_from_your_file_manager_to_share_it">Informe guardado. Ábrelo desde tu gestor de archivos para compartirlo.</string>
-    <string name="reports_save_to_downloads_diplay">Los informes se guardan en Downloads/DiPlay.\u0020</string>
+    <string name="reports_save_to_downloads_diplay">Los informes se guardan en Downloads/CarPaly.\u0020</string>
     <string name="requesting_iphone_usb_permission">Solicitando permiso USB del iPhone</string>
     <string name="requesting_mfi_usb_permission">Solicitando permiso USB de MFi</string>
     <string name="reset">Restablecer</string>
@@ -696,4 +696,5 @@
     <string name="head_unit_profile_description">El perfil Xingyue L usa la geometría publicada de la pantalla central de 1920 × 720, 300 mm de ancho físico, pantalla completa, H.264 y 60 fps. No accede a datos del vehículo, al cuadro de instrumentos ni a los mandos. Vuelve a conectar CarPlay tras cambiarlo.</string>
     <string name="geely_kx11_candidate_profile">Perfil candidato Geely KX11</string>
     <string name="geely_kx11_detection_evidence">Detección KX11: %1$s · %2$s</string>
+    <string name="settings_open_diagnostics">Abrir diagnóstico y registros</string>
 </resources>

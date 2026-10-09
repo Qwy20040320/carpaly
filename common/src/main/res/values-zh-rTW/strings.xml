@@ -36,7 +36,7 @@
     <string name="clipboard_usage_access">DiPlay 使用狀況存取權限</string>
     <string name="report_clip_label">診斷報告</string>
     <string name="share_diagnostic_report">分享診斷報告</string>
-    <string name="setup_error_auth">無法載入 CarPlay 認證。請在此 App 上覆蓋安裝完整的 DiPlay 建置版本。無需解除安裝或變更熱點設定。</string>
+    <string name="setup_error_auth">此 CarPaly 建置沒有可用的 MFi 認證資源。請僅使用你有權使用的認證材料重新建置；不會從其他 APK 擷取憑證。請查看「設定 → 診斷」。</string>
     <string name="hotspot_state_stopped">已停止</string>
     <string name="hotspot_state_off">已關閉</string>
     <string name="hotspot_wireless_prefix">無線熱點：</string>
@@ -308,7 +308,7 @@
     <string name="report_android_location_to_the_iphone">向 iPhone 回報 Android 位置</string>
     <string name="report_location_to_iphone">向 iPhone 回報位置</string>
     <string name="report_saved_open_it_from_your_file_manager_to_share_it">報告已儲存。在檔案管理器中開啟即可分享。</string>
-    <string name="reports_save_to_downloads_diplay">報告會儲存至 Downloads/DiPlay。</string>
+    <string name="reports_save_to_downloads_diplay">報告會儲存至 Downloads/CarPaly。</string>
     <string name="requesting_iphone_usb_permission">正在要求 iPhone USB 權限</string>
     <string name="requesting_mfi_usb_permission">正在要求 MFi USB 權限</string>
     <string name="reset">重設</string>
@@ -756,4 +756,5 @@
     <string name="head_unit_profile_description">星越 L 設定檔使用已公布的 1920 × 720 中控螢幕幾何尺寸、300 mm 實體寬度、全螢幕、H.264 與 60 fps。它不會存取車輛資料、儀表板或車輛控制。變更後請重新連線 CarPlay。</string>
     <string name="geely_kx11_candidate_profile">吉利 KX11 候選車型設定檔</string>
     <string name="geely_kx11_detection_evidence">KX11 識別：%1$s · %2$s</string>
+    <string name="settings_open_diagnostics">開啟診斷中心與記錄</string>
 </resources>

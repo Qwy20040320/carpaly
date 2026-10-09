@@ -25,6 +25,8 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
@@ -34,6 +36,7 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
+import android.widget.EditText
 import android.widget.GridLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -42,6 +45,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
+import com.shilapi.xcertplay.host.R
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -56,6 +60,10 @@ import kotlin.math.sqrt
  * open CAN/UDS/Vehicle HAL/vendor interfaces, request USB devices, or collect vehicle identifiers.
  */
 class GeelyDiagnosticCenterActivity : ComponentActivity() {
+    internal companion object {
+        const val EXTRA_MFI_AUTH_STATUS = "com.shilapi.xcertplay.extra.MFI_AUTH_STATUS"
+    }
+
     private val handler = Handler(Looper.getMainLooper())
     private val valueViews = linkedMapOf<String, TextView>()
     private var monitoring = false
@@ -80,6 +88,7 @@ class GeelyDiagnosticCenterActivity : ComponentActivity() {
     private lateinit var logHistoryModeButton: Button
     private lateinit var logModuleFilter: Spinner
     private lateinit var logErrorFilter: CheckBox
+    private lateinit var logSearchField: EditText
     private lateinit var wheelStatus: TextView
     private lateinit var micStatus: TextView
     private lateinit var speakerStatus: TextView
@@ -222,10 +231,10 @@ class GeelyDiagnosticCenterActivity : ComponentActivity() {
         }
         val toolbar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         toolbar.addView(button("‹ 返回", false) { finish() }, LinearLayout.LayoutParams(dp(112), dp(52)))
-        toolbar.addView(text("吉利车机诊断中心", 25, 0xfff3f5f8.toInt(), true),
+        toolbar.addView(text("CarPaly 诊断中心", 25, 0xfff3f5f8.toInt(), true),
             LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(18) })
         root.addView(toolbar)
-        root.addView(text("只读取 Android 与 CarPlay 接收端可见信息；车辆总线、VIN、序列号、网络凭据均不读取。", 14, 0xffaab3c2.toInt())
+        root.addView(text("只读取 Android 与 CarPlay 接收端可见信息；车辆总线、VIN、序列号、网络凭据均不读取。导出由你手动发起，不会自动上传。", 14, 0xffaab3c2.toInt())
             .apply { setPadding(dp(8), dp(4), dp(8), dp(12)) })
 
         val controls = GridLayout(this).apply { columnCount = 4 }
@@ -241,7 +250,8 @@ class GeelyDiagnosticCenterActivity : ComponentActivity() {
             renderSnapshot()
             Toast.makeText(this, "Wi-Fi / 蓝牙状态已刷新", Toast.LENGTH_SHORT).show()
         }, gridParams())
-        controls.addView(button("导出诊断 ZIP", false) { prepareExport() }, gridParams())
+        controls.addView(button(getString(R.string.save_diagnostic_report), false) { prepareExport(saveToDownloads = true) }, gridParams())
+        controls.addView(button(getString(R.string.choose_save_location), false) { prepareExport(saveToDownloads = false) }, gridParams())
         controls.addView(button("查看实时日志", false) {
             renderLogHistory()
             renderLogManagement()
@@ -337,6 +347,18 @@ class GeelyDiagnosticCenterActivity : ComponentActivity() {
         }
         filterRow.addView(logErrorFilter)
         logCard.addView(filterRow)
+        logSearchField = EditText(this).apply {
+            hint = "按关键字筛选时间、模块或内容"
+            setSingleLine(true)
+            setTextColor(0xffedf2f8.toInt())
+            setHintTextColor(0xffaab3c2.toInt())
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = renderLogHistory()
+                override fun afterTextChanged(s: Editable?) = Unit
+            })
+        }
+        logCard.addView(logSearchField, LinearLayout.LayoutParams(-1, dp(52)))
         logHistoryModeButton = button("查看全部历史（最多 300 条）", false) {
             showingFullHistory = !showingFullHistory
             logHistoryModeButton.text = if (showingFullHistory) "切回实时日志（最近 30 条）" else "查看全部历史（最多 300 条）"
@@ -469,12 +491,17 @@ class GeelyDiagnosticCenterActivity : ComponentActivity() {
             6 -> "vehicle"
             else -> null
         }
+        val keyword = if (::logSearchField.isInitialized) logSearchField.text.toString().trim() else ""
         val errorPattern = Regex("(?i)error|failed|exception|crash|错误|失败")
         val entries = GeelyDiagnosticHistory.read(this)
             .filter { module == null || it.optString("module") == module }
             .filter { event ->
                 !logErrorFilter.isChecked || event.optString("severity").equals("ERROR", true) ||
                     errorPattern.containsMatchIn(event.optString("message"))
+            }
+            .filter { event ->
+                keyword.isBlank() || listOf("timestamp", "module", "severity", "message")
+                    .any { event.optString(it).contains(keyword, ignoreCase = true) }
             }
         val visible = if (showingFullHistory) entries else entries.takeLast(30)
         logHistoryView.text = visible.joinToString("\n") { event ->
@@ -583,6 +610,7 @@ class GeelyDiagnosticCenterActivity : ComponentActivity() {
             hasSession -> "SESSION_STARTING_OR_STOPPING"
             else -> "DISCONNECTED"
         }
+        val mfiAuthStatus = intent.getStringExtra(EXTRA_MFI_AUTH_STATUS) ?: "UNKNOWN"
         val sessionEvents = JSONArray().apply {
             history.filter { it.optString("module") == "carplay" }.forEach(::put)
             put(JSONObject().apply {
@@ -644,6 +672,7 @@ class GeelyDiagnosticCenterActivity : ComponentActivity() {
         files["carplay_session.json"] = json(mapOf(
             "recorded_at" to recordedAt,
             "source" to "CarPlayBackgroundSession",
+            "mfi_auth_setup_status" to mfiAuthStatus,
             "observed_state" to sessionState,
             "session_present" to hasSession,
             "media_active" to active,
@@ -680,6 +709,12 @@ class GeelyDiagnosticCenterActivity : ComponentActivity() {
             "android_automotive_feature" to if (packageAutomotive) "AVAILABLE" else "NO_DATA",
             "android_car_property_api" to "NOT_TESTED: no privileged vehicle property API is queried",
             "geely_ecarx_api" to "NOT_TESTED: no documented public API/SDK integrated",
+            "headlight_and_day_night" to "NOT_IMPLEMENTED: no authorized headlight-state API integrated",
+            "fuel_and_refueling_inference" to "NOT_IMPLEMENTED: no reliable fuel-level data source",
+            "climate_status_and_control" to "NOT_IMPLEMENTED: no authorized climate API integrated",
+            "ambient_light_status_and_control" to "NOT_IMPLEMENTED: no authorized ambient-light API integrated",
+            "cluster_and_hud" to "NOT_TESTED: no authorized Geely cluster/HUD interface validated",
+            "siri_vehicle_control" to "NOT_IMPLEMENTED: no authorized iPhone-to-vehicle command path",
             "vehicle_bus_access" to "DISABLED: no CAN/UDS/Vehicle HAL/vendor Binder access",
             "events" to JSONArray().apply { history.filter { it.optString("module") == "vehicle" }.forEach(::put) },
         ))
@@ -689,6 +724,7 @@ class GeelyDiagnosticCenterActivity : ComponentActivity() {
             "# CarPaly 吉利车机诊断摘要",
             "",
             "- 生成时间（UTC）：$recordedAt",
+            "- MFi 认证资源初始化：$mfiAuthStatus；Apple/iPhone 信任状态：NOT_TESTED",
             "- 车型档案：$activeProfile；实车/具体年款验证：NOT_TESTED",
             "- CarPlay 接收端状态：$sessionState（不代表认证、配对或完整连接能力）",
             "- 扬声器 API 测试：$speakerTestStatus；实际可听效果：NOT_TESTED",
@@ -716,6 +752,12 @@ class GeelyDiagnosticCenterActivity : ComponentActivity() {
             "vehicle" to listOf(
                 "适配档案：$activeProfile", "构建识别：${detection.confidence.name}",
                 "证据：${detection.evidence.joinToString("；").ifBlank { "暂无" }}",
+                "大灯/日夜模式：NOT_IMPLEMENTED · 未接入获授权的大灯状态接口",
+                "油量/续航/加油推断：NOT_IMPLEMENTED · 未取得可靠燃油数据源",
+                "空调读取/控制：NOT_IMPLEMENTED · 未接入获授权的空调接口",
+                "氛围灯读取/控制：NOT_IMPLEMENTED · 未接入获授权的氛围灯接口",
+                "仪表/HUD：NOT_TESTED · 尚无经过验证的吉利接口",
+                "Siri 车辆控制：NOT_IMPLEMENTED · APK 无可用的授权车辆命令通道",
                 "真实车辆/年款验证：NOT_TESTED", "ECARX/车辆总线写入：已禁用",
             ).joinToString("\n"),
             "display" to listOf(
@@ -734,6 +776,7 @@ class GeelyDiagnosticCenterActivity : ComponentActivity() {
                 "不读取 Wi-Fi/蓝牙名称、地址、SSID、密码或配对记录。",
             ).joinToString("\n"),
             "carplay" to listOf(
+                "MFi 认证资源初始化：$mfiAuthStatus（不代表 Apple/iPhone 已信任或 CarPlay 已通过认证）",
                 "会话：${if (active) "OBSERVED · 活跃" else if (hasSession) "OBSERVED · 连接中/停止中" else "NO_DATA · 未连接"}",
                 "传输模式设置：${if (AirPlayPersistence.loadWirelessEnabled(this)) "无线" else "USB（设置值）"}",
                 "Android 音频模式：${audio.mode}；系统报告正在播放：${audio.isMusicActive}",
@@ -763,14 +806,14 @@ class GeelyDiagnosticCenterActivity : ComponentActivity() {
         return matches.takeLast(100)
     }
 
-    private fun prepareExport() {
+    private fun prepareExport(saveToDownloads: Boolean) {
         val snapshot = capture()
         val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
         val filename = "CarPaly-Diagnostic-$stamp.zip"
         pendingExportFilename = filename
         Toast.makeText(this, "正在安全读取最近日志并准备 ZIP…", Toast.LENGTH_SHORT).show()
         Thread({
-            val exportCapture = runCatching {
+            val outcome = runCatching {
                 val files = snapshot.files.toMutableMap()
                 val appLogs = DiagnosticLogManager.exportRecentLogs(applicationContext)
                 files["app_logs.txt"] = appLogs
@@ -782,13 +825,34 @@ class GeelyDiagnosticCenterActivity : ComponentActivity() {
                     .mapNotNull(DiagnosticRedactor::redact).toList()
                 files["errors.txt"] = (priorErrors + sessionErrors).takeLast(100)
                     .ifEmpty { listOf("NO_DATA · 尚无可导出的错误事件") }.joinToString("\n")
-                snapshot.copy(files = files)
-            }.getOrElse { snapshot }
+                val exportCapture = snapshot.copy(files = files)
+                val saved = if (saveToDownloads) {
+                    DiagnosticExportStore.saveArchiveWithoutPicker(applicationContext, filename) { output ->
+                        DiagnosticArchive.write(output, exportCapture.files)
+                    }
+                } else null
+                exportCapture to saved
+            }
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
-                pendingExportCapture = exportCapture
-                runCatching { createZip.launch(filename) }
-                    .onFailure { saveAndOfferShareFallback(filename, exportCapture) }
+                outcome.fold(
+                    { (exportCapture, saved) ->
+                        if (saved == null) {
+                            pendingExportCapture = exportCapture
+                            runCatching { createZip.launch(filename) }
+                                .onFailure { saveAndOfferShareFallback(filename, exportCapture) }
+                        } else {
+                            val location = saved.savedPath
+                                ?: if (saved.savedInApp) "应用私有目录/diagnostic-reports/$filename" else "Downloads/CarPaly/$filename"
+                            DiagnosticLogManager.recordExportLocation(applicationContext, location)
+                            renderLogManagement()
+                            Toast.makeText(this, "诊断报告 ZIP 已保存：$location；不会自动上传。导出后请自行检查隐私内容。", Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    { failure ->
+                        Toast.makeText(this, "诊断 ZIP 保存失败：${failure.javaClass.simpleName}", Toast.LENGTH_LONG).show()
+                    },
+                )
             }
         }, "carpaly-diagnostic-export-prepare").apply { isDaemon = true }.start()
     }

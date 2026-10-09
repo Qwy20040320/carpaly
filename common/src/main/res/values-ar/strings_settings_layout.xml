@@ -22,7 +22,7 @@
     <string name="settings_advanced_media">الفيديو والصوت</string>
     <string name="settings_wheel_keys">أزرار عجلة القيادة</string>
     <string name="settings_experimental_display">الشاشة (تجريبي)</string>
-    <string name="settings_diagnostics_summary">احفظ تقريرًا محليًا عند استكشاف مشكلة في الاتصال</string>
+    <string name="settings_diagnostics_summary">حالة الاستقبال المباشرة والسجلات المحلية وتقرير تشخيص موحّد.</string>
     <string name="settings_full_screen_description">إخفاء شريطي الحالة والتنقل في DiPlay وCarPlay.</string>
     <string name="settings_vehicle_description">تختلف ميزات السيارة ولوحة العدادات حسب الطراز والبرنامج الثابت. راجعها في الإعدادات المتقدمة قبل تفعيل عناصر التحكم التجريبية.</string>
     <string name="settings_open_advanced">فتح الإعدادات المتقدمة</string>

@@ -51,5 +51,9 @@ class SettingsLayoutPolicyTest {
         val assignments = SettingsInformationArchitecture.sectionsByCategory.values.flatten()
         assertEquals(SettingsSection.entries.toSet(), assignments.toSet())
         assertEquals(assignments.toSet().size, assignments.size)
+        assertEquals(setOf(SettingsSection.DIAGNOSTICS),
+            SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.DIAGNOSTICS))
+        assertFalse(SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.VEHICLE)
+            .contains(SettingsSection.DIAGNOSTICS))
     }
 }

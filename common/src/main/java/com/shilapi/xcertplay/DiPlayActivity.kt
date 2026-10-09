@@ -59,6 +59,7 @@ import com.shilapi.xcertplay.network.CarHotspotSettings
 import com.shilapi.xcertplay.network.CarHotspotTethering
 import com.shilapi.xcertplay.network.WifiP2pChannels
 import com.shilapi.xcertplay.orchestration.WirelessHotspotMode
+import com.shilapi.xcertplay.orchestration.MfiTarget
 import com.shilapi.xcertplay.settings.SettingsTheme
 import com.shilapi.xcertplay.settings.SettingsWidgets
 import com.shilapi.xcertplay.setup.DiLinkGeneration
@@ -66,6 +67,7 @@ import com.shilapi.xcertplay.setup.SetupGuide
 import com.shilapi.xcertplay.transport.EvChargingConnectors
 import com.shilapi.xcertplay.update.UpdateCatalog
 import com.shilapi.xcertplay.update.UpdateClient
+import com.shilapi.xcertplay.update.UpdateApkCompatibility
 import com.shilapi.xcertplay.update.UpdateChecksums
 import com.shilapi.xcertplay.update.UpdateRelease
 import com.shilapi.xcertplay.update.UpdateVersion
@@ -83,7 +85,6 @@ internal enum class SettingsCategory {
 /** A settings card. Every entry needs one category in [SettingsInformationArchitecture]; see AGENTS.md. */
 internal enum class SettingsSection {
     CARPLAY_CONTROLS,
-    GEELY_DIAGNOSTICS,
     WHEEL_KEYS,
     CONNECTION_SETUP,
     DIAGNOSTICS,
@@ -117,7 +118,6 @@ internal object SettingsInformationArchitecture {
         SettingsCategory.NAVIGATION to setOf(SettingsSection.LOCATION, SettingsSection.BYD_NAVIGATION),
         SettingsCategory.VEHICLE to setOf(
             SettingsSection.CARPLAY_CONTROLS,
-            SettingsSection.GEELY_DIAGNOSTICS,
             SettingsSection.WHEEL_KEYS,
             SettingsSection.CAR_BUTTON,
         ),
@@ -1412,13 +1412,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun allSettingsSections(content: LinearLayout) {
-        filteredSection(content, SettingsSection.GEELY_DIAGNOSTICS,
-            "吉利车机诊断中心", R.drawable.ic_dp_diagnostics) { card ->
-            card.addView(label("只读检查星越 L 接收端状态；不会访问车辆总线或读取车辆识别码。", 14, MUTED))
-            card.addView(button("打开吉利车机诊断中心", false) {
-                startActivity(Intent(this, GeelyDiagnosticCenterActivity::class.java))
-            }, matchButton(12, 60))
-        }
         filteredSection(content, SettingsSection.CARPLAY_CONTROLS,
             getString(R.string.carplay_controls), R.drawable.ic_dp_controls) { card ->
             val profiles = HeadUnitProfile.entries
@@ -1484,14 +1477,19 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         filteredSection(content, SettingsSection.DIAGNOSTICS,
             getString(R.string.diagnostics), R.drawable.ic_dp_diagnostics) { card ->
-            exportButton = button(if (exportInProgress) getString(R.string.saving_report) else getString(R.string.save_diagnostic_report), false) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) exportDiagnostics()
-                else chooseReportDestination()
-            }.apply { isEnabled = !exportInProgress }
-            card.addView(exportButton, matchButton(10, 60))
-            card.addView(button(getString(R.string.choose_save_location), false) { chooseReportDestination() }, matchButton(10, 60))
-            val destination = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) getString(R.string.reports_save_to_downloads_diplay) else getString(R.string.choose_where_to_save_your_report)
-            card.addView(label(destination + getString(R.string.nothing_is_sent_automatically_protocol_payloads_and_creden), 14, MUTED).apply { setPadding(0, dp(12), 0, 0) })
+            card.addView(label(getString(R.string.settings_diagnostics_summary), 16, MUTED))
+            card.addView(button(getString(R.string.settings_open_diagnostics), true) {
+                val authStatus = when {
+                    setupError != null -> "UNAVAILABLE"
+                    AirPlayPersistence.loadMfiTarget(this) == MfiTarget.LOCAL -> "LOADED_NOT_TRUSTED"
+                    else -> "CONFIGURED_NOT_VERIFIED"
+                }
+                startActivity(Intent(this, GeelyDiagnosticCenterActivity::class.java)
+                    .putExtra(GeelyDiagnosticCenterActivity.EXTRA_MFI_AUTH_STATUS, authStatus))
+            }, matchButton(12, 60))
+            card.addView(label(getString(R.string.reports_save_to_downloads_diplay) +
+                getString(R.string.nothing_is_sent_automatically_protocol_payloads_and_creden), 14, MUTED)
+                .apply { setPadding(0, dp(12), 0, 0) })
         }
         filteredSection(content, SettingsSection.AUTOMATIC_CONNECTION,
             getString(R.string.automatic_connection), R.drawable.ic_dp_automation) { card ->
@@ -2086,8 +2084,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             // Each attempt owns its files, including across activity recreation.
             val directory = File(cacheDir, "update/${java.util.UUID.randomUUID()}")
             val outcome = runCatching {
-                val checksumsFile = File(directory, UpdateCatalog.CHECKSUMS_FILE)
-                UpdateClient.download(release.checksumsUrl, checksumsFile) { _, _ -> }
                 val apkFile = File(directory, release.apkName)
                 UpdateClient.download(release.apkUrl, apkFile) { written, total ->
                     val percent = total?.takeIf { it > 0 }?.let { (written * 100 / it).toInt() } ?: return@download
@@ -2098,11 +2094,18 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 }
                 updateStage = UpdateStage.VERIFYING
                 refreshUpdateUi(generation)
-                val expected = UpdateChecksums.parse(checksumsFile.readText())
                 val actual = UpdateChecksums.sha256Hex(apkFile)
-                if (!UpdateChecksums.matches(expected, release.apkName, actual)) {
+                if (!java.security.MessageDigest.isEqual(
+                        release.sha256.lowercase().toByteArray(Charsets.US_ASCII),
+                        actual.lowercase().toByteArray(Charsets.US_ASCII),
+                    )) {
                     throw IOException("Checksum mismatch for ${release.apkName}")
                 }
+                val installed = UpdateApkCompatibility.inspectInstalled(packageManager, packageName)
+                    ?: throw IOException("Could not inspect the installed application's package signature")
+                val candidate = UpdateApkCompatibility.inspectArchive(packageManager, apkFile)
+                    ?: throw IOException("Downloaded file is not a valid, signed Android APK")
+                UpdateApkCompatibility.incompatibility(installed, candidate)?.let { throw IOException(it) }
                 apkFile
             }.onFailure { directory.deleteRecursively() }
             runOnUiThread {
@@ -2154,7 +2157,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
     }
 
-    private fun userAgent() = "DiPlay/${version()}"
+    private fun userAgent() = "CarPaly/${version()}"
 
     // An opted-in connection prepares the hotspot in the controller instead of stopping at this reminder.
     private fun carHotspotOff(): Boolean =
@@ -4447,7 +4450,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private fun connect(wireless: Boolean) {
         startupHotspotCancelled = true
         if (wireless && pendingCarHotspotSetup) { toast(getString(R.string.save_your_hotspot_details_in_connection_setup_first)); page = "connection"; render(); return }
-        if (setupError != null) { toast(setupError!!); return }
+        if (setupError != null) {
+            showAuthenticationSetupError()
+            return
+        }
         if (wireless && AirPlayPersistence.loadWirelessHotspotMode(this) == WirelessHotspotMode.MANUAL &&
             hotspotError(storedSsid(), storedPassword()) != null) {
             pendingCarHotspotSetup = true
@@ -4476,6 +4482,20 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
     private fun openProjection() {
         startActivity(Intent(this, CarPlayHostActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+    }
+
+    private fun showAuthenticationSetupError() {
+        val message = setupError ?: return
+        appDialogBuilder()
+            .setTitle(getString(R.string.setup_needs_attention))
+            .setMessage(message)
+            .setPositiveButton(getString(R.string.diagnostics)) { _, _ ->
+                page = "settings"
+                settingsCategory = SettingsCategory.DIAGNOSTICS
+                render()
+            }
+            .setNegativeButton(getString(R.string.done), null)
+            .show()
     }
     private fun choosePhone() {
         if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
@@ -4578,7 +4598,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             disconnectButton?.isEnabled = true
             lastRunning = running
         }
-        connectButton?.isEnabled = setupError == null
+        // Keep this actionable even when private MFi assets are missing: tapping it explains the
+        // exact blocker and offers a direct route to diagnostics instead of appearing dead.
+        connectButton?.isEnabled = true
         refreshReconnectBar()
         refreshReadiness()
     }
@@ -4600,7 +4622,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }, "adb-cluster-authorize").start()
     }
 
-    private fun reportFileName() = "DiPlay-${SimpleDateFormat("yyyyMMdd-HHmmss-SSS", Locale.US).format(Date())}.txt"
+    private fun reportFileName() = "CarPaly-${SimpleDateFormat("yyyyMMdd-HHmmss-SSS", Locale.US).format(Date())}.txt"
 
     private fun chooseReportDestination() {
         // Some head units omit or disable DocumentsUI. Launch itself can throw, before
@@ -4618,7 +4640,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         Thread({
             val result = runCatching {
                 val report = buildString {
-                    appendLine("DiPlay ${version()} · private beta diagnostic report")
+                    appendLine("CarPaly ${version()} · diagnostic report")
                     appendLine("Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}")
                     appendLine("Head unit: ${Build.MANUFACTURER} ${Build.MODEL}")
                     appendLine("Connection: ${if (AirPlayPersistence.loadWirelessEnabled(appContext)) "wireless" else "USB"}")
@@ -4704,7 +4726,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                         .setMessage(when {
                             savedReport.savedInApp -> getString(R.string.diagnostic_report_saved_in_app)
                             savedReport.savedPath != null -> getString(R.string.diagnostic_report_saved_to_path, savedReport.savedPath)
-                            uri == null -> "Downloads/DiPlay/$fileName"
+                            uri == null -> "Downloads/CarPaly/$fileName"
                             else -> getString(R.string.your_report_was_saved_to_the_selected_location)
                         })
                         .setPositiveButton(getString(R.string.view_diagnostic_report)) { _, _ -> showDiagnosticReport(report) }

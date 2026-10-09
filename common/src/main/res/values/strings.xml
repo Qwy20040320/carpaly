@@ -37,7 +37,7 @@
     <string name="clipboard_usage_access">DiPlay Usage Access</string>
     <string name="report_clip_label">Diagnostic report</string>
     <string name="share_diagnostic_report">Share diagnostic report</string>
-    <string name="setup_error_auth">CarPlay authentication could not be loaded. Install the complete DiPlay build over this app. No uninstall or hotspot change is needed.</string>
+    <string name="setup_error_auth">This CarPaly build has no usable MFi authentication assets. Rebuild only with authentication materials you are authorized to use; credentials are not extracted from other APKs. See Settings → Diagnostics.</string>
     <string name="hotspot_state_stopped">stopped</string>
     <string name="hotspot_state_off">off</string>
     <string name="hotspot_wireless_prefix">Wireless hotspot:\u0020</string>
@@ -310,7 +310,7 @@
     <string name="report_android_location_to_the_iphone">Report Android location to the iPhone</string>
     <string name="report_location_to_iphone">Report location to iPhone</string>
     <string name="report_saved_open_it_from_your_file_manager_to_share_it">Report saved. Open it from your file manager to share it.</string>
-    <string name="reports_save_to_downloads_diplay">Reports save to Downloads/DiPlay.\u0020</string>
+    <string name="reports_save_to_downloads_diplay">Reports save to Downloads/CarPaly.\u0020</string>
     <string name="requesting_iphone_usb_permission">Requesting iPhone USB permission</string>
     <string name="requesting_mfi_usb_permission">Requesting MFi USB permission</string>
     <string name="reset">Reset</string>
@@ -392,7 +392,8 @@
     <string name="settings_advanced_media">Video and audio</string>
     <string name="settings_wheel_keys">Wheel keys</string>
     <string name="settings_experimental_display">Display (experimental)</string>
-    <string name="settings_diagnostics_summary">Save a local report when troubleshooting a connection</string>
+    <string name="settings_diagnostics_summary">Live receiver status, local logs, and a combined diagnostic report.</string>
+    <string name="settings_open_diagnostics">Open diagnostics and logs</string>
     <string name="settings_full_screen_description">Hide the status and navigation bars in DiPlay and CarPlay.</string>
     <string name="settings_vehicle_description">Vehicle and dashboard features vary by model and firmware. Review them in Advanced settings before enabling experimental controls.</string>
     <string name="settings_open_advanced">Open Advanced settings</string>
