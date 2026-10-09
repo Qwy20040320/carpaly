@@ -110,6 +110,8 @@ jobs:
           "$build_tools/apksigner" verify --verbose --print-certs "$apk"
           badging="$("$build_tools/aapt" dump badging "$apk")"
           grep -Fq "package: name='com.shihab.diplay.hudtest'" <<<"$badging"
+          expected_version="${GITHUB_REF_NAME#v}"
+          grep -Fq "versionName='$expected_version-hud-test'" <<<"$badging"
           grep -Fq "package: name='com.shihab.diplay.hudtest'" dist/apk-metadata.txt
           expected_sha="$(awk '$2 == "mobile/build/outputs/apk/debug/mobile-debug.apk" { print $1 }' dist/apk-sha256.txt)"
           actual_sha="$(sha256sum "$apk" | awk '{ print $1 }')"

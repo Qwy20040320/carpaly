@@ -33,6 +33,12 @@ class UpdateVersionTest {
     }
 
     @Test
+    fun nextCarPalyReleaseTagIsNewerThanTheCurrentHudTestBuild() {
+        assertTrue(UpdateVersion.isNewer("v0.2.16", "0.2.15-hud-test"))
+        assertFalse(UpdateVersion.isNewer("v0.1.1", "0.2.15-hud-test"))
+    }
+
+    @Test
     fun unparseableRemoteVersionIsNeverAnUpdate() {
         assertFalse(UpdateVersion.isNewer("public-preview", "0.2.14"))
     }
