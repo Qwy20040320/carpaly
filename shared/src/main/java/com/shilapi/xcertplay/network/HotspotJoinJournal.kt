@@ -15,6 +15,10 @@ internal class HotspotJoinJournal<C>(directory: File, private val firmware: Stri
     override fun load(): HotspotJoinTransaction.Record<C>? {
         if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) return null
         val bytes = file.openRead().use { it.readBytesBounded(MAX_BYTES) }
+        return decode(bytes)
+    }
+
+    private fun decode(bytes: ByteArray): HotspotJoinTransaction.Record<C> {
         if (bytes.size < 32) throw IOException()
         val body = bytes.copyOf(bytes.size - 32)
         if (!MessageDigest.isEqual(digest(body), bytes.copyOfRange(body.size, bytes.size))) throw IOException()
@@ -54,11 +58,45 @@ internal class HotspotJoinJournal<C>(directory: File, private val firmware: Stri
             syncFile(stream) // AtomicFile can suppress fsync failure; require a throwing sync first.
             file.finishWrite(stream)
         } catch (error: Exception) { file.failWrite(stream); throw error }
-        syncDirectory() // Persist the rename itself, not only the snapshot file contents.
+        val promotedPendingWrite = promotePendingWrite(record)
+        val backup = File(file.baseFile.path + ".bak")
+        if (promotedPendingWrite && backup.exists()) {
+            // Some AtomicFile implementations silently leave a fully synced .new file when the
+            // platform's rename cannot replace an existing base file (notably Windows Robolectric).
+            // Promote it with an explicit backup/rollback sequence; never delete the last good copy
+            // until the replacement directory entry has been synced.
+            syncDirectory()
+            if (!backup.delete()) throw IOException()
+            syncDirectory()
+        } else {
+            syncDirectory()
+        }
         // Verification is mandatory even if an OEM AtomicFile implementation silently fails.
         val saved = load() ?: throw IOException()
         if (saved.token != record.token || saved.stage != record.stage ||
             saved.original != record.original || saved.target != record.target) throw IOException()
+    }
+
+    /**
+     * Finish implementations normally consume `.new`. If they leave it behind, validate that
+     * staged snapshot before promoting it, preserving the current base as `.bak` until the rename
+     * succeeds. A crash at any intermediate point remains recoverable through AtomicFile.
+     */
+    private fun promotePendingWrite(record: HotspotJoinTransaction.Record<C>): Boolean {
+        val pending = File(file.baseFile.path + ".new")
+        if (!pending.exists()) return false
+        val staged = pending.inputStream().use { decode(it.readBytesBounded(MAX_BYTES)) }
+        if (staged.token != record.token || staged.firmware != record.firmware || staged.stage != record.stage ||
+            staged.original != record.original || staged.target != record.target) throw IOException()
+
+        val backup = File(file.baseFile.path + ".bak")
+        if (backup.exists()) throw IOException()
+        if (file.baseFile.exists() && !file.baseFile.renameTo(backup)) throw IOException()
+        if (!pending.renameTo(file.baseFile)) {
+            if (backup.exists()) backup.renameTo(file.baseFile)
+            throw IOException()
+        }
+        return true
     }
 
     private fun InputStream.readBytesBounded(limit: Int): ByteArray {

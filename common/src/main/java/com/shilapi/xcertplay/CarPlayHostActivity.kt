@@ -10,6 +10,7 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.SurfaceTexture
@@ -101,6 +102,7 @@ import com.shilapi.xcertplay.transport.IphoneUsbMatcher
 import com.shilapi.xcertplay.transport.UsbDeviceId
 import com.shilapi.xcertplay.transport.VehicleSpeedLocationProvider
 import java.io.File
+import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.ArrayDeque
 import java.util.Date
@@ -360,6 +362,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private var displayScaleTenths = CarPlayDisplayScale.DEFAULT_TENTHS
     private var uiScalePercent = CarPlayUiScale.DEFAULT
     private var displayDiagnosticAttempt: String? = null
+    private var activeHeadUnitProfile: HeadUnitProfile? = null
     private var hevcEnabled = true
     private var hevcSoftwareDecoderEnabled = false
     private var advancedAudioChannelMappingSupported = false
@@ -641,33 +644,49 @@ class CarPlayHostActivity : ComponentActivity() {
         displayScaleTenths = CarPlayDisplayScale.sanitize((displayScalePercent + 5) / 10)
         // Size is now chosen only through CarPlaySize; ignore the canvas scale older builds stored.
         uiScalePercent = CarPlayUiScale.DEFAULT
-        hevcEnabled = AirPlayPersistence.loadHevcEnabled(this)
-        hevcSoftwareDecoderEnabled =
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
-                AirPlayPersistence.loadHevcSoftwareDecoderEnabled(this)
         advancedAudioChannelMapping =
             advancedAudioChannelMappingSupported &&
                 AirPlayPersistence.loadAdvancedAudioChannelMapping(this)
         navigationStreamType = AirPlayPersistence.loadNavigationStreamType(this)
         debugLogsEnabled = AirPlayPersistence.loadDebugLogsEnabled(this)
         autoStartOnBoot = AirPlayPersistence.loadAutoStartOnBoot(this)
+        loadHeadUnitPresentationSettings()
+        AirPlayPersistence.loadMaximumDetectedDisplay(this).let { (width, height) ->
+            maximumDetectedWidthPixels = width
+            maximumDetectedHeightPixels = height
+        }
+        rightHandDrive = AirPlayPersistence.loadRightHandDrive(this)
+        safeAreaDrawOutside = AirPlayPersistence.loadSafeAreaDrawOutside(this)
+        locationPermissionAvailable = hasFineLocationPermission()
+        loadConnectionSettings()
+        wirelessPermissionsReady = !wirelessEnabled || hasRequiredWirelessPermissions()
+    }
+
+    /** Reloads settings owned by the receiver, including a profile changed in DiPlay's settings activity. */
+    private fun loadHeadUnitPresentationSettings() {
+        activeHeadUnitProfile = HeadUnitProfile.active(this)
+        hevcEnabled = AirPlayPersistence.loadHevcEnabled(this)
+        hevcSoftwareDecoderEnabled =
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                AirPlayPersistence.loadHevcSoftwareDecoderEnabled(this)
         manufacturer = AirPlayPersistence.loadManufacturer(this)
         model = AirPlayPersistence.loadModel(this)
         oemLabel = AirPlayPersistence.loadOemLabel(this)
         fps = AirPlayPersistence.loadFps(this)
         widthPhysicalMm = AirPlayPersistence.loadWidthPhysicalMm(this)
         physicalSizeBasis = AirPlayPersistence.loadPhysicalSizeBasis(this)
-        AirPlayPersistence.loadMaximumDetectedDisplay(this).let { (width, height) ->
-            maximumDetectedWidthPixels = width
-            maximumDetectedHeightPixels = height
-        }
-        rightHandDrive = AirPlayPersistence.loadRightHandDrive(this)
         hideTopBar = AirPlayPersistence.loadHideTopBar(this)
         hideBottomBar = AirPlayPersistence.loadHideBottomBar(this)
-        safeAreaDrawOutside = AirPlayPersistence.loadSafeAreaDrawOutside(this)
-        locationPermissionAvailable = hasFineLocationPermission()
-        loadConnectionSettings()
-        wirelessPermissionsReady = !wirelessEnabled || hasRequiredWirelessPermissions()
+        // Keep this limited to CarPlay receiver presentation. Galaxy OS vehicle, cluster and CAN
+        // interfaces are deliberately not guessed from a model name.
+        if (activeHeadUnitProfile == HeadUnitProfile.GEELY_XINGYUE_L) {
+            manufacturer = GeelyXingyueLProfile.CARPLAY_MANUFACTURER
+            model = GeelyXingyueLProfile.CARPLAY_MODEL
+            oemLabel = GeelyXingyueLProfile.CARPLAY_OEM_LABEL
+            hevcEnabled = false
+            hideTopBar = true
+            hideBottomBar = true
+        }
     }
 
     /**
@@ -752,23 +771,8 @@ class CarPlayHostActivity : ComponentActivity() {
             checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED
         }
 
-    private fun requiredWirelessPermissions(): List<String> = when {
-        wirelessHotspotMode == WirelessHotspotMode.EXISTING_WIFI ->
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) listOf(Manifest.permission.BLUETOOTH_CONNECT) else emptyList()
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> listOf(
-            Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.NEARBY_WIFI_DEVICES,
-        )
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> listOf(
-            Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-        )
-        else -> listOf(
-            Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-        )
-    }
+    private fun requiredWirelessPermissions(): List<String> =
+        WirelessPermissions.required(wirelessHotspotMode, Build.VERSION.SDK_INT)
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -826,7 +830,12 @@ class CarPlayHostActivity : ComponentActivity() {
         nightModeController.resume(systemNight)
         AppAppearanceRuntime.publishHost(this, darkMode)
         refreshAppAppearance()
+        var systemBarsChanged = false
         if (!menuOpen) {
+            val oldHideTopBar = hideTopBar
+            val oldHideBottomBar = hideBottomBar
+            loadHeadUnitPresentationSettings()
+            systemBarsChanged = oldHideTopBar != hideTopBar || oldHideBottomBar != hideBottomBar
             displayScalePercent = AirPlayPersistence.loadDisplayScalePercent(this)
             displayScaleTenths = CarPlayDisplayScale.sanitize((displayScalePercent + 5) / 10)
             updateResolutionMenu()
@@ -875,14 +884,6 @@ class CarPlayHostActivity : ComponentActivity() {
         com.shilapi.xcertplay.hud.BydNavigationOutputs.setTurnOverlayListener(clusterTurnOverlayListener)
         mainHandler.removeCallbacks(refreshTurnOverlay)
         mainHandler.post(refreshTurnOverlay)
-        var systemBarsChanged = false
-        if (!menuOpen) {
-            val savedHideTopBar = AirPlayPersistence.loadHideTopBar(this)
-            val savedHideBottomBar = AirPlayPersistence.loadHideBottomBar(this)
-            systemBarsChanged = hideTopBar != savedHideTopBar || hideBottomBar != savedHideBottomBar
-            hideTopBar = savedHideTopBar
-            hideBottomBar = savedHideBottomBar
-        }
         maybeStartCarPlay()
         applyFullscreenMode()
         if (systemBarsChanged) refreshDisplaySizeAfterLayout()
@@ -3541,6 +3542,13 @@ class CarPlayHostActivity : ComponentActivity() {
         val safeWidth = (size.width / 2 * 2).coerceAtLeast(2)
         val safeHeight = (size.height / 2 * 2).coerceAtLeast(2)
         val alignedSize = DisplaySize(safeWidth, safeHeight)
+        if (activeHeadUnitProfile == HeadUnitProfile.GEELY_XINGYUE_L) {
+            appendLog(
+                "Geely Xingyue L profile: viewport=${alignedSize.width}x${alignedSize.height} " +
+                    "expected=${GeelyXingyueLProfile.VIEWPORT_WIDTH}x${GeelyXingyueLProfile.VIEWPORT_HEIGHT} " +
+                    "matched=${GeelyXingyueLProfile.matchesViewport(alignedSize.width, alignedSize.height)}",
+            )
+        }
         val physical = resolvePhysicalSize(alignedSize)
         val knobPrimary = AndroidTvInputMode.shouldUseKnobAsPrimaryInput(this)
         val baseDisplay = AirPlayDisplayConfig(
@@ -3763,9 +3771,26 @@ class CarPlayHostActivity : ComponentActivity() {
         return AirPlayIcon(bounds.outWidth, bounds.outHeight, encoded)
     }
 
-    private fun defaultAirPlayIconBytes(): ByteArray =
-        // Shown in CarPlay's app list as the "back to the car" button.
-        resources.openRawResource(R.raw.ic_car_home).use { it.readBytes() }
+    private fun defaultAirPlayIconBytes(): ByteArray {
+        // The default app-list icon is shown as CarPlay's "back to the car" button.
+        if (!CarPlayVehicleBranding.usesGeelyIcon(activeHeadUnitProfile)) {
+            return resources.openRawResource(R.raw.ic_car_home).use { it.readBytes() }
+        }
+        val bitmap = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888)
+        return try {
+            resources.getDrawable(R.drawable.ic_geely_auto_2023, theme)
+                .apply { setBounds(0, 0, bitmap.width, bitmap.height) }
+                .draw(Canvas(bitmap))
+            ByteArrayOutputStream().use { output ->
+                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) {
+                    "Could not encode the Geely CarPlay icon"
+                }
+                output.toByteArray()
+            }
+        } finally {
+            bitmap.recycle()
+        }
+    }
 
     private fun updateAirPlayIconPreview() {
         val preview = iconPreviewView ?: return
@@ -3777,8 +3802,15 @@ class CarPlayHostActivity : ComponentActivity() {
                 AirPlayPersistence.clearCustomAirPlayIcon(this)
             }
         }
-        val bitmap = customBitmap ?: BitmapFactory.decodeResource(resources, R.raw.placeholder_icon)
-        preview.setImageBitmap(bitmap)
+        if (customBitmap != null) {
+            preview.setImageBitmap(customBitmap)
+        } else {
+            preview.setImageResource(if (CarPlayVehicleBranding.usesGeelyIcon(activeHeadUnitProfile)) {
+                R.drawable.ic_geely_auto_2023
+            } else {
+                R.raw.ic_car_home
+            })
+        }
         iconStatusView?.text =
             if (customBitmap != null) getString(R.string.custom_1_1_icon) else getString(R.string.default_placeholder_icon)
     }
@@ -3919,11 +3951,7 @@ class CarPlayHostActivity : ComponentActivity() {
             },
             mediaBufferMillis = AirPlayPersistence.loadMediaBufferMillis(this),
             onAudioDiagnostic = { message ->
-                if (message.startsWith("Microphone: ")) {
-                    AsyncDiagnosticLog.append(diagnosticLog, message)
-                } else {
-                    diagnosticLog?.append(formattedLogLine(message, System.currentTimeMillis()))
-                }
+                AsyncDiagnosticLog.append(diagnosticLog, message)
             },
             onMediaAudioChanged = CarPlayMediaKeys::onMediaAudioChanged,
             callEchoCancellation = AirPlayPersistence.loadCallEchoCancellation(this),
@@ -3990,6 +4018,7 @@ class CarPlayHostActivity : ComponentActivity() {
                     }
                     if (controllerGeneration != restartGeneration || startupRetryStopped) return@runOnUiThread
                     startupRetryBudget.disconnected()
+                    VideoFrameRateTracker.reset()
                     activeAirPlaySession = null
                     CarPlayBackgroundSession.active = false
                     if (menuOpen) {
@@ -5006,25 +5035,27 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     private fun appendLog(message: String) {
-        val safe = DiagnosticRedactor.redact(message) ?: return
-        sessionLog?.append(formattedLogLine(safe, System.currentTimeMillis()))
+        AsyncDiagnosticLog.append(sessionLog, message)
     }
 
     private fun appendFileLog(message: String) {
-        sessionLog?.append(formattedLogLine(message, System.currentTimeMillis()))
+        AsyncDiagnosticLog.append(sessionLog, message)
     }
-
-    private fun formattedLogLine(message: String, nowMillis: Long): String =
-        "${SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date(nowMillis))}  $message"
 
     private fun initializeSessionLog() {
         val logFile = File(File(filesDir, "logs"), "diplay.log")
-        val activeLog = SessionLogFile(logFile)
+        val appContext = applicationContext
+        runCatching { DiagnosticLogManager.prune(appContext) }
+        val activeLog = SessionLogFile(
+            logFile,
+            loggingEnabled = { DiagnosticLogManager.isEnabled(appContext) },
+            onRotation = { DiagnosticLogManager.prune(appContext) },
+        )
         runCatching {
             activeLog.reset(
                 "DiPlay log started " +
                     "${SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())} " +
-                    "pid=${Process.myPid()} path=${logFile.absolutePath}",
+                    "pid=${Process.myPid()} app_private_log=true",
             )
         }
         sessionLog = activeLog

@@ -33,6 +33,32 @@ class UpdateVersionTest {
     }
 
     @Test
+    fun nextCarPalyReleaseTagIsNewerThanTheCurrentHudTestBuild() {
+        assertTrue(UpdateVersion.isNewer("v0.2.16", "0.2.15-hud-test"))
+        assertFalse(UpdateVersion.isNewer("v0.1.1", "0.2.15-hud-test"))
+    }
+
+    @Test
+    fun comparesMultiDigitPatchNumbersNumerically() {
+        assertTrue(UpdateVersion.isNewer("1.1.10", "1.1.9"))
+        assertTrue(UpdateVersion.isNewer("1.1.11", "1.1.10"))
+        assertFalse(UpdateVersion.isNewer("1.1.9", "1.1.10"))
+    }
+
+    @Test
+    fun independentCarPalyVersionIsNewerThanLegacyHudTestVersions() {
+        assertTrue(UpdateVersion.isNewer("1.1.4", "0.2.16-hud-test"))
+        assertTrue(UpdateVersion.isNewer("1.1.4", "0.2.15-hud-test"))
+    }
+
+    @Test
+    fun onlyPlainVersionTagsAreReleaseIdentifiers() {
+        assertTrue(UpdateVersion.releaseVersion("v1.1.4") == "1.1.4")
+        assertTrue(UpdateVersion.releaseVersion("v1.1.4-beta.1") == null)
+        assertTrue(UpdateVersion.releaseVersion("1.1.4") == null)
+    }
+
+    @Test
     fun unparseableRemoteVersionIsNeverAnUpdate() {
         assertFalse(UpdateVersion.isNewer("public-preview", "0.2.14"))
     }

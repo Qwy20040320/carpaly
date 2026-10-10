@@ -22,7 +22,7 @@
     <string name="settings_advanced_media">Vídeo y audio</string>
     <string name="settings_wheel_keys">Botones del volante</string>
     <string name="settings_experimental_display">Pantalla (experimental)</string>
-    <string name="settings_diagnostics_summary">Guarda un informe local al resolver problemas de conexión</string>
+    <string name="settings_diagnostics_summary">Estado del receptor en tiempo real, registros locales e informe de diagnóstico combinado.</string>
     <string name="settings_full_screen_description">Oculta las barras de estado y navegación en DiPlay y CarPlay.</string>
     <string name="settings_vehicle_description">Las funciones del vehículo y del cuadro de instrumentos varían según el modelo y el firmware. Revísalas en Ajustes avanzados antes de activar controles experimentales.</string>
     <string name="settings_open_advanced">Abrir ajustes avanzados</string>

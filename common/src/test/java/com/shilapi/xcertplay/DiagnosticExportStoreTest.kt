@@ -33,15 +33,30 @@ class DiagnosticExportStoreTest {
     }
 
     @Test fun android10SavesUtf8ReportToDownloadsAndPublishesAfterClosingIt() {
-        val report = "DiPlay · diagnostic report\nVideo: H.264\n"
-        val uri = DiagnosticExportStore.saveToDownloads(resolver, "DiPlay-test.txt", report)
+        val report = "CarPaly · diagnostic report\nVideo: H.264\n"
+        val uri = DiagnosticExportStore.saveToDownloads(resolver, "CarPaly-test.txt", report)
         assertEquals(provider.uri, uri)
         assertEquals(report, provider.file.readText())
-        assertEquals("Download/DiPlay", provider.insertValues!!.getAsString(MediaStore.Downloads.RELATIVE_PATH))
+        assertEquals("Download/CarPaly", provider.insertValues!!.getAsString(MediaStore.Downloads.RELATIVE_PATH))
         assertEquals("text/plain", provider.insertValues!!.getAsString(MediaStore.Downloads.MIME_TYPE))
         assertEquals(1, provider.insertValues!!.getAsInteger(MediaStore.Downloads.IS_PENDING))
         assertEquals(0, provider.publishValues!!.getAsInteger(MediaStore.Downloads.IS_PENDING))
         assertEquals(report, provider.contentAtPublish)
+        assertFalse(provider.deleted)
+    }
+
+    @Test fun pickerFallbackPublishesZipToCarPalyDownloadsWithArchiveMimeType() {
+        val context = RuntimeEnvironment.getApplication()
+        val archiveBytes = byteArrayOf(0x50, 0x4b, 0x03, 0x04, 0x01, 0x02)
+        val saved = DiagnosticExportStore.saveArchiveWithoutPicker(context, "CarPaly-Diagnostic-20261009-120000.zip") {
+            it.write(archiveBytes)
+        }
+        assertEquals(provider.uri, saved.uri)
+        assertTrue(provider.file.readBytes().contentEquals(archiveBytes))
+        assertEquals("Download/CarPaly", provider.insertValues!!.getAsString(MediaStore.Downloads.RELATIVE_PATH))
+        assertEquals("application/zip", provider.insertValues!!.getAsString(MediaStore.Downloads.MIME_TYPE))
+        assertEquals(1, provider.insertValues!!.getAsInteger(MediaStore.Downloads.IS_PENDING))
+        assertEquals(0, provider.publishValues!!.getAsInteger(MediaStore.Downloads.IS_PENDING))
         assertFalse(provider.deleted)
     }
 
@@ -96,7 +111,7 @@ class DiagnosticExportStoreTest {
         }
         override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
             assertEquals(this.uri, uri)
-            assertEquals("wt", mode)
+            assertTrue("Unexpected provider mode: $mode", mode in setOf("wt", "w"))
             if (denyWrite) throw SecurityException("Test provider refused write")
             return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_CREATE or
                 ParcelFileDescriptor.MODE_WRITE_ONLY or ParcelFileDescriptor.MODE_TRUNCATE)

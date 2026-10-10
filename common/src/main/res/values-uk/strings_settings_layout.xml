@@ -22,7 +22,7 @@
     <string name="settings_advanced_media">Відео та звук</string>
     <string name="settings_wheel_keys">Кнопки на кермі</string>
     <string name="settings_experimental_display">Екран (експериментально)</string>
-    <string name="settings_diagnostics_summary">Збережіть локальний звіт під час усунення проблем із підключенням</string>
+    <string name="settings_diagnostics_summary">Стан приймача наживо, локальні журнали та об’єднаний діагностичний звіт.</string>
     <string name="settings_full_screen_description">Приховувати панелі стану й навігації в DiPlay та CarPlay.</string>
     <string name="settings_vehicle_description">Функції автомобіля та приладової панелі залежать від моделі й прошивки. Перегляньте їх у розділі «Додатково», перш ніж вмикати експериментальні параметри.</string>
     <string name="settings_open_advanced">Відкрити додаткові налаштування</string>

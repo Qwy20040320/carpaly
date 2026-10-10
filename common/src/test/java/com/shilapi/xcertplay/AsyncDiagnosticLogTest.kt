@@ -5,6 +5,29 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AsyncDiagnosticLogTest {
+    @Test fun sessionLoggerStartsDisabledAndHonorsLiveToggleWithoutRecreation() {
+        val folder = Files.createTempDirectory("diplay-toggle-log").toFile()
+        val file = folder.resolve("diplay.log")
+        var enabled = false
+        try {
+            SessionLogFile(file, loggingEnabled = { enabled }).use { log ->
+                log.reset("header")
+                log.append("not recorded")
+                assertFalse(file.exists())
+
+                enabled = true
+                log.append("recorded after opt-in")
+                assertTrue(file.readText().contains("recorded after opt-in"))
+
+                enabled = false
+                log.append("not recorded after opt-out")
+                assertFalse(file.readText().contains("not recorded after opt-out"))
+            }
+        } finally {
+            folder.deleteRecursively()
+        }
+    }
+
     @Test fun queuedEvidenceIsRedactedAndTimestampedBeforeUsingItsCapturedFileTarget() {
         val folder = Files.createTempDirectory("diplay-async-log").toFile()
         val old = SessionLogFile(folder.resolve("old.log"))
