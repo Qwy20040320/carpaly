@@ -2,7 +2,7 @@ name: Android checks
 on:
   push:
     branches: [main, 'feature/**']
-    tags: ['v*']
+    tags: ['v1.*']
   pull_request:
   workflow_dispatch:
 permissions:
@@ -25,7 +25,7 @@ jobs:
           go install github.com/zricethezav/gitleaks/v8@v8.30.0
           "$(go env GOPATH)/bin/gitleaks" git --redact .
       - name: Validate release publisher syntax
-        run: bash -n .github/scripts/publish-apk-release.sh
+        run: bash -n .github/scripts/publish-authenticated-apk-release.sh
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -90,11 +90,12 @@ jobs:
             samples/maphost/build/outputs/apk/debug/*.apk
             apk-sha256.txt
             apk-metadata.txt
-  release:
-    name: Publish verified CarPaly APK
+  authenticated_release:
+    name: Build and publish authenticated CarPaly preview
     needs: check
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v1.')
     runs-on: ubuntu-latest
+    environment: mfi-public-release
     permissions:
       contents: write
     steps:
@@ -102,50 +103,104 @@ jobs:
         with:
           fetch-depth: 1
           persist-credentials: false
-      - uses: actions/download-artifact@v4
-        with:
-          name: debug-apks-and-sha256
-          path: dist
-      - name: Require local MFi assets (source-only APKs must not publish)
-        run: |
-          set -euo pipefail
-          apk="dist/mobile/build/outputs/apk/debug/mobile-debug.apk"
-          test -s "$apk"
-          entries="$(unzip -Z1 "$apk")"
-          for required in assets/offline-mfi/identity.pk8 assets/offline-mfi/certificate.p7b; do
-            if ! grep -Fxq "$required" <<<"$entries"; then
-              echo "Refusing to publish a source-only APK; missing required local MFi asset: $required" >&2
-              exit 1
-            fi
-          done
-      - uses: android-actions/setup-android@v3
-        with:
-          packages: build-tools;36.0.0
-      - name: Verify the main app APK
-        id: apk
+      - name: Require reviewed third-party public-distribution grant
+        env:
+          MFI_PUBLIC_DISTRIBUTION_REVIEWED: ${{ vars.MFI_PUBLIC_DISTRIBUTION_REVIEWED }}
+          MFI_PUBLIC_DISTRIBUTION_AUTHORIZATION_REF: ${{ secrets.MFI_PUBLIC_DISTRIBUTION_AUTHORIZATION_REF }}
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
-            echo "Release tags must use vMAJOR.MINOR.PATCH (for example v0.1.1)." >&2
+          [[ "$MFI_PUBLIC_DISTRIBUTION_REVIEWED" == "true" ]] || {
+            echo "Public authentication-asset release is disabled until a maintainer verifies the original-author grant." >&2
             exit 1
           }
-          apk="dist/mobile/build/outputs/apk/debug/mobile-debug.apk"
+          [[ -n "$MFI_PUBLIC_DISTRIBUTION_AUTHORIZATION_REF" ]] || {
+            echo "The reviewed authorization record reference is not configured." >&2
+            exit 1
+          }
+          [[ "$GITHUB_REF_NAME" == v1.*.* ]] || {
+            echo "Only CarPaly v1.x.y release tags are accepted." >&2
+            exit 1
+          }
+      - name: Set up Java and Android SDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools platforms;android-37.0 build-tools;36.0.0 ndk;28.2.13676358
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Provision protected MFi inputs and stable debug signer
+        env:
+          MFI_IDENTITY_PK8_BASE64: ${{ secrets.MFI_IDENTITY_PK8_BASE64 }}
+          MFI_CERTIFICATE_P7B_BASE64: ${{ secrets.MFI_CERTIFICATE_P7B_BASE64 }}
+          CARPALY_DEBUG_KEYSTORE_BASE64: ${{ secrets.CARPALY_DEBUG_KEYSTORE_BASE64 }}
+          CARPALY_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.CARPALY_DEBUG_KEYSTORE_PASSWORD }}
+          CARPALY_DEBUG_KEY_ALIAS: ${{ secrets.CARPALY_DEBUG_KEY_ALIAS }}
+          CARPALY_DEBUG_KEY_PASSWORD: ${{ secrets.CARPALY_DEBUG_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          : "${MFI_IDENTITY_PK8_BASE64:?MFI_IDENTITY_PK8_BASE64 is not configured}"
+          : "${MFI_CERTIFICATE_P7B_BASE64:?MFI_CERTIFICATE_P7B_BASE64 is not configured}"
+          : "${CARPALY_DEBUG_KEYSTORE_BASE64:?CARPALY_DEBUG_KEYSTORE_BASE64 is not configured}"
+          : "${CARPALY_DEBUG_KEYSTORE_PASSWORD:?CARPALY_DEBUG_KEYSTORE_PASSWORD is not configured}"
+          : "${CARPALY_DEBUG_KEY_ALIAS:?CARPALY_DEBUG_KEY_ALIAS is not configured}"
+          : "${CARPALY_DEBUG_KEY_PASSWORD:?CARPALY_DEBUG_KEY_PASSWORD is not configured}"
+          auth_dir="$RUNNER_TEMP/carpaly-auth-assets"
+          signing_dir="$RUNNER_TEMP/carpaly-signing"
+          mkdir -p "$auth_dir/offline-mfi" "$signing_dir"
+          printf '%s' "$MFI_IDENTITY_PK8_BASE64" | base64 --decode > "$auth_dir/offline-mfi/identity.pk8"
+          printf '%s' "$MFI_CERTIFICATE_P7B_BASE64" | base64 --decode > "$auth_dir/offline-mfi/certificate.p7b"
+          printf '%s' "$CARPALY_DEBUG_KEYSTORE_BASE64" | base64 --decode > "$signing_dir/debug.keystore"
+          chmod 600 "$auth_dir/offline-mfi/identity.pk8" "$auth_dir/offline-mfi/certificate.p7b" "$signing_dir/debug.keystore"
+          test -s "$auth_dir/offline-mfi/identity.pk8"
+          test -s "$auth_dir/offline-mfi/certificate.p7b"
+          test -s "$signing_dir/debug.keystore"
+      - name: Build and verify authenticated standalone debug APK
+        env:
+          DIPLAY_AUTH_ASSETS_DIR: ${{ runner.temp }}/carpaly-auth-assets
+          CARPALY_DEBUG_KEYSTORE_PATH: ${{ runner.temp }}/carpaly-signing/debug.keystore
+          CARPALY_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.CARPALY_DEBUG_KEYSTORE_PASSWORD }}
+          CARPALY_DEBUG_KEY_ALIAS: ${{ secrets.CARPALY_DEBUG_KEY_ALIAS }}
+          CARPALY_DEBUG_KEY_PASSWORD: ${{ secrets.CARPALY_DEBUG_KEY_PASSWORD }}
+        run: ./gradlew :mobile:verifyStandaloneDebugApk --stacktrace
+      - name: Verify APK metadata, signer, auth hashes and release name
+        id: apk
+        env:
+          DIPLAY_AUTH_ASSETS_DIR: ${{ runner.temp }}/carpaly-auth-assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="mobile/build/outputs/apk/debug/mobile-debug.apk"
           test -s "$apk"
           unzip -tq "$apk"
           build_tools="$ANDROID_HOME/build-tools/36.0.0"
           "$build_tools/apksigner" verify --verbose --print-certs "$apk"
+          signer_sha="$("$build_tools/apksigner" verify --print-certs "$apk" | awk -F': ' '/Signer #1 certificate SHA-256 digest/ { print tolower($2); exit }')"
+          expected_signer_sha="7b729b4066beec0f8321963c3c8bc68fbbe2162120845c28263e8cae157bbdc0"
+          [[ "$signer_sha" == "$expected_signer_sha" ]] || {
+            echo "APK signer differs from the locally delivered v1.1.4 debug signer; refusing an incompatible update." >&2
+            exit 1
+          }
           badging="$("$build_tools/aapt" dump badging "$apk")"
           grep -Fq "package: name='com.shihab.diplay.hudtest'" <<<"$badging"
           expected_version="${GITHUB_REF_NAME#v}"
           grep -Fq "versionName='$expected_version'" <<<"$badging"
-          version_code="$(sed -nE "s/.*versionCode='([0-9]+)'.*/\\1/p" <<<"$badging" | head -n 1)"
+          version_code="$(sed -nE "s/.*versionCode='([0-9]+)'.*/\1/p" <<<"$badging" | head -n 1)"
           [[ "$version_code" =~ ^[1-9][0-9]*$ ]]
-          grep -Fq "package: name='com.shihab.diplay.hudtest'" dist/apk-metadata.txt
-          expected_sha="$(awk '$2 == "mobile/build/outputs/apk/debug/mobile-debug.apk" { print $1 }' dist/apk-sha256.txt)"
+          auth_dir="$DIPLAY_AUTH_ASSETS_DIR/offline-mfi"
+          for name in identity.pk8 certificate.p7b; do
+            source_sha="$(sha256sum "$auth_dir/$name" | awk '{ print $1 }')"
+            apk_sha="$(unzip -p "$apk" "assets/offline-mfi/$name" | sha256sum | awk '{ print $1 }')"
+            [[ -n "$source_sha" && "$source_sha" == "$apk_sha" ]] || {
+              echo "Authenticated APK asset mismatch: $name" >&2
+              exit 1
+            }
+          done
           actual_sha="$(sha256sum "$apk" | awk '{ print $1 }')"
-          test -n "$expected_sha"
-          test "$expected_sha" = "$actual_sha"
           size="$(stat -c '%s' "$apk")"
           if (( size > 50 * 1024 * 1024 )); then
             echo "APK is larger than the 50 MiB release ceiling ($size bytes)." >&2
@@ -156,21 +211,37 @@ jobs:
           fi
           release_dir="$RUNNER_TEMP/carpaly-release"
           mkdir -p "$release_dir"
-          release_apk="$release_dir/CarPaly-XingyueL${expected_version}.apk"
+          release_name="CarPaly-XingyueL${expected_version}.apk"
+          release_apk="$release_dir/$release_name"
+          release_checksum="$release_dir/$release_name.sha256"
           cp "$apk" "$release_apk"
+          printf '%s  %s\n' "$actual_sha" "$release_name" > "$release_checksum"
           test "$(sha256sum "$release_apk" | awk '{ print $1 }')" = "$actual_sha"
-          echo "path=$release_apk" >> "$GITHUB_OUTPUT"
+          (cd "$release_dir" && sha256sum --check --status "$release_name.sha256")
+          echo "apk_path=$release_apk" >> "$GITHUB_OUTPUT"
+          echo "checksum_path=$release_checksum" >> "$GITHUB_OUTPUT"
+          echo "apk_name=$release_name" >> "$GITHUB_OUTPUT"
           echo "sha256=$actual_sha" >> "$GITHUB_OUTPUT"
           echo "size=$size" >> "$GITHUB_OUTPUT"
           echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
-      - name: Create or safely update GitHub Release
+      - name: Publish and verify authenticated pre-release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
-          APK_PATH: ${{ steps.apk.outputs.path }}
+          APK_PATH: ${{ steps.apk.outputs.apk_path }}
+          APK_NAME: ${{ steps.apk.outputs.apk_name }}
+          CHECKSUM_PATH: ${{ steps.apk.outputs.checksum_path }}
           APK_SHA256: ${{ steps.apk.outputs.sha256 }}
           APK_SIZE: ${{ steps.apk.outputs.size }}
           APK_VERSION_CODE: ${{ steps.apk.outputs.version_code }}
-        run: bash .github/scripts/publish-apk-release.sh
+        run: bash .github/scripts/publish-authenticated-apk-release.sh
+      - name: Remove local release credentials from runner
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf -- "$RUNNER_TEMP/carpaly-auth-assets" "$RUNNER_TEMP/carpaly-release" \
+            "$RUNNER_TEMP/carpaly-release-remote" "$RUNNER_TEMP/carpaly-release-published" \
+            "$RUNNER_TEMP/carpaly-signing"
