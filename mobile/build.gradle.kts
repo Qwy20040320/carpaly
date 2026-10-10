@@ -9,6 +9,7 @@ import java.security.cert.X509Certificate
 import java.security.interfaces.ECPublicKey
 import java.security.spec.PKCS8EncodedKeySpec
 import java.util.zip.ZipFile
+import org.gradle.api.tasks.Sync
 
 plugins {
     alias(libs.plugins.android.application)
@@ -18,6 +19,15 @@ plugins {
 // Optional local-only input. CI and ordinary source builds contain no accessory identity.
 val localAuthenticationAssets = providers.environmentVariable("DIPLAY_AUTH_ASSETS_DIR")
     .orNull?.let { file(it).canonicalFile }
+val stagedAuthenticationAssets = layout.buildDirectory.dir("generated/authenticationAssets")
+val stageAuthenticationAssets by tasks.registering(Sync::class) {
+    localAuthenticationAssets?.let { inputRoot ->
+        from(inputRoot) {
+            include("offline-mfi/identity.pk8", "offline-mfi/certificate.p7b")
+        }
+    }
+    into(stagedAuthenticationAssets)
+}
 val distributionDebugKeystore = providers.environmentVariable("CARPALY_DEBUG_KEYSTORE_PATH")
     .orNull?.let { file(it).canonicalFile }
 val gitCommit = providers.exec {
@@ -101,7 +111,11 @@ android {
     }
 
 
-    localAuthenticationAssets?.let { sourceSets.getByName("main").assets.directories.add(it.absolutePath) }
+    // Stage only the two selected runtime inputs. DIPLAY_AUTH_ASSETS_DIR may be the repository
+    // root, so never register that parent directory itself as an APK assets source.
+    localAuthenticationAssets?.let {
+        sourceSets.getByName("main").assets.directories.add(stagedAuthenticationAssets.get().asFile.absolutePath)
+    }
 
     signingConfigs {
         create("release") {
@@ -172,9 +186,12 @@ val rejectBundledCredentials by tasks.registering {
     group = "verification"
     description = "Reject unexpected credential files in APK assets."
     val filesToCheck = credentialAssets
-    val allowed = localAuthenticationAssets?.let { dir ->
-        listOf("identity.pk8", "certificate.p7b").map { dir.resolve("offline-mfi/$it").canonicalFile }.toSet()
+    val allowed = localAuthenticationAssets?.let {
+        listOf("identity.pk8", "certificate.p7b")
+            .map { name -> stagedAuthenticationAssets.get().file("offline-mfi/$name").asFile.canonicalFile }
+            .toSet()
     } ?: emptySet()
+    if (localAuthenticationAssets != null) dependsOn(stageAuthenticationAssets)
     inputs.files(filesToCheck)
     doLast {
         check(allowed.all { it.isFile }) { "Explicit local authentication assets are incomplete" }
@@ -188,23 +205,28 @@ tasks.named("preBuild") { dependsOn(rejectBundledCredentials) }
 val verifyStandaloneAuthentication by tasks.registering {
     group = "verification"
     description = "Require the explicit runtime authentication input for a standalone car-test APK."
+    notCompatibleWithConfigurationCache("Validates local authentication material without serializing it into the configuration cache.")
     val directory = localAuthenticationAssets
     doLast {
         check(directory != null) {
             "Standalone car builds require DIPLAY_AUTH_ASSETS_DIR; assembleDebug alone is source-only."
         }
+        val authDirectory = directory.resolve("offline-mfi")
         val expectedPaths = setOf(
             "offline-mfi/identity.pk8",
             "offline-mfi/certificate.p7b",
         )
-        val actualPaths = directory.walkTopDown()
+        check(authDirectory.isDirectory && !Files.isSymbolicLink(authDirectory.toPath())) {
+            "Authentication asset directory must contain an offline-mfi folder"
+        }
+        val actualPaths = authDirectory.walkTopDown()
             .filter { it.isFile || Files.isSymbolicLink(it.toPath()) }
             .map { it.relativeTo(directory).invariantSeparatorsPath }
             .toSet()
         check(actualPaths == expectedPaths) {
             "Authentication asset directory must contain exactly identity.pk8 and certificate.p7b"
         }
-        check(directory.walkTopDown().none { Files.isSymbolicLink(it.toPath()) }) {
+        check(authDirectory.walkTopDown().none { Files.isSymbolicLink(it.toPath()) }) {
             "Authentication asset directory cannot contain symbolic links"
         }
         verifyMfiIdentity(directory)
@@ -213,7 +235,9 @@ val verifyStandaloneAuthentication by tasks.registering {
         )
     }
 }
-tasks.named("preBuild") { mustRunAfter(verifyStandaloneAuthentication) }
+if (localAuthenticationAssets != null) {
+    tasks.named("preBuild") { dependsOn(verifyStandaloneAuthentication) }
+}
 tasks.register("assembleStandaloneDebug") {
     group = "build"
     description = "Build a standalone car-test APK with explicitly provisioned authentication."
@@ -223,6 +247,7 @@ tasks.register("assembleStandaloneDebug") {
 tasks.register("verifyStandaloneDebugApk") {
     group = "verification"
     description = "Build a standalone authenticated debug APK and verify both embedded identity assets."
+    notCompatibleWithConfigurationCache("Validates local authentication material without serializing it into the configuration cache.")
     dependsOn("assembleStandaloneDebug")
     doLast {
         val directory = checkNotNull(localAuthenticationAssets)
