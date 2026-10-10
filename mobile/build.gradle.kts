@@ -1,4 +1,5 @@
 import java.io.ByteArrayInputStream
+import java.nio.file.Files
 import java.security.KeyFactory
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -100,7 +101,7 @@ android {
     }
 
 
-    localAuthenticationAssets?.let { sourceSets.getByName("main").assets.srcDir(it) }
+    localAuthenticationAssets?.let { sourceSets.getByName("main").assets.directories.add(it.absolutePath) }
 
     signingConfigs {
         create("release") {
@@ -191,6 +192,20 @@ val verifyStandaloneAuthentication by tasks.registering {
     doLast {
         check(directory != null) {
             "Standalone car builds require DIPLAY_AUTH_ASSETS_DIR; assembleDebug alone is source-only."
+        }
+        val expectedPaths = setOf(
+            "offline-mfi/identity.pk8",
+            "offline-mfi/certificate.p7b",
+        )
+        val actualPaths = directory.walkTopDown()
+            .filter { it.isFile || Files.isSymbolicLink(it.toPath()) }
+            .map { it.relativeTo(directory).invariantSeparatorsPath }
+            .toSet()
+        check(actualPaths == expectedPaths) {
+            "Authentication asset directory must contain exactly identity.pk8 and certificate.p7b"
+        }
+        check(directory.walkTopDown().none { Files.isSymbolicLink(it.toPath()) }) {
+            "Authentication asset directory cannot contain symbolic links"
         }
         verifyMfiIdentity(directory)
         logger.lifecycle(

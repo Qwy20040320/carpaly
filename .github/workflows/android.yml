@@ -25,7 +25,33 @@ jobs:
           go install github.com/zricethezav/gitleaks/v8@v8.30.0
           "$(go env GOPATH)/bin/gitleaks" git --redact .
       - name: Validate release publisher syntax
-        run: bash -n .github/scripts/publish-authenticated-apk-release.sh
+        env:
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/carpaly-python-cache
+        run: |
+          bash -n .github/scripts/publish-authenticated-apk-release.sh
+          python3 -m py_compile scripts/package_source_archive.py
+      - name: Validate clean source archive packaging
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/carpaly-source-validation.zip"
+          python3 scripts/package_source_archive.py --ref "$GITHUB_SHA" --output "$archive"
+          python3 - "$archive" <<'PY'
+          from pathlib import PurePosixPath
+          import sys
+          from zipfile import ZipFile
+
+          with ZipFile(sys.argv[1]) as source:
+              names = set(source.namelist())
+              assert "CarPaly/LICENSE" in names
+              assert "CarPaly/README.md" in names
+              assert "CarPaly/docs/licenses/DiAuto-AGPL-3.0.txt" in names
+              assert "CarPaly/shared/src/main/jni/speexdsp/COPYING" in names
+              assert all(name.lower().endswith(".md") is False or name == "CarPaly/README.md" for name in names)
+              blocked = {".apk", ".aab", ".pk8", ".p7b", ".pem", ".key", ".p12", ".pfx", ".jks", ".keystore"}
+              assert all(PurePosixPath(name).suffix.lower() not in blocked for name in names)
+              assert source.testzip() is None
+          PY
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -241,17 +267,47 @@ jobs:
           mkdir -p "$release_dir"
           release_name="CarPaly-XingyueL${expected_version}.apk"
           release_apk="$release_dir/$release_name"
-          release_checksum="$release_dir/$release_name.sha256"
           cp "$apk" "$release_apk"
-          printf '%s  %s\n' "$actual_sha" "$release_name" > "$release_checksum"
           test "$(sha256sum "$release_apk" | awk '{ print $1 }')" = "$actual_sha"
-          (cd "$release_dir" && sha256sum --check --status "$release_name.sha256")
           echo "apk_path=$release_apk" >> "$GITHUB_OUTPUT"
-          echo "checksum_path=$release_checksum" >> "$GITHUB_OUTPUT"
           echo "apk_name=$release_name" >> "$GITHUB_OUTPUT"
           echo "sha256=$actual_sha" >> "$GITHUB_OUTPUT"
           echo "size=$size" >> "$GITHUB_OUTPUT"
           echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
+      - name: Package commit-pinned source and release checksums
+        id: package
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          APK_PATH: ${{ steps.apk.outputs.apk_path }}
+          APK_NAME: ${{ steps.apk.outputs.apk_name }}
+          APK_SHA256: ${{ steps.apk.outputs.sha256 }}
+          RUNNER_TEMP: ${{ runner.temp }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_dir="$RUNNER_TEMP/carpaly-release"
+          source_name="${APK_NAME%.apk}-source.zip"
+          source_path="$release_dir/$source_name"
+          python3 scripts/package_source_archive.py --ref "$RELEASE_TAG" --output "$source_path"
+          source_sha="$(sha256sum "$source_path" | awk '{ print $1 }')"
+          source_size="$(stat -c '%s' "$source_path")"
+          sums_path="$release_dir/SHA256SUMS.txt"
+          (
+            cd "$release_dir"
+            sha256sum "$APK_NAME" "$source_name" > SHA256SUMS.txt
+            sha256sum --check SHA256SUMS.txt
+          )
+          sums_sha="$(sha256sum "$sums_path" | awk '{ print $1 }')"
+          sums_size="$(stat -c '%s' "$sums_path")"
+          printf 'Source ZIP: %s (%s bytes, SHA-256 %s)\n' "$source_name" "$source_size" "$source_sha"
+          printf 'SHA256SUMS.txt: %s bytes, SHA-256 %s\n' "$sums_size" "$sums_sha"
+          echo "source_path=$source_path" >> "$GITHUB_OUTPUT"
+          echo "source_name=$source_name" >> "$GITHUB_OUTPUT"
+          echo "source_sha256=$source_sha" >> "$GITHUB_OUTPUT"
+          echo "source_size=$source_size" >> "$GITHUB_OUTPUT"
+          echo "sums_path=$sums_path" >> "$GITHUB_OUTPUT"
+          echo "sums_sha256=$sums_sha" >> "$GITHUB_OUTPUT"
+          echo "sums_size=$sums_size" >> "$GITHUB_OUTPUT"
       - name: Publish and verify authenticated pre-release
         shell: bash
         env:
@@ -260,10 +316,16 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
           APK_PATH: ${{ steps.apk.outputs.apk_path }}
           APK_NAME: ${{ steps.apk.outputs.apk_name }}
-          CHECKSUM_PATH: ${{ steps.apk.outputs.checksum_path }}
           APK_SHA256: ${{ steps.apk.outputs.sha256 }}
           APK_SIZE: ${{ steps.apk.outputs.size }}
           APK_VERSION_CODE: ${{ steps.apk.outputs.version_code }}
+          SOURCE_ZIP_PATH: ${{ steps.package.outputs.source_path }}
+          SOURCE_ZIP_NAME: ${{ steps.package.outputs.source_name }}
+          SOURCE_ZIP_SHA256: ${{ steps.package.outputs.source_sha256 }}
+          SOURCE_ZIP_SIZE: ${{ steps.package.outputs.source_size }}
+          SHA256SUMS_PATH: ${{ steps.package.outputs.sums_path }}
+          SHA256SUMS_SHA256: ${{ steps.package.outputs.sums_sha256 }}
+          SHA256SUMS_SIZE: ${{ steps.package.outputs.sums_size }}
         run: bash .github/scripts/publish-authenticated-apk-release.sh
       - name: Remove local release credentials from runner
         if: always()
@@ -272,4 +334,5 @@ jobs:
           set -euo pipefail
           rm -rf -- "$RUNNER_TEMP/carpaly-auth-assets" "$RUNNER_TEMP/carpaly-release" \
             "$RUNNER_TEMP/carpaly-release-remote" "$RUNNER_TEMP/carpaly-release-published" \
-            "$RUNNER_TEMP/carpaly-signing" "$RUNNER_TEMP/release-keystore-inspection.txt"
+            "$RUNNER_TEMP/carpaly-signing" "$RUNNER_TEMP/carpaly-python-cache" \
+            "$RUNNER_TEMP/release-keystore-inspection.txt"
