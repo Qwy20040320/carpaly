@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | 模拟器安装与启动 | PASS | Android 16 / API 36、x86_64 AVD；CarPaly 1.1.4 安装并启动。 |
 | 中文界面 | PASS | Android `zh-CN`（配置显示 `zh-rCN`）；CarPaly 配对说明、首次车辆设置及连接设置页面均显示中文。模拟器保持普通可见窗口运行。 |
-| 单元测试 | PASS | 2,014 项；2,011 通过、3 跳过、0 失败、0 错误。`home` 测试任务没有测试用例。 |
+| 单元测试 | PASS | 2,018 项；2,015 通过、3 跳过、0 失败、0 错误。包含 `home` 模块 4 项返回键测试。 |
 | Android Lint | PASS_WITH_WARNINGS | 18 条 Warning、0 Error；详情见下文。 |
 | APK 结构与签名 | PASS | 本地测试 APK 包名、版本及 v2 调试签名检查通过；不代表正式发布签名。 |
 | 诊断与日志 UI | PASS | 手动日志开关、持久化、查看、清除、轮转限制信息和 ZIP 导出已在模拟器检查；本轮测试数据已清理，上传仍需用户主动操作。 |
@@ -29,8 +29,7 @@
 
 ## 自动化构建与静态检查
 
-- Gradle 单元测试汇总：`shared` 1,035 项；`common` 979 项，其中 3 项跳过；合计 2,014 项、0 失败、0 错误。
-- `home` 单元测试任务没有测试用例。
+- Gradle 单元测试汇总：`shared` 1,035 项；`common` 979 项，其中 3 项跳过；`home` 4 项；合计 2,018 项、2,015 通过、0 失败、0 错误。
 - Lint：`mobile` 报告 18 条警告、0 错误：14 条 `SetTextI18n`、2 条来自转换后依赖类的 `TrustAllX509TrustManager`、1 条 `UnusedAttribute`（`localeConfig` 的 minSdk 提示）、1 条 `UnusedResources`。警告并未被当作实车验证或安全审计通过；信任所有证书的依赖告警仍需单独确认来源和影响。
 - 首次标准打包时，Windows 报告目标 APK 正被 Bandizip 占用，`:mobile:packageDebug` 无法写入。未结束或关闭该用户进程；随后将 Gradle `:mobile` 输出重定向到忽略的本机临时目录。完整 CI 命令最终 **BUILD SUCCESSFUL**：248 个 actionable tasks（27 executed、221 up-to-date），包括三模块单元测试、Lint 和 APK 构建。最终诊断 APK 完成结构、版本和 v2 签名验证，签名类型为调试证书；APK 不含离线 MFi 认证资源。
 - 可见 AVD 上执行多轮应用启动观察；最终首页/连接设置页面可打开，诊断页面和设置入口可用。观察期间未见 FATAL EXCEPTION 或 ANR。应用重启观察不是长时间稳定性测试。

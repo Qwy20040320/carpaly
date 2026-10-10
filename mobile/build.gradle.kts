@@ -90,7 +90,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.shihab.diplay"
+        applicationId = "com.shihab.diplay.hudtest"
         minSdk = 25
         targetSdk = 37
         versionCode = 36
@@ -122,7 +122,6 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix = ".hudtest"
             if (distributionDebugKeystore != null) {
                 signingConfig = signingConfigs.getByName("distributionDebug")
             }
