@@ -7,11 +7,16 @@ import subprocess
 root = Path(__file__).resolve().parents[1]
 names = subprocess.check_output(['git', 'ls-files', '-z'], cwd=root).decode().split('\0')
 blocked_suffixes = {'.pk8', '.p7b', '.pem', '.key', '.p12', '.pfx', '.jks', '.keystore', '.apk', '.aab'}
+allowed_markdown = {
+    'README.md',
+    # Explicit V9.3 deliverable; keep every other non-home Markdown file local.
+    'docs/geely/EMULATOR_IPHONE_ACCEPTANCE_REPORT.md',
+}
 private_block = re.compile(rb'-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----\s+[A-Za-z0-9+/=\r\n]{40,}')
 failures = []
 for name in filter(None, names):
     path = root / name
-    if path.suffix.lower() == '.md' and name != 'README.md':
+    if path.suffix.lower() == '.md' and name not in allowed_markdown:
         failures.append(name)
         continue
     if not path.is_file():
