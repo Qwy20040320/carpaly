@@ -9,8 +9,6 @@ names = subprocess.check_output(['git', 'ls-files', '-z'], cwd=root).decode().sp
 blocked_suffixes = {'.pk8', '.p7b', '.pem', '.key', '.p12', '.pfx', '.jks', '.keystore', '.apk', '.aab'}
 allowed_markdown = {
     'README.md',
-    # Explicit V9.3 deliverable; keep every other non-home Markdown file local.
-    'docs/geely/EMULATOR_IPHONE_ACCEPTANCE_REPORT.md',
 }
 private_block = re.compile(rb'-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----\s+[A-Za-z0-9+/=\r\n]{40,}')
 failures = []

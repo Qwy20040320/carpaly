@@ -88,23 +88,24 @@ def build_archive(ref: str, output: Path) -> tuple[int, int]:
                             raise ValueError(f"Credential or installable artifact found in source commit: {member.name}")
                         if path.suffix.lower() == ".md" and member.name not in ALLOWED_MARKDOWN:
                             continue
-                        if not (member.isfile() or member.issym()):
+                        # A ZIP symlink can escape the extraction root even when its
+                        # member name is safe. Public source archives do not need
+                        # symlinks, so reject them rather than normalizing targets.
+                        if member.issym():
+                            raise ValueError(f"Symbolic links are forbidden in source archives: {member.name}")
+                        if not member.isfile():
                             raise ValueError(f"Unsupported source archive entry: {member.name}")
                         if member.name in included:
                             raise ValueError(f"Duplicate source archive path: {member.name}")
 
                         info = ZipInfo(member.name, archive_timestamp(member.mtime))
                         info.create_system = 3
-                        if member.issym():
-                            info.external_attr = (stat.S_IFLNK | 0o777) << 16
-                            payload = member.linkname.encode("utf-8")
-                        else:
-                            info.external_attr = (stat.S_IFREG | (member.mode & 0o777)) << 16
-                            stream = source.extractfile(member)
-                            if stream is None:
-                                raise ValueError(f"Could not read source archive entry: {member.name}")
-                            with stream:
-                                payload = stream.read()
+                        info.external_attr = (stat.S_IFREG | (member.mode & 0o777)) << 16
+                        stream = source.extractfile(member)
+                        if stream is None:
+                            raise ValueError(f"Could not read source archive entry: {member.name}")
+                        with stream:
+                            payload = stream.read()
                         zipped.writestr(info, payload)
                         included.add(member.name)
 
