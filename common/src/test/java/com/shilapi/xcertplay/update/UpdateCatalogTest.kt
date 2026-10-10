@@ -161,8 +161,11 @@ class UpdateCatalogTest {
 
     @Test
     fun skipsApksLargerThanTheSupportedDownloadLimit() {
-        val json = releaseJson.replace("\"size\":23000000", "\"size\":${UpdateApkDownloader.MAX_APK_BYTES + 1}")
-        assertEquals("v1.1.4", UpdateCatalog.parse(json)?.tagName)
+        val oversizedSize = UpdateApkDownloader.MAX_APK_BYTES + 1
+        val oversizedJson = Regex("(\"size\"\\s*:\\s*)23000000")
+            .replace(releaseJson) { match -> "${match.groupValues[1]}$oversizedSize" }
+        assertEquals(2, Regex("\"size\"\\s*:\\s*$oversizedSize").findAll(oversizedJson).count())
+        assertEquals("v1.1.4", UpdateCatalog.parse(oversizedJson)?.tagName)
     }
 
     @Test
