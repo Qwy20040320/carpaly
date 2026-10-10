@@ -726,7 +726,15 @@
     <string name="update_channel_description">預覽通道會檢查預覽版與穩定版；穩定通道只檢查穩定版。CarPaly 實車驗證期間預設使用預覽通道。</string>
     <string name="update_available_details">目前版本：%1$s\n最新版本：%2$s\n安裝套件大小：%3$s</string>
     <string name="update_apk_filename">APK 檔案：%1$s</string>
-    <string name="update_manual_install_warning">此處只會開啟 GitHub Release 頁面；CarPaly 無法驗證你之後下載的檔案。不同預覽／除錯建置的簽章可能不同，Android 可能拒絕覆蓋安裝。請先備份資料；App 不會自動解除安裝任何內容。</string>
+    <string name="update_manual_install_warning">CarPaly 會下載含版本號的 APK，驗證 SHA-256、套件名稱、版本和簽章，並檢查必要的認證資源檔案存在後，才提供 Android 安裝程式入口。若簽章金鑰不同，Android 仍可能拒絕覆蓋安裝。請先備份資料；安裝一律需要你在系統畫面確認。</string>
+    <string name="update_download_update">下載並驗證 APK</string>
+    <string name="update_downloading">正在下載並驗證 %1$s…</string>
+    <string name="update_verifying_install">正在重新檢查 APK 完整性與相容性…</string>
+    <string name="update_download_verified">SHA-256、套件名稱、版本和簽章皆已驗證，且必要的認證資源檔案存在。準備好後可繼續前往 Android 安裝程式。</string>
+    <string name="update_install_update">繼續安裝</string>
+    <string name="update_install_permission_required">請在下一個畫面允許 CarPaly 安裝更新，然後返回並再次點選「繼續安裝」。Android 仍會要求你確認。</string>
+    <string name="update_install_failed">無法開啟 Android 系統安裝程式。</string>
+    <string name="update_incompatible">APK 缺少必要認證資源，或其套件名稱、版本、簽章與目前安裝不相符。</string>
     <string name="update_preview_release">預覽版</string>
     <string name="update_regular_release">非預覽版</string>
     <string name="update_release_notes_heading">版本說明</string>

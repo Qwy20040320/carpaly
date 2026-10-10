@@ -5,13 +5,17 @@ import android.content.pm.PackageManager
 import android.os.Build
 import java.io.File
 import java.security.MessageDigest
+import java.util.zip.ZipFile
 
 /** Immutable package identity used to reject an APK that cannot update this installation. */
 internal data class UpdateApkIdentity(
     val packageName: String,
     val versionCode: Long,
     val signerSha256: Set<String>,
+    val versionName: String = "",
 )
+
+internal class UpdateApkIncompatibilityException(message: String) : java.io.IOException(message)
 
 internal object UpdateApkCompatibility {
     internal fun inspectInstalled(packageManager: PackageManager, packageName: String): UpdateApkIdentity? =
@@ -56,6 +60,17 @@ internal object UpdateApkCompatibility {
                 MessageDigest.getInstance("SHA-256").digest(signature.toByteArray())
                     .joinToString("") { byte -> "%02x".format(byte) }
             }.toSet(),
+            versionName = versionName.orEmpty(),
         )
     }
+
+    /** Delivered APKs from v1.1.4 onward must retain the offline MFi credential assets. */
+    internal fun hasAuthenticationAssets(apk: File): Boolean = runCatching {
+        ZipFile(apk).use { archive ->
+            listOf("identity.pk8", "certificate.p7b").all { fileName ->
+                val entry = archive.getEntry("assets/offline-mfi/$fileName") ?: return@use false
+                !entry.isDirectory && entry.size > 0L && entry.size <= 1024L * 1024L
+            }
+        }
+    }.getOrDefault(false)
 }

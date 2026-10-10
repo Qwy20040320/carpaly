@@ -678,7 +678,15 @@
     <string name="update_channel_description">Попередній канал шукає попередні та стабільні випуски; стабільний — лише стабільні. Поки CarPaly проходить перевірку, за замовчуванням вибрано попередній канал.</string>
     <string name="update_available_details">Поточна: %1$s\nНайновіша: %2$s\nРозмір пакета: %3$s</string>
     <string name="update_apk_filename">Файл APK: %1$s</string>
-    <string name="update_manual_install_warning">Відкривається лише сторінка випуску GitHub; CarPaly не може перевірити файл, який ви завантажите пізніше. Ключі підпису попередніх збірок можуть відрізнятися, тому Android може заборонити оновлення поверх поточної версії. Зробіть резервну копію; застосунок нічого не видалятиме.</string>
+    <string name="update_manual_install_warning">CarPaly завантажує APK із номером версії, перевіряє SHA-256, пакет, версію й підпис, а також наявність потрібних файлів автентифікації перед відкриттям інсталятора Android. Android може відхилити оновлення з іншим ключем підпису. Створіть резервну копію; встановлення завжди потрібно підтвердити в системі.</string>
+    <string name="update_download_update">Завантажити й перевірити APK</string>
+    <string name="update_downloading">Завантаження та перевірка %1$s…</string>
+    <string name="update_verifying_install">Повторна перевірка цілісності й сумісності APK…</string>
+    <string name="update_download_verified">SHA-256, пакет, версію й підпис перевірено; потрібні файли автентифікації присутні. Коли будете готові, перейдіть до інсталятора Android.</string>
+    <string name="update_install_update">Продовжити встановлення</string>
+    <string name="update_install_permission_required">Дозвольте CarPaly встановлювати оновлення на наступному екрані, потім поверніться й знову натисніть «Продовжити встановлення». Android однаково запитає підтвердження.</string>
+    <string name="update_install_failed">Не вдалося відкрити інсталятор Android.</string>
+    <string name="update_incompatible">У APK немає потрібних ресурсів автентифікації або його пакет, версія чи підпис не збігаються з установленим застосунком.</string>
     <string name="update_preview_release">Попередній випуск</string>
     <string name="update_regular_release">Звичайний випуск</string>
     <string name="update_release_notes_heading">Примітки до випуску</string>

@@ -666,7 +666,15 @@
     <string name="update_channel_description">Предварительный канал проверяет предварительные и стабильные выпуски; стабильный — только стабильные. Пока CarPaly проходит проверку, по умолчанию выбран предварительный канал.</string>
     <string name="update_available_details">Текущая: %1$s\nПоследняя: %2$s\nРазмер пакета: %3$s</string>
     <string name="update_apk_filename">Файл APK: %1$s</string>
-    <string name="update_manual_install_warning">Открывается только страница выпуска GitHub; CarPaly не может проверить файл, скачанный вами позже. Ключи подписи предварительных сборок могут различаться, поэтому Android может запретить установку поверх текущей версии. Сохраните резервную копию; приложение ничего не удаляет.</string>
+    <string name="update_manual_install_warning">CarPaly скачивает APK с номером версии, проверяет SHA-256, пакет, версию и подпись, а также наличие обязательных файлов аутентификации до открытия установщика Android. Android всё равно может отклонить обновление с другим ключом подписи. Создайте резервную копию; установку всегда нужно подтвердить в системе.</string>
+    <string name="update_download_update">Скачать и проверить APK</string>
+    <string name="update_downloading">Скачивание и проверка %1$s…</string>
+    <string name="update_verifying_install">Повторная проверка целостности и совместимости APK…</string>
+    <string name="update_download_verified">SHA-256, пакет, версия и подпись проверены; обязательные файлы аутентификации присутствуют. Когда будете готовы, перейдите к установщику Android.</string>
+    <string name="update_install_update">Продолжить установку</string>
+    <string name="update_install_permission_required">Разрешите CarPaly устанавливать обновления на следующем экране, затем вернитесь и снова нажмите «Продолжить установку». Android по-прежнему запросит подтверждение.</string>
+    <string name="update_install_failed">Не удалось открыть установщик Android.</string>
+    <string name="update_incompatible">В APK отсутствуют обязательные ресурсы аутентификации либо его пакет, версия или подпись не совпадают с установленным приложением.</string>
     <string name="update_preview_release">Предварительный выпуск</string>
     <string name="update_regular_release">Обычный выпуск</string>
     <string name="update_release_notes_heading">Примечания к выпуску</string>

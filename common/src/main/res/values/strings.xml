@@ -764,7 +764,15 @@
     <string name="update_channel_description">Preview checks preview and stable releases. Stable checks stable releases only. Preview is the default while CarPaly is being validated.</string>
     <string name="update_available_details">Current: %1$s\nLatest: %2$s\nPackage size: %3$s</string>
     <string name="update_apk_filename">APK file: %1$s</string>
-    <string name="update_manual_install_warning">This opens the GitHub release page only; CarPaly cannot verify a file downloaded afterward. Preview/debug signing keys may differ between builds, so Android can reject an in-place update. Back up your data; the app will not uninstall anything.</string>
+    <string name="update_manual_install_warning">CarPaly downloads the versioned APK and verifies its SHA-256, package, version, and signer, then checks that required authentication asset files are present before offering Android\'s installer. Android may still reject an update signed by a different key. Back up your data; installation always requires your confirmation.</string>
+    <string name="update_download_update">Download and verify APK</string>
+    <string name="update_downloading">Downloading and verifying %1$s…</string>
+    <string name="update_verifying_install">Rechecking APK integrity and compatibility…</string>
+    <string name="update_download_verified">SHA-256, package, version, and signer verified; required authentication asset files are present. Continue to Android\'s installer when ready.</string>
+    <string name="update_install_update">Continue to install</string>
+    <string name="update_install_permission_required">Allow CarPaly to install updates on the next screen, then return and tap Continue to install again. Android will still ask you to confirm.</string>
+    <string name="update_install_failed">Could not open Android\'s package installer.</string>
+    <string name="update_incompatible">This APK is missing required authentication assets or does not match this installation\'s package, version, or signer.</string>
     <string name="update_preview_release">Preview release</string>
     <string name="update_regular_release">Non-preview release</string>
     <string name="update_release_notes_heading">Release notes</string>

@@ -666,7 +666,15 @@
     <string name="update_channel_description">Preliminar consulta versiones preliminares y estables; Estable consulta solo las estables. Preliminar es la opción predeterminada mientras se valida CarPaly.</string>
     <string name="update_available_details">Actual: %1$s\nMás reciente: %2$s\nTamaño del paquete: %3$s</string>
     <string name="update_apk_filename">Archivo APK: %1$s</string>
-    <string name="update_manual_install_warning">Esto solo abre la página de GitHub; CarPaly no puede verificar el archivo que descargues después. Las claves de firma de las versiones preliminares pueden variar y Android podría rechazar una actualización directa. Haz una copia de seguridad; la aplicación no desinstalará nada.</string>
+    <string name="update_manual_install_warning">CarPaly descarga el APK versionado, verifica su SHA-256, paquete, versión y firma, y comprueba que estén presentes los archivos de autenticación requeridos antes de ofrecer el instalador de Android. Android aún puede rechazar una actualización firmada con otra clave. Haz una copia de seguridad; siempre tendrás que confirmar la instalación.</string>
+    <string name="update_download_update">Descargar y verificar APK</string>
+    <string name="update_downloading">Descargando y verificando %1$s…</string>
+    <string name="update_verifying_install">Volviendo a comprobar la integridad y compatibilidad del APK…</string>
+    <string name="update_download_verified">SHA-256, paquete, versión y firma verificados; están presentes los archivos de autenticación requeridos. Continúa al instalador de Android cuando quieras.</string>
+    <string name="update_install_update">Continuar con la instalación</string>
+    <string name="update_install_permission_required">Permite que CarPaly instale actualizaciones en la pantalla siguiente; vuelve y pulsa de nuevo Continuar con la instalación. Android seguirá pidiendo confirmación.</string>
+    <string name="update_install_failed">No se pudo abrir el instalador de Android.</string>
+    <string name="update_incompatible">El APK no incluye los recursos de autenticación requeridos o no coincide con el paquete, versión o firma instalada.</string>
     <string name="update_preview_release">Versión preliminar</string>
     <string name="update_regular_release">Versión no preliminar</string>
     <string name="update_release_notes_heading">Notas de la versión</string>

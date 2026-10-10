@@ -2,7 +2,12 @@ package com.shilapi.xcertplay.update
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 class UpdateApkCompatibilityTest {
     private val installed = UpdateApkIdentity("com.example.carpaly", 10, setOf("cert-a"))
@@ -32,5 +37,28 @@ class UpdateApkCompatibilityTest {
             "APK signing certificate could not be verified",
             UpdateApkCompatibility.incompatibility(installed, installed.copy(versionCode = 11, signerSha256 = emptySet())),
         )
+    }
+
+    @Test fun requiresBothNonEmptyOfflineAuthenticationAssetsInTheApk() {
+        val apk = File.createTempFile("carpaly-auth-assets", ".apk")
+        try {
+            ZipOutputStream(apk.outputStream()).use { zip ->
+                listOf("identity.pk8", "certificate.p7b").forEach { name ->
+                    zip.putNextEntry(ZipEntry("assets/offline-mfi/$name"))
+                    zip.write(byteArrayOf(1, 2, 3))
+                    zip.closeEntry()
+                }
+            }
+            assertTrue(UpdateApkCompatibility.hasAuthenticationAssets(apk))
+
+            ZipOutputStream(apk.outputStream()).use { zip ->
+                zip.putNextEntry(ZipEntry("assets/offline-mfi/identity.pk8"))
+                zip.write(byteArrayOf(1))
+                zip.closeEntry()
+            }
+            assertFalse(UpdateApkCompatibility.hasAuthenticationAssets(apk))
+        } finally {
+            apk.delete()
+        }
     }
 }

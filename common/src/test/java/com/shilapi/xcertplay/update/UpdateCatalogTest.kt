@@ -19,7 +19,8 @@ class UpdateCatalogTest {
             "html_url": "https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.6",
             "body": "draft notes",
             "assets": [
-              {"name": "CarPaly-XingyueL1.1.6.apk", "browser_download_url": "https://github.com/Qwy20040320/carpaly/releases/download/v1.1.6/CarPaly-XingyueL1.1.6.apk", "size": 23000000, "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+              {"name": "CarPaly-XingyueL1.1.6.apk", "browser_download_url": "https://github.com/Qwy20040320/carpaly/releases/download/v1.1.6/CarPaly-XingyueL1.1.6.apk", "size": 23000000, "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+              {"name": "CarPaly-XingyueL1.1.6.apk.sha256", "browser_download_url": "https://github.com/Qwy20040320/carpaly/releases/download/v1.1.6/CarPaly-XingyueL1.1.6.apk.sha256", "size": 92}
             ]
           },
           {
@@ -29,7 +30,8 @@ class UpdateCatalogTest {
             "html_url": "https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.5",
             "body": "preview notes",
             "assets": [
-              {"name": "CarPaly-XingyueL1.1.5.apk", "browser_download_url": "https://github.com/Qwy20040320/carpaly/releases/download/v1.1.5/CarPaly-XingyueL1.1.5.apk", "size": 23000000, "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+              {"name": "CarPaly-XingyueL1.1.5.apk", "browser_download_url": "https://github.com/Qwy20040320/carpaly/releases/download/v1.1.5/CarPaly-XingyueL1.1.5.apk", "size": 23000000, "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+              {"name": "CarPaly-XingyueL1.1.5.apk.sha256", "browser_download_url": "https://github.com/Qwy20040320/carpaly/releases/download/v1.1.5/CarPaly-XingyueL1.1.5.apk.sha256", "size": 92}
             ]
           },
           {
@@ -39,7 +41,8 @@ class UpdateCatalogTest {
             "html_url": "https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.4",
             "body": "stable notes",
             "assets": [
-              {"name": "CarPaly-XingyueL1.1.4.apk", "browser_download_url": "https://github.com/Qwy20040320/carpaly/releases/download/v1.1.4/CarPaly-XingyueL1.1.4.apk", "size": 22388239, "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
+              {"name": "CarPaly-XingyueL1.1.4.apk", "browser_download_url": "https://github.com/Qwy20040320/carpaly/releases/download/v1.1.4/CarPaly-XingyueL1.1.4.apk", "size": 22388239, "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},
+              {"name": "CarPaly-XingyueL1.1.4.apk.sha256", "browser_download_url": "https://github.com/Qwy20040320/carpaly/releases/download/v1.1.4/CarPaly-XingyueL1.1.4.apk.sha256", "size": 92}
             ]
           }
         ]
@@ -55,6 +58,11 @@ class UpdateCatalogTest {
             "https://github.com/Qwy20040320/carpaly/releases/download/v1.1.5/CarPaly-XingyueL1.1.5.apk",
             release?.apkUrl,
         )
+        assertEquals(
+            "https://github.com/Qwy20040320/carpaly/releases/download/v1.1.5/CarPaly-XingyueL1.1.5.apk.sha256",
+            release?.checksumUrl,
+        )
+        assertEquals(92L, release?.checksumSizeBytes)
         assertEquals("https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.5", release?.releasePageUrl)
         assertEquals("preview notes", release?.releaseNotes)
         assertEquals(23_000_000L, release?.sizeBytes)
@@ -80,10 +88,12 @@ class UpdateCatalogTest {
         val json = """
             [
               {"tag_name":"v1.1.9","draft":false,"prerelease":true,"html_url":"https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.9","assets":[
-                {"name":"CarPaly-XingyueL1.1.9.apk","browser_download_url":"https://github.com/Qwy20040320/carpaly/releases/download/v1.1.9/CarPaly-XingyueL1.1.9.apk","size":100,"digest":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
+                {"name":"CarPaly-XingyueL1.1.9.apk","browser_download_url":"https://github.com/Qwy20040320/carpaly/releases/download/v1.1.9/CarPaly-XingyueL1.1.9.apk","size":100,"digest":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},
+                {"name":"CarPaly-XingyueL1.1.9.apk.sha256","browser_download_url":"https://github.com/Qwy20040320/carpaly/releases/download/v1.1.9/CarPaly-XingyueL1.1.9.apk.sha256","size":92}
               ]},
               {"tag_name":"v1.1.10","draft":false,"prerelease":true,"html_url":"https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.10","assets":[
-                {"name":"CarPaly-XingyueL1.1.10.apk","browser_download_url":"https://github.com/Qwy20040320/carpaly/releases/download/v1.1.10/CarPaly-XingyueL1.1.10.apk","size":100,"digest":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
+                {"name":"CarPaly-XingyueL1.1.10.apk","browser_download_url":"https://github.com/Qwy20040320/carpaly/releases/download/v1.1.10/CarPaly-XingyueL1.1.10.apk","size":100,"digest":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},
+                {"name":"CarPaly-XingyueL1.1.10.apk.sha256","browser_download_url":"https://github.com/Qwy20040320/carpaly/releases/download/v1.1.10/CarPaly-XingyueL1.1.10.apk.sha256","size":93}
               ]}
             ]
         """.trimIndent()
@@ -97,7 +107,8 @@ class UpdateCatalogTest {
             [
               {"tag_name":"v1.1.6","draft":false,"prerelease":true,"html_url":"https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.6","assets":[]},
               {"tag_name":"v1.1.5","draft":false,"prerelease":true,"html_url":"https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.5","assets":[
-                {"name":"CarPaly-XingyueL1.1.5.apk","browser_download_url":"https://github.com/Qwy20040320/carpaly/releases/download/v1.1.5/CarPaly-XingyueL1.1.5.apk","size":100,"digest":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
+                {"name":"CarPaly-XingyueL1.1.5.apk","browser_download_url":"https://github.com/Qwy20040320/carpaly/releases/download/v1.1.5/CarPaly-XingyueL1.1.5.apk","size":100,"digest":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},
+                {"name":"CarPaly-XingyueL1.1.5.apk.sha256","browser_download_url":"https://github.com/Qwy20040320/carpaly/releases/download/v1.1.5/CarPaly-XingyueL1.1.5.apk.sha256","size":92}
               ]}
             ]
         """.trimIndent()
@@ -109,6 +120,16 @@ class UpdateCatalogTest {
         val json = """
             [{"tag_name":"v0.2.16","draft":false,"prerelease":true,"html_url":"https://github.com/Qwy20040320/carpaly/releases/tag/v0.2.16","assets":[
               {"name":"CarPaly-XingyueL.apk","browser_download_url":"https://github.com/Qwy20040320/carpaly/releases/download/v0.2.16/CarPaly-XingyueL.apk","size":22388239,"digest":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
+            ]}]
+        """.trimIndent()
+        assertNull(UpdateCatalog.parse(json))
+    }
+
+    @Test
+    fun skipsVersionedReleasesFromBeforeTheAuthenticatedDistributionBoundary() {
+        val json = """
+            [{"tag_name":"v1.1.3","draft":false,"prerelease":false,"html_url":"https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.3","assets":[
+              {"name":"CarPaly-XingyueL1.1.3.apk","browser_download_url":"https://github.com/Qwy20040320/carpaly/releases/download/v1.1.3/CarPaly-XingyueL1.1.3.apk","size":200,"digest":"sha256:${"0".repeat(64)}"}
             ]}]
         """.trimIndent()
         assertNull(UpdateCatalog.parse(json))
@@ -128,13 +149,20 @@ class UpdateCatalogTest {
     fun requiresTheGitHubProvidedSha256DigestAndNonZeroSize() {
         val noDigest = """
             [{"tag_name":"v1.1.4","draft":false,"prerelease":true,"html_url":"https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.4","assets":[
-              {"name":"CarPaly-XingyueL1.1.4.apk","browser_download_url":"https://github.com/Qwy20040320/carpaly/releases/download/v1.1.4/CarPaly-XingyueL1.1.4.apk","size":200,"digest":""}
+              {"name":"CarPaly-XingyueL1.1.4.apk","browser_download_url":"https://github.com/Qwy20040320/carpaly/releases/download/v1.1.4/CarPaly-XingyueL1.1.4.apk","size":200,"digest":""},
+              {"name":"CarPaly-XingyueL1.1.4.apk.sha256","browser_download_url":"https://github.com/Qwy20040320/carpaly/releases/download/v1.1.4/CarPaly-XingyueL1.1.4.apk.sha256","size":92}
             ]}]
         """.trimIndent()
         val noSize = noDigest.replace("\"size\":200", "\"size\":0")
             .replace("\"digest\":\"\"", "\"digest\":\"sha256:${"0".repeat(64)}\"")
         assertNull(UpdateCatalog.parse(noDigest))
         assertNull(UpdateCatalog.parse(noSize))
+    }
+
+    @Test
+    fun skipsApksLargerThanTheSupportedDownloadLimit() {
+        val json = releaseJson.replace("\"size\":23000000", "\"size\":${UpdateApkDownloader.MAX_APK_BYTES + 1}")
+        assertEquals("v1.1.4", UpdateCatalog.parse(json)?.tagName)
     }
 
     @Test

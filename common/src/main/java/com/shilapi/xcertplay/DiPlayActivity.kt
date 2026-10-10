@@ -35,6 +35,7 @@ import android.widget.*
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
 import androidx.core.view.doOnLayout
 import androidx.core.view.WindowCompat
 import androidx.core.view.ViewCompat
@@ -71,6 +72,10 @@ import com.shilapi.xcertplay.update.UpdateClient
 import com.shilapi.xcertplay.update.UpdateChannel
 import com.shilapi.xcertplay.update.UpdateRelease
 import com.shilapi.xcertplay.update.UpdateVersion
+import com.shilapi.xcertplay.update.UpdateApkCompatibility
+import com.shilapi.xcertplay.update.UpdateApkDownloader
+import com.shilapi.xcertplay.update.UpdateApkInstallIntent
+import com.shilapi.xcertplay.update.UpdateApkIncompatibilityException
 import java.io.File
 import java.io.IOException
 import java.text.SimpleDateFormat
@@ -195,6 +200,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     @Volatile private var updateStage = UpdateStage.IDLE
     @Volatile private var updateGeneration = 0
     private var updateRelease: UpdateRelease? = null
+    private var updateApkFile: File? = null
     private var updateMessage: String? = null
     private var updatePromptDismissedTag: String? = null
     private var carButtonCard: LinearLayout? = null
@@ -2031,7 +2037,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
     }
 
-    private enum class UpdateStage { IDLE, CHECKING, AVAILABLE, FAILED }
+    private enum class UpdateStage { IDLE, CHECKING, AVAILABLE, DOWNLOADING, VERIFYING_INSTALL, READY_TO_INSTALL, FAILED }
 
     private fun updateRow(): View {
         val container = column().apply { setPadding(0, dp(12), 0, 0) }
@@ -2041,7 +2047,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 container.addView(button(getString(R.string.update_check), false) { checkForUpdates() },
                     matchButton(if (updateMessage == null) 0 else 10, 60))
             UpdateStage.CHECKING -> container.addView(label(getString(R.string.update_checking), 14, MUTED))
-            UpdateStage.AVAILABLE -> updateRelease?.let { release ->
+            UpdateStage.AVAILABLE, UpdateStage.READY_TO_INSTALL -> updateRelease?.let { release ->
                 val packageSize = android.text.format.Formatter.formatShortFileSize(this, release.sizeBytes)
                 container.addView(label(getString(R.string.update_available_details,
                     version(), release.versionName, packageSize), 14, MUTED))
@@ -2057,16 +2063,24 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 container.addView(label(notes, 14, MUTED).apply { setPadding(0, dp(4), 0, dp(8)) })
                 container.addView(label(getString(R.string.update_manual_install_warning), 13, WARNING)
                     .apply { setPadding(0, dp(4), 0, dp(4)) })
-                container.addView(button(getString(R.string.update_open_release, release.tagName), true) {
-                    openUpdateRelease(release)
-                }, matchButton(4, 60))
+                container.addView(updateActionView(release), matchButton(4, 60))
+                if (updateStage == UpdateStage.AVAILABLE) {
+                    container.addView(button(getString(R.string.update_open_release, release.tagName), false) {
+                        openUpdateRelease(release)
+                    }, matchButton(4, 56))
+                }
             }
+            UpdateStage.DOWNLOADING -> container.addView(label(
+                getString(R.string.update_downloading, updateRelease?.apkName.orEmpty()), 14, MUTED,
+            ))
+            UpdateStage.VERIFYING_INSTALL -> container.addView(label(getString(R.string.update_verifying_install), 14, MUTED))
         }
         return container
     }
 
     private fun updateNoticeCard(release: UpdateRelease): View = card().apply {
         addView(label(getString(R.string.update_available_title), 18, TEXT, true))
+        updateMessage?.let { addView(label(it, 14, MUTED).apply { setPadding(0, dp(6), 0, 0) }) }
         addView(label(getString(R.string.update_available_details,
             version(), release.versionName,
             android.text.format.Formatter.formatShortFileSize(this@DiPlayActivity, release.sizeBytes)), 14, MUTED)
@@ -2082,15 +2096,32 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         addView(label(notes, 14, MUTED))
         addView(label(getString(R.string.update_manual_install_warning), 13, WARNING)
             .apply { setPadding(0, dp(8), 0, 0) })
-        addView(row().apply {
-            addView(button(getString(R.string.update_open_release, release.tagName), true) {
-                openUpdateRelease(release)
-            }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = dp(8) })
-            addView(button(getString(R.string.later), false) {
-                updatePromptDismissedTag = release.tagName
-                render()
-            }, LinearLayout.LayoutParams(0, -2, 1f))
-        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+        when (updateStage) {
+            UpdateStage.DOWNLOADING, UpdateStage.VERIFYING_INSTALL -> {
+                val statusText = if (updateStage == UpdateStage.DOWNLOADING) {
+                    getString(R.string.update_downloading, release.apkName)
+                } else {
+                    getString(R.string.update_verifying_install)
+                }
+                addView(label(statusText, 14, MUTED).apply { setPadding(0, dp(12), 0, 0) })
+            }
+            else -> addView(row().apply {
+                addView(updateActionView(release), LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = dp(8) })
+                addView(button(getString(R.string.later), false) {
+                    updatePromptDismissedTag = release.tagName
+                    render()
+                }, LinearLayout.LayoutParams(0, -2, 1f))
+            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+        }
+    }
+
+    private fun updateActionView(release: UpdateRelease): View = when (updateStage) {
+        UpdateStage.READY_TO_INSTALL -> button(getString(R.string.update_install_update), true) {
+            installDownloadedUpdate()
+        }
+        UpdateStage.DOWNLOADING -> label(getString(R.string.update_downloading, release.apkName), 14, MUTED)
+        UpdateStage.VERIFYING_INSTALL -> label(getString(R.string.update_verifying_install), 14, MUTED)
+        else -> button(getString(R.string.update_download_update), true) { downloadUpdate(release) }
     }
 
     private fun autoUpdateChecksEnabled(): Boolean = getSharedPreferences("diplay", MODE_PRIVATE)
@@ -2143,6 +2174,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         updateStage = UpdateStage.CHECKING
         updateMessage = null
         updateRelease = null
+        updateApkFile = null
         val generation = ++updateGeneration
         if (page == "about") render()
         Thread({
@@ -2191,6 +2223,141 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             Log.w("DiPlay-Update", "could not open the GitHub release page", it)
             toast(getString(R.string.update_open_failed))
         }
+    }
+
+    private fun downloadUpdate(release: UpdateRelease) {
+        if (updateStage == UpdateStage.DOWNLOADING || updateStage == UpdateStage.VERIFYING_INSTALL) return
+        if (updateStage == UpdateStage.READY_TO_INSTALL && updateApkFile?.isFile == true) {
+            toast(getString(R.string.update_download_verified))
+            return
+        }
+        updateRelease = release
+        updateApkFile = null
+        updateMessage = null
+        updateStage = UpdateStage.DOWNLOADING
+        val generation = ++updateGeneration
+        renderUpdateStatusIfVisible()
+        Thread({
+            val outcome = runCatching {
+                val apk = UpdateApkDownloader.download(release, File(cacheDir, "update"))
+                try {
+                    if (!UpdateApkDownloader.matchesVerifiedRelease(apk, release)) {
+                        throw UpdateApkIncompatibilityException("Downloaded APK no longer matches its release digest")
+                    }
+                    val installed = UpdateApkCompatibility.inspectInstalled(packageManager, packageName)
+                        ?: throw UpdateApkIncompatibilityException("Could not inspect the installed application signer")
+                    val candidate = UpdateApkCompatibility.inspectArchive(packageManager, apk)
+                        ?: throw UpdateApkIncompatibilityException("Could not inspect the downloaded APK signer")
+                    val incompatibility = UpdateApkCompatibility.incompatibility(installed, candidate)
+                    if (incompatibility != null) throw UpdateApkIncompatibilityException(incompatibility)
+                    if (candidate.versionName != release.versionName) {
+                        throw UpdateApkIncompatibilityException("APK versionName does not match its release tag")
+                    }
+                    if (!UpdateApkCompatibility.hasAuthenticationAssets(apk)) {
+                        throw UpdateApkIncompatibilityException("APK is missing required offline MFi assets")
+                    }
+                    apk
+                } catch (failure: Exception) {
+                    apk.delete()
+                    throw failure
+                }
+            }
+            runOnUiThread {
+                if (generation != updateGeneration || isFinishing || isDestroyed) return@runOnUiThread
+                outcome.fold(
+                    { apk ->
+                        updateApkFile = apk
+                        updateMessage = getString(R.string.update_download_verified)
+                        updateStage = UpdateStage.READY_TO_INSTALL
+                    },
+                    { failure ->
+                        Log.w("DiPlay-Update", "verified update download failed", failure)
+                        updateMessage = getString(
+                            if (failure is UpdateApkIncompatibilityException) R.string.update_incompatible
+                            else R.string.update_failed,
+                        )
+                        updateStage = UpdateStage.AVAILABLE
+                    },
+                )
+                renderUpdateStatusIfVisible()
+            }
+        }, "carpaly-update-download").start()
+    }
+
+    private fun installDownloadedUpdate() {
+        if (updateStage != UpdateStage.READY_TO_INSTALL) return
+        val release = updateRelease
+        val apk = updateApkFile
+        if (release == null || apk == null || !apk.isFile) {
+            updateMessage = getString(R.string.update_failed)
+            updateStage = UpdateStage.AVAILABLE
+            renderUpdateStatusIfVisible()
+            return
+        }
+        val generation = ++updateGeneration
+        updateStage = UpdateStage.VERIFYING_INSTALL
+        updateMessage = null
+        renderUpdateStatusIfVisible()
+        Thread({
+            val validation = runCatching {
+                if (!UpdateApkDownloader.matchesVerifiedRelease(apk, release)) {
+                    throw UpdateApkIncompatibilityException("Downloaded APK no longer matches its verified digest")
+                }
+                val installed = UpdateApkCompatibility.inspectInstalled(packageManager, packageName)
+                    ?: throw UpdateApkIncompatibilityException("Could not verify installed package identity")
+                val candidate = UpdateApkCompatibility.inspectArchive(packageManager, apk)
+                    ?: throw UpdateApkIncompatibilityException("Could not inspect downloaded package identity")
+                val incompatibility = UpdateApkCompatibility.incompatibility(installed, candidate)
+                if (incompatibility != null) throw UpdateApkIncompatibilityException(incompatibility)
+                if (candidate.versionName != release.versionName ||
+                    !UpdateApkCompatibility.hasAuthenticationAssets(apk)) {
+                    throw UpdateApkIncompatibilityException("APK version or required authentication assets are invalid")
+                }
+            }
+            runOnUiThread {
+                if (generation != updateGeneration || isFinishing || isDestroyed) return@runOnUiThread
+                validation.fold(
+                    {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+                            updateMessage = getString(R.string.update_install_permission_required)
+                            updateStage = UpdateStage.READY_TO_INSTALL
+                            renderUpdateStatusIfVisible()
+                            runCatching {
+                                startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+                            }.onFailure { failure ->
+                                Log.w("DiPlay-Update", "could not open unknown-app install settings", failure)
+                                toast(getString(R.string.update_install_failed))
+                            }
+                            return@fold
+                        }
+                        runCatching {
+                            val uri = FileProvider.getUriForFile(this, "$packageName.update-apks", apk)
+                            startActivity(UpdateApkInstallIntent.create(uri))
+                            updateStage = UpdateStage.READY_TO_INSTALL
+                        }.onFailure { failure ->
+                            Log.w("DiPlay-Update", "could not launch the Android package installer", failure)
+                            updateMessage = getString(R.string.update_install_failed)
+                            updateStage = UpdateStage.READY_TO_INSTALL
+                        }
+                    },
+                    { failure ->
+                        Log.w("DiPlay-Update", "refusing incompatible update APK", failure)
+                        updateMessage = getString(
+                            if (failure is UpdateApkIncompatibilityException) R.string.update_incompatible
+                            else R.string.update_failed,
+                        )
+                        updateStage = UpdateStage.AVAILABLE
+                        updateApkFile = null
+                        apk.delete()
+                    },
+                )
+                renderUpdateStatusIfVisible()
+            }
+        }, "carpaly-update-install-check").start()
+    }
+
+    private fun renderUpdateStatusIfVisible() {
+        if (page == "about" || (page == "home" && !CarPlayBackgroundSession.hasSession())) render()
     }
 
     private fun userAgent() = "CarPaly/${version()}"
