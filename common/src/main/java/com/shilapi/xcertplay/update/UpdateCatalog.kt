@@ -2,9 +2,20 @@ package com.shilapi.xcertplay.update
 
 import org.json.JSONArray
 
-/** The published release that a newer build can be downloaded from. */
+internal enum class UpdateChannel {
+    PREVIEW,
+    STABLE;
+
+    companion object {
+        internal fun fromPreference(value: String?): UpdateChannel =
+            entries.firstOrNull { it.name.equals(value, ignoreCase = true) } ?: PREVIEW
+    }
+}
+
+/** The published CarPaly release that a newer build can be downloaded from. */
 internal data class UpdateRelease(
     val tagName: String,
+    val versionName: String,
     val apkName: String,
     val apkUrl: String,
     val releasePageUrl: String,
@@ -15,53 +26,56 @@ internal data class UpdateRelease(
 )
 
 internal object UpdateCatalog {
-    internal const val APK_NAME = "CarPaly-XingyueL.apk"
-    private const val RELEASE_DOWNLOAD_PREFIX = "/Qwy20040320/carpaly/releases/download/"
-    private const val RELEASE_PAGE_PREFIX = "/Qwy20040320/carpaly/releases/tag/"
+    private const val REPOSITORY = "Qwy20040320/carpaly"
     private val sha256Digest = Regex("^sha256:([0-9a-fA-F]{64})$")
 
-    /** Returns the newest non-draft release only when it carries the canonical APK and digest. */
-    internal fun parse(json: String): UpdateRelease? {
+    internal fun apkName(versionName: String): String = "CarPaly-XingyueL$versionName.apk"
+
+    /** Returns the newest valid release allowed by [channel], skipping drafts and malformed assets. */
+    internal fun parse(json: String, channel: UpdateChannel = UpdateChannel.PREVIEW): UpdateRelease? {
         val releases = JSONArray(json)
+        var newestValid: UpdateRelease? = null
         for (index in 0 until releases.length()) {
             val release = releases.optJSONObject(index) ?: continue
             if (release.optBoolean("draft")) continue
-            val tag = release.optString("tag_name").takeIf { it.isNotBlank() } ?: return null
-            val releasePageUrl = release.optString("html_url")
-            val parsedPageUrl = runCatching { java.net.URL(releasePageUrl) }.getOrNull() ?: return null
-            if (parsedPageUrl.protocol != "https" || parsedPageUrl.host != "github.com" ||
-                parsedPageUrl.path != "$RELEASE_PAGE_PREFIX$tag") return null
-            val assets = release.optJSONArray("assets") ?: return null
-            var apkUrl: String? = null
-            var sha256: String? = null
-            var sizeBytes: Long? = null
+
+            val isPrerelease = release.optBoolean("prerelease")
+            if (channel == UpdateChannel.STABLE && isPrerelease) continue
+
+            val tag = release.optString("tag_name").takeIf { it.isNotBlank() } ?: continue
+            val versionName = UpdateVersion.releaseVersion(tag) ?: continue
+            val expectedName = apkName(versionName)
+            val expectedPage = "https://github.com/$REPOSITORY/releases/tag/$tag"
+            if (release.optString("html_url") != expectedPage) continue
+
+            val expectedAssetUrl = "https://github.com/$REPOSITORY/releases/download/$tag/$expectedName"
+            val assets = release.optJSONArray("assets") ?: continue
             for (assetIndex in 0 until assets.length()) {
                 val asset = assets.optJSONObject(assetIndex) ?: continue
-                val name = asset.optString("name")
-                if (name != APK_NAME) continue
-                val url = asset.optString("browser_download_url")
-                val parsedUrl = runCatching { java.net.URL(url) }.getOrNull() ?: continue
-                if (parsedUrl.protocol != "https" || parsedUrl.host != "github.com" ||
-                    parsedUrl.path != "$RELEASE_DOWNLOAD_PREFIX$tag/$APK_NAME") continue
-                apkUrl = url
-                sha256 = sha256Digest.find(asset.optString("digest"))?.groupValues?.get(1)?.lowercase()
-                sizeBytes = asset.optLong("size").takeIf { it > 0 }
-            }
-            if (apkUrl != null && sha256 != null && sizeBytes != null) {
-                return UpdateRelease(
+                if (asset.optString("name") != expectedName ||
+                    asset.optString("browser_download_url") != expectedAssetUrl) continue
+                val digest = sha256Digest.matchEntire(asset.optString("digest"))
+                    ?.groupValues?.get(1)?.lowercase() ?: continue
+                val sizeBytes = asset.optLong("size", -1).takeIf { it > 0 } ?: continue
+
+                val candidate = UpdateRelease(
                     tagName = tag,
-                    apkName = APK_NAME,
-                    apkUrl = apkUrl,
-                    releasePageUrl = releasePageUrl,
+                    versionName = versionName,
+                    apkName = expectedName,
+                    apkUrl = expectedAssetUrl,
+                    releasePageUrl = expectedPage,
                     releaseNotes = release.optString("body"),
                     sizeBytes = sizeBytes,
-                    isPrerelease = release.optBoolean("prerelease"),
-                    sha256 = sha256,
+                    isPrerelease = isPrerelease,
+                    sha256 = digest,
                 )
+                val current = newestValid
+                if (current == null || UpdateVersion.isNewer(candidate.versionName, current.versionName) ||
+                    (candidate.versionName == current.versionName && current.isPrerelease && !candidate.isPrerelease)) {
+                    newestValid = candidate
+                }
             }
-            // Never fall back to a stale, older release when the newest published entry is invalid.
-            return null
         }
-        return null
+        return newestValid
     }
 }

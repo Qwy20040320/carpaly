@@ -658,7 +658,15 @@
     <string name="update_up_to_date">Ya tienes la última versión</string>
     <string name="settings_auto_update_check">Buscar actualizaciones automáticamente</string>
     <string name="settings_auto_update_check_description">Comprueba si hay versiones publicadas como máximo una vez cada 24 horas. Desactívalo para impedir las comprobaciones al iniciar; la búsqueda manual seguirá disponible. No se descarga ni instala ningún APK automáticamente.</string>
+    <string name="update_available_title">Actualización disponible</string>
+    <string name="update_channel_title">Canal de actualización</string>
+    <string name="update_channel_preview">Preliminar</string>
+    <string name="update_channel_stable">Estable</string>
+    <string name="update_channel_row">Canal de actualización: %1$s</string>
+    <string name="update_channel_description">Preliminar consulta versiones preliminares y estables; Estable consulta solo las estables. Preliminar es la opción predeterminada mientras se valida CarPaly.</string>
     <string name="update_available_details">Actual: %1$s\nMás reciente: %2$s\nTamaño del paquete: %3$s</string>
+    <string name="update_apk_filename">Archivo APK: %1$s</string>
+    <string name="update_manual_install_warning">Esto solo abre la página de GitHub; CarPaly no puede verificar el archivo que descargues después. Las claves de firma de las versiones preliminares pueden variar y Android podría rechazar una actualización directa. Haz una copia de seguridad; la aplicación no desinstalará nada.</string>
     <string name="update_preview_release">Versión preliminar</string>
     <string name="update_regular_release">Versión no preliminar</string>
     <string name="update_release_notes_heading">Notas de la versión</string>

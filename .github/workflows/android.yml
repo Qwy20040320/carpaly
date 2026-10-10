@@ -24,6 +24,8 @@ jobs:
         run: |
           go install github.com/zricethezav/gitleaks/v8@v8.30.0
           "$(go env GOPATH)/bin/gitleaks" git --redact .
+      - name: Validate release publisher syntax
+        run: bash -n .github/scripts/publish-apk-release.sh
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -111,7 +113,9 @@ jobs:
           badging="$("$build_tools/aapt" dump badging "$apk")"
           grep -Fq "package: name='com.shihab.diplay.hudtest'" <<<"$badging"
           expected_version="${GITHUB_REF_NAME#v}"
-          grep -Fq "versionName='$expected_version-hud-test'" <<<"$badging"
+          grep -Fq "versionName='$expected_version'" <<<"$badging"
+          version_code="$(sed -nE "s/.*versionCode='([0-9]+)'.*/\\1/p" <<<"$badging" | head -n 1)"
+          [[ "$version_code" =~ ^[1-9][0-9]*$ ]]
           grep -Fq "package: name='com.shihab.diplay.hudtest'" dist/apk-metadata.txt
           expected_sha="$(awk '$2 == "mobile/build/outputs/apk/debug/mobile-debug.apk" { print $1 }' dist/apk-sha256.txt)"
           actual_sha="$(sha256sum "$apk" | awk '{ print $1 }')"
@@ -127,12 +131,13 @@ jobs:
           fi
           release_dir="$RUNNER_TEMP/carpaly-release"
           mkdir -p "$release_dir"
-          release_apk="$release_dir/CarPaly-XingyueL.apk"
+          release_apk="$release_dir/CarPaly-XingyueL${expected_version}.apk"
           cp "$apk" "$release_apk"
           test "$(sha256sum "$release_apk" | awk '{ print $1 }')" = "$actual_sha"
           echo "path=$release_apk" >> "$GITHUB_OUTPUT"
           echo "sha256=$actual_sha" >> "$GITHUB_OUTPUT"
           echo "size=$size" >> "$GITHUB_OUTPUT"
+          echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
       - name: Create or safely update GitHub Release
         shell: bash
         env:
@@ -142,4 +147,5 @@ jobs:
           APK_PATH: ${{ steps.apk.outputs.path }}
           APK_SHA256: ${{ steps.apk.outputs.sha256 }}
           APK_SIZE: ${{ steps.apk.outputs.size }}
+          APK_VERSION_CODE: ${{ steps.apk.outputs.version_code }}
         run: bash .github/scripts/publish-apk-release.sh

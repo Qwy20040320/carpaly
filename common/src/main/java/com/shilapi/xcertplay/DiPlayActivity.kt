@@ -45,6 +45,7 @@ import com.shilapi.xcertplay.airplay.CarPlayClusterDisplay
 import com.shilapi.xcertplay.airplay.CarPlayDisplayScale
 import com.shilapi.xcertplay.airplay.ClusterTurnCardOverlay
 import com.shilapi.xcertplay.compat.closeCompat
+import com.shilapi.xcertplay.appDialogBuilder
 import com.shilapi.xcertplay.hud.BydAdbAccess
 import com.shilapi.xcertplay.hud.BydNavigationOutputs
 import com.shilapi.xcertplay.hud.BydFieldSource
@@ -67,6 +68,7 @@ import com.shilapi.xcertplay.transport.EvChargingConnectors
 import com.shilapi.xcertplay.update.UpdateCatalog
 import com.shilapi.xcertplay.update.UpdateCheckPolicy
 import com.shilapi.xcertplay.update.UpdateClient
+import com.shilapi.xcertplay.update.UpdateChannel
 import com.shilapi.xcertplay.update.UpdateRelease
 import com.shilapi.xcertplay.update.UpdateVersion
 import java.io.File
@@ -194,6 +196,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     @Volatile private var updateGeneration = 0
     private var updateRelease: UpdateRelease? = null
     private var updateMessage: String? = null
+    private var updatePromptDismissedTag: String? = null
     private var carButtonCard: LinearLayout? = null
     private var bydAdbControls: LinearLayout? = null
     private var adbSwitchChangePending = false
@@ -695,7 +698,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             setImageResource(R.drawable.ic_carplay)
             contentDescription = getString(R.string.carplay)
         }, LinearLayout.LayoutParams(logoSize, logoSize))
-        addView(label(getString(R.string.diplay), if (compact) 20 else 26, TEXT, true).apply {
+        addView(label(getString(R.string.app_name), if (compact) 20 else 26, TEXT, true).apply {
             setPadding(if (compact) dp(8) else dp(12), 0, 0, 0)
         }, LinearLayout.LayoutParams(0, if (compact) dp(44) else dp(52), 1f))
         addView(appearanceButton(), LinearLayout.LayoutParams(dp(48), dp(48)).apply {
@@ -777,6 +780,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         val wide = resources.configuration.screenWidthDp >= 850
         val body = column()
+        updateRelease?.takeIf { it.tagName != updatePromptDismissedTag }?.let { release ->
+            body.addView(updateNoticeCard(release))
+            body.addView(space(16))
+        }
         val left = column()
         if (!compact) {
             left.addView(label(getString(R.string.your_phone_your_drive), 12, ACCENT, true).apply { letterSpacing = .16f })
@@ -2002,7 +2009,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun about(content: LinearLayout) {
-        content.addView(label(getString(R.string.diplay), 40, TEXT, true))
+        content.addView(label(getString(R.string.app_name), 40, TEXT, true))
         content.addView(label(getString(R.string.carplay_at_home_in_your_car), 20, MUTED).apply { setPadding(0, dp(8), 0, dp(24)) })
         section(content, getString(R.string.about_public_preview_prefix, version())) { card ->
             card.addView(label(getString(R.string.an_independent_carplay_receiver_for_android_head_units_wir), 17, TEXT))
@@ -2012,6 +2019,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     .putBoolean(UpdateCheckPolicy.AUTO_CHECK_ENABLED_KEY, enabled).apply()
                 if (enabled) maybeCheckForUpdatesAutomatically()
             }
+            card.addView(button(getString(R.string.update_channel_row, getString(updateChannelLabel(updateChannel()))), false) {
+                showUpdateChannelDialog()
+            }, matchButton(8, 60))
+            card.addView(label(getString(R.string.update_channel_description), 14, MUTED)
+                .apply { setPadding(0, dp(4), 0, 0) })
             card.addView(updateRow())
         }
         section(content, getString(R.string.made_possible_by_open_source)) { card ->
@@ -2032,7 +2044,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             UpdateStage.AVAILABLE -> updateRelease?.let { release ->
                 val packageSize = android.text.format.Formatter.formatShortFileSize(this, release.sizeBytes)
                 container.addView(label(getString(R.string.update_available_details,
-                    version(), release.tagName, packageSize), 14, MUTED))
+                    version(), release.versionName, packageSize), 14, MUTED))
+                container.addView(label(getString(R.string.update_apk_filename, release.apkName), 13, MUTED)
+                    .apply { setPadding(0, dp(4), 0, 0) })
                 val releaseType = getString(if (release.isPrerelease) R.string.update_preview_release
                     else R.string.update_regular_release)
                 container.addView(label(releaseType, 14, MUTED).apply { setPadding(0, dp(6), 0, 0) })
@@ -2041,6 +2055,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 val notes = release.releaseNotes.trim().take(2_000)
                     .ifBlank { getString(R.string.update_no_release_notes) }
                 container.addView(label(notes, 14, MUTED).apply { setPadding(0, dp(4), 0, dp(8)) })
+                container.addView(label(getString(R.string.update_manual_install_warning), 13, WARNING)
+                    .apply { setPadding(0, dp(4), 0, dp(4)) })
                 container.addView(button(getString(R.string.update_open_release, release.tagName), true) {
                     openUpdateRelease(release)
                 }, matchButton(4, 60))
@@ -2049,8 +2065,62 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         return container
     }
 
+    private fun updateNoticeCard(release: UpdateRelease): View = card().apply {
+        addView(label(getString(R.string.update_available_title), 18, TEXT, true))
+        addView(label(getString(R.string.update_available_details,
+            version(), release.versionName,
+            android.text.format.Formatter.formatShortFileSize(this@DiPlayActivity, release.sizeBytes)), 14, MUTED)
+            .apply { setPadding(0, dp(8), 0, 0) })
+        addView(label(getString(R.string.update_apk_filename, release.apkName), 13, MUTED)
+            .apply { setPadding(0, dp(4), 0, 0) })
+        addView(label(getString(if (release.isPrerelease) R.string.update_preview_release
+            else R.string.update_regular_release), 14, MUTED).apply { setPadding(0, dp(6), 0, 0) })
+        addView(label(getString(R.string.update_release_notes_heading), 14, TEXT, true)
+            .apply { setPadding(0, dp(10), 0, dp(4)) })
+        val notes = release.releaseNotes.trim().take(500)
+            .ifBlank { getString(R.string.update_no_release_notes) }
+        addView(label(notes, 14, MUTED))
+        addView(label(getString(R.string.update_manual_install_warning), 13, WARNING)
+            .apply { setPadding(0, dp(8), 0, 0) })
+        addView(row().apply {
+            addView(button(getString(R.string.update_open_release, release.tagName), true) {
+                openUpdateRelease(release)
+            }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = dp(8) })
+            addView(button(getString(R.string.later), false) {
+                updatePromptDismissedTag = release.tagName
+                render()
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+    }
+
     private fun autoUpdateChecksEnabled(): Boolean = getSharedPreferences("diplay", MODE_PRIVATE)
         .getBoolean(UpdateCheckPolicy.AUTO_CHECK_ENABLED_KEY, true)
+
+    private fun updateChannel(): UpdateChannel = UpdateChannel.fromPreference(
+        getSharedPreferences("diplay", MODE_PRIVATE)
+            .getString(UpdateCheckPolicy.UPDATE_CHANNEL_KEY, UpdateChannel.PREVIEW.name),
+    )
+
+    private fun updateChannelLabel(channel: UpdateChannel): Int = when (channel) {
+        UpdateChannel.PREVIEW -> R.string.update_channel_preview
+        UpdateChannel.STABLE -> R.string.update_channel_stable
+    }
+
+    private fun showUpdateChannelDialog() {
+        val channels = arrayOf(UpdateChannel.PREVIEW, UpdateChannel.STABLE)
+        val labels = channels.map { getString(updateChannelLabel(it)) }.toTypedArray()
+        appDialogBuilder()
+            .setTitle(R.string.update_channel_title)
+            .setSingleChoiceItems(labels, channels.indexOf(updateChannel())) { dialog, which ->
+                val selected = channels.getOrNull(which) ?: return@setSingleChoiceItems
+                getSharedPreferences("diplay", MODE_PRIVATE).edit()
+                    .putString(UpdateCheckPolicy.UPDATE_CHANNEL_KEY, selected.name).apply()
+                dialog.dismiss()
+                checkForUpdates()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
 
     private fun maybeCheckForUpdatesAutomatically() {
         // Unit/UI tests use Robolectric, where a real GitHub request would make activity tests
@@ -2088,7 +2158,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                             updateRelease = release
                             updateStage = UpdateStage.AVAILABLE
                         }
-                        render()
+                        if (page == "about" || (page == "home" && !CarPlayBackgroundSession.hasSession())) {
+                            render()
+                        }
                     },
                     { failure ->
                         Log.w("DiPlay-Update", "update check failed", failure)
@@ -2107,12 +2179,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             "application/vnd.github+json",
             userAgent(),
         )
-        val release = UpdateCatalog.parse(json)
-        if (release == null && org.json.JSONArray(json).length() > 0) {
-            throw IOException("The latest GitHub release metadata could not be verified")
-        }
+        val release = UpdateCatalog.parse(json, updateChannel())
         if (release == null) return null
-        return release.takeIf { UpdateVersion.isNewer(it.tagName, version()) }
+        return release.takeIf { UpdateVersion.isNewer(it.versionName, version()) }
     }
 
     private fun openUpdateRelease(release: UpdateRelease) {

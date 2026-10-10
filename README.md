@@ -28,6 +28,20 @@ CarPaly 基于开源项目 DiPlay 持续开发，重点为吉利星越 L（内�
 
 CarPaly 是 [shihabal3amri/DiPlay](https://github.com/shihabal3amri/DiPlay) 的社区派生项目，保留原项目要求的 GPL-3.0 许可与版权声明，并在此基础上开发 KX11 候选适配、诊断和日志功能。原项目远程仍作为开发参考；详见下方许可证与致谢。
 
+## CarPaly 独立版本体系
+
+CarPaly 使用自己的版本序列：`1.1.1 → 1.1.2 → 1.1.3 → 1.1.4 → …`。每次发布递增末尾数字，例如 `1.1.9` 之后是 `1.1.10`；DiPlay 上游版本只用于源码跟踪和移植，不会改变 CarPaly 的应用版本。
+
+| 历史 GitHub Release / 标签 | CarPaly 展示映射 | 实际 APK 元数据 | 历史资源 |
+| --- | --- | --- | --- |
+| [`v0.1.0`](https://github.com/Qwy20040320/carpaly/releases/tag/v0.1.0) | `v1.1.1`（仅映射） | `versionName=0.2.15-hud-test`，`versionCode=34`，`com.shihab.diplay.hudtest`，Android Debug 签名 | [原始 APK `CarPaly-XingyueL.apk`](https://github.com/Qwy20040320/carpaly/releases/download/v0.1.0/CarPaly-XingyueL.apk)；保留原链接 |
+| [`v0.1.1`](https://github.com/Qwy20040320/carpaly/releases/tag/v0.1.1) | `v1.1.2`（仅映射） | 没有 APK，无法提供 APK 内部版本或签名 | 只有 GitHub 自动生成的源码归档；保留原标签 |
+| [`v0.2.16`](https://github.com/Qwy20040320/carpaly/releases/tag/v0.2.16) | `v1.1.3`（仅映射） | `versionName=0.2.16-hud-test`，`versionCode=35`，`com.shihab.diplay.hudtest`，Android Debug 签名 | [原始 APK `CarPaly-XingyueL.apk`](https://github.com/Qwy20040320/carpaly/releases/download/v0.2.16/CarPaly-XingyueL.apk)；保留原链接 |
+
+上表中的新编号只是历史映射，不会改写旧 Git 标签、Release 标题、提交或 APK 二进制；因此不能把 `v0.2.16` 的旧 APK 说成内部版本 `1.1.3`。两份可下载的旧 APK 使用不同 Debug 证书，不保证可互相覆盖安装。旧链接和原始资产名保持不变。
+
+下一次计划构建为 `v1.1.4`：APK 内 `versionName=1.1.4`、`versionCode=36`，文件名 `CarPaly-XingyueL1.1.4.apk`，Release 标题 `CarPaly v1.1.4`。**该版本目前尚未发布。**后续版本文件名按 `CarPaly-XingyueL{versionName}.apk` 自动生成；Release 仅上传该 APK 一个手动资产，GitHub 自动生成的源码归档除外。预览通道默认开启，稳定通道只检查非预发布版本。
+
 ## 车型兼容性
 
 “候选配置”表示代码中可以选择或由 Android 构建身份映射得到，不表示吉利官方认证或实车兼容。自动识别仅检查 Android 构建字段中的平台/车型证据，不读取 VIN，也不查询车辆总线。
@@ -108,7 +122,8 @@ CarPaly 是 [shihabal3amri/DiPlay](https://github.com/shihabal3amri/DiPlay) 的�
 ## APK 下载与安装
 
 - **GitHub Releases：**[打开发布页](https://github.com/Qwy20040320/carpaly/releases)
-- 最新 [v0.2.16 预览版](https://github.com/Qwy20040320/carpaly/releases/tag/v0.2.16) 只有一个二进制附件 `CarPaly-XingyueL.apk`。它是 Debug/HUD-test 构建，包名为 `com.shihab.diplay.hudtest`，使用 Android Debug 签名；CI 已验证 APK 结构和签名。该 APK 未包含 MFi 认证输入，也没有经过星越 L 实车验证。Debug 证书不保证跨构建一致；证书不匹配时，Android 和应用更新器会拒绝原地覆盖。
+- 当前最新历史预览 [v0.2.16](https://github.com/Qwy20040320/carpaly/releases/tag/v0.2.16) 的 APK 仍以旧名 [`CarPaly-XingyueL.apk`](https://github.com/Qwy20040320/carpaly/releases/download/v0.2.16/CarPaly-XingyueL.apk) 提供。它是 Debug/HUD-test 构建，包名为 `com.shihab.diplay.hudtest`，使用 Android Debug 签名；CI 已验证 APK 结构和签名。该 APK 未包含 MFi 认证输入，也没有经过星越 L 实车验证。Debug 证书不保证跨构建一致；证书不匹配时，Android 和应用更新器会拒绝原地覆盖。
+- 下一版 `v1.1.4` 尚未发布；发布时将使用 `versionName=1.1.4`、标签 `v1.1.4` 和文件名 `CarPaly-XingyueL1.1.4.apk`。应用更新检查器只识别与版本标签匹配的版本化 APK，并引导用户手动打开 Release 页面；不会自动下载或安装。
 - **暂无经过实车验证的正式版本。**
 
 ### 安装要求
@@ -220,11 +235,12 @@ CarPaly is a community Android CarPlay receiver derived from [DiPlay](https://gi
 - USB and Wi-Fi receiver paths, media/audio handling, and generic CarPlay cluster-related code are present, but no Geely in-car integration is confirmed.
 - The read-only diagnostic center, opt-in bounded logs, filtering, redaction, and user-triggered ZIP export are implemented and covered by software tests.
 - Reverse-camera/360 takeover and Geely-specific HUD integration are not implemented.
-- Release [v0.2.16](https://github.com/Qwy20040320/carpaly/releases/tag/v0.2.16) provides the single `CarPaly-XingyueL.apk` attachment, a Debug/HUD-test build signed with an Android debug key; CI verified its package structure and signature. No MFi authentication inputs are bundled, and it has not been validated in a Geely vehicle. Debug certificates are not guaranteed to remain stable across builds; signature mismatches block in-place updates.
+- Historical release [v0.2.16](https://github.com/Qwy20040320/carpaly/releases/tag/v0.2.16) keeps its original [`CarPaly-XingyueL.apk`](https://github.com/Qwy20040320/carpaly/releases/download/v0.2.16/CarPaly-XingyueL.apk) attachment; it is a Debug/HUD-test build signed with an Android debug key. No MFi authentication inputs are bundled, and it has not been validated in a Geely vehicle. Debug certificates are not guaranteed to remain stable across builds; signature mismatches block in-place updates.
+- The next planned release is `v1.1.4`, with APK `versionName=1.1.4` and filename `CarPaly-XingyueL1.1.4.apk`; it has not been published. Future asset names are generated from the APK versionName. The in-app checker validates the versioned asset and only opens its Release page for a manual download.
 
 ### Download and setup
 
-Download the [v0.2.16 preview APK](https://github.com/Qwy20040320/carpaly/releases/tag/v0.2.16) from [GitHub Releases](https://github.com/Qwy20040320/carpaly/releases). It is a Debug/HUD-test build, has no bundled MFi authentication inputs, and is not production-signed or vehicle-validated: **暂无经过实车验证的正式版本。** The project requires Android API 25 or later. For source builds, use JDK 25, Gradle Wrapper 9.5, Android SDK Platform 37, and NDK 28.2.13676358, then run:
+Download the historical [v0.2.16 preview APK](https://github.com/Qwy20040320/carpaly/releases/download/v0.2.16/CarPaly-XingyueL.apk) from [GitHub Releases](https://github.com/Qwy20040320/carpaly/releases). It keeps its original unversioned filename; the next planned `v1.1.4` APK will be named `CarPaly-XingyueL1.1.4.apk` and has not yet been published. The existing build is a Debug/HUD-test build, has no bundled MFi authentication inputs, and is not production-signed or vehicle-validated: **暂无经过实车验证的正式版本。** The project requires Android API 25 or later. For source builds, use JDK 25, Gradle Wrapper 9.5, Android SDK Platform 37, and NDK 28.2.13676358, then run:
 
 ~~~powershell
 .\gradlew.bat :mobile:assembleDebug

@@ -8,7 +8,7 @@ import java.net.URL
 
 internal object UpdateClient {
     internal const val RELEASES_URL =
-        "https://api.github.com/repos/Qwy20040320/carpaly/releases?per_page=10"
+        "https://api.github.com/repos/Qwy20040320/carpaly/releases?per_page=30"
     private const val CONNECT_TIMEOUT_MILLIS = 10_000
     private const val READ_TIMEOUT_MILLIS = 30_000
     private const val MAXIMUM_TEXT_BYTES = 4 * 1024 * 1024

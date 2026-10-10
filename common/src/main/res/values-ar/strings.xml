@@ -658,7 +658,15 @@
     <string name="update_up_to_date">لديك آخر إصدار</string>
     <string name="settings_auto_update_check">البحث تلقائيًا عن التحديثات</string>
     <string name="settings_auto_update_check_description">تحقّق من الإصدارات المنشورة مرة واحدة كل 24 ساعة كحد أقصى. أوقف هذا الخيار لتعطيل الفحص عند التشغيل؛ يظل الفحص اليدوي متاحًا. لا يُنزّل التطبيق ملفات APK أو يثبّتها تلقائيًا.</string>
+    <string name="update_available_title">يتوفر تحديث</string>
+    <string name="update_channel_title">قناة التحديث</string>
+    <string name="update_channel_preview">معاينة</string>
+    <string name="update_channel_stable">مستقر</string>
+    <string name="update_channel_row">قناة التحديث: %1$s</string>
+    <string name="update_channel_description">تبحث قناة المعاينة عن إصدارات المعاينة والمستقرة، بينما تبحث القناة المستقرة عن الإصدارات المستقرة فقط. المعاينة هي الافتراضية أثناء التحقق من CarPaly.</string>
     <string name="update_available_details">الحالي: %1$s\nالأحدث: %2$s\nحجم الحزمة: %3$s</string>
+    <string name="update_apk_filename">ملف APK: %1$s</string>
+    <string name="update_manual_install_warning">يفتح هذا صفحة إصدار GitHub فقط؛ لا يستطيع CarPaly التحقق من الملف الذي تنزّله لاحقاً. قد تختلف مفاتيح توقيع الإصدارات التجريبية، لذلك قد يرفض Android التحديث فوق التطبيق الحالي. احتفظ بنسخة احتياطية؛ لن يحذف التطبيق أي شيء.</string>
     <string name="update_preview_release">إصدار تجريبي</string>
     <string name="update_regular_release">إصدار غير تجريبي</string>
     <string name="update_release_notes_heading">ملاحظات الإصدار</string>

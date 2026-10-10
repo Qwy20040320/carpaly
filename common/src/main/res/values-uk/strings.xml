@@ -670,7 +670,15 @@
     <string name="update_up_to_date">У вас вже найновіша версія</string>
     <string name="settings_auto_update_check">Автоматично перевіряти оновлення</string>
     <string name="settings_auto_update_check_description">Перевіряйте опубліковані випуски не частіше ніж раз на 24 години. Вимкніть цей параметр, щоб зупинити перевірки під час запуску; ручна перевірка залишиться доступною. APK не завантажується й не встановлюється автоматично.</string>
+    <string name="update_available_title">Доступне оновлення</string>
+    <string name="update_channel_title">Канал оновлень</string>
+    <string name="update_channel_preview">Попередній</string>
+    <string name="update_channel_stable">Стабільний</string>
+    <string name="update_channel_row">Канал оновлень: %1$s</string>
+    <string name="update_channel_description">Попередній канал шукає попередні та стабільні випуски; стабільний — лише стабільні. Поки CarPaly проходить перевірку, за замовчуванням вибрано попередній канал.</string>
     <string name="update_available_details">Поточна: %1$s\nНайновіша: %2$s\nРозмір пакета: %3$s</string>
+    <string name="update_apk_filename">Файл APK: %1$s</string>
+    <string name="update_manual_install_warning">Відкривається лише сторінка випуску GitHub; CarPaly не може перевірити файл, який ви завантажите пізніше. Ключі підпису попередніх збірок можуть відрізнятися, тому Android може заборонити оновлення поверх поточної версії. Зробіть резервну копію; застосунок нічого не видалятиме.</string>
     <string name="update_preview_release">Попередній випуск</string>
     <string name="update_regular_release">Звичайний випуск</string>
     <string name="update_release_notes_heading">Примітки до випуску</string>

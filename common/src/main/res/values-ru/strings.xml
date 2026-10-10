@@ -658,7 +658,15 @@
     <string name="update_up_to_date">У вас последняя версия</string>
     <string name="settings_auto_update_check">Автоматически проверять обновления</string>
     <string name="settings_auto_update_check_description">Проверять опубликованные выпуски не чаще одного раза в 24 часа. Выключите параметр, чтобы отключить проверку при запуске; ручная проверка останется доступна. APK не скачивается и не устанавливается автоматически.</string>
+    <string name="update_available_title">Доступно обновление</string>
+    <string name="update_channel_title">Канал обновлений</string>
+    <string name="update_channel_preview">Предварительный</string>
+    <string name="update_channel_stable">Стабильный</string>
+    <string name="update_channel_row">Канал обновлений: %1$s</string>
+    <string name="update_channel_description">Предварительный канал проверяет предварительные и стабильные выпуски; стабильный — только стабильные. Пока CarPaly проходит проверку, по умолчанию выбран предварительный канал.</string>
     <string name="update_available_details">Текущая: %1$s\nПоследняя: %2$s\nРазмер пакета: %3$s</string>
+    <string name="update_apk_filename">Файл APK: %1$s</string>
+    <string name="update_manual_install_warning">Открывается только страница выпуска GitHub; CarPaly не может проверить файл, скачанный вами позже. Ключи подписи предварительных сборок могут различаться, поэтому Android может запретить установку поверх текущей версии. Сохраните резервную копию; приложение ничего не удаляет.</string>
     <string name="update_preview_release">Предварительный выпуск</string>
     <string name="update_regular_release">Обычный выпуск</string>
     <string name="update_release_notes_heading">Примечания к выпуску</string>

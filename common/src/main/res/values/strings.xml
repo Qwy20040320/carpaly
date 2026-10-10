@@ -756,7 +756,15 @@
     <string name="update_up_to_date">You\'re up to date</string>
     <string name="settings_auto_update_check">Check for updates automatically</string>
     <string name="settings_auto_update_check_description">Check for published releases at most once every 24 hours. Turn this off to disable launch-time checks; manual checks remain available. No APK is downloaded or installed automatically.</string>
+    <string name="update_available_title">Update available</string>
+    <string name="update_channel_title">Update channel</string>
+    <string name="update_channel_preview">Preview</string>
+    <string name="update_channel_stable">Stable</string>
+    <string name="update_channel_row">Update channel: %1$s</string>
+    <string name="update_channel_description">Preview checks preview and stable releases. Stable checks stable releases only. Preview is the default while CarPaly is being validated.</string>
     <string name="update_available_details">Current: %1$s\nLatest: %2$s\nPackage size: %3$s</string>
+    <string name="update_apk_filename">APK file: %1$s</string>
+    <string name="update_manual_install_warning">This opens the GitHub release page only; CarPaly cannot verify a file downloaded afterward. Preview/debug signing keys may differ between builds, so Android can reject an in-place update. Back up your data; the app will not uninstall anything.</string>
     <string name="update_preview_release">Preview release</string>
     <string name="update_regular_release">Non-preview release</string>
     <string name="update_release_notes_heading">Release notes</string>

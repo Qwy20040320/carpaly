@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-for variable in GH_TOKEN GH_REPO RELEASE_TAG APK_PATH APK_SHA256 APK_SIZE GITHUB_RUN_ID GITHUB_RUN_ATTEMPT RUNNER_TEMP; do
+for variable in GH_TOKEN GH_REPO RELEASE_TAG APK_PATH APK_SHA256 APK_SIZE APK_VERSION_CODE GITHUB_RUN_ID GITHUB_RUN_ATTEMPT RUNNER_TEMP; do
   if ! printenv "$variable" >/dev/null; then
     echo "Required environment variable is missing: $variable" >&2
     exit 1
@@ -13,13 +13,24 @@ if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   exit 1
 fi
 
-canonical_name="CarPaly-XingyueL.apk"
+version="$(sed 's/^v//' <<< "$RELEASE_TAG")"
+if [[ ! "$APK_VERSION_CODE" =~ ^[1-9][0-9]*$ ]]; then
+  echo "APK_VERSION_CODE must be a positive integer." >&2
+  exit 1
+fi
+canonical_name="CarPaly-XingyueL$version.apk"
+escaped_version="$(sed 's/\./\\./g' <<< "$version")"
+managed_asset_regex="^CarPaly-XingyueL$escaped_version-(upload|previous)-[0-9]+-[0-9]+\\.apk$"
+previous_asset_regex="^CarPaly-XingyueL$escaped_version-previous-[0-9]+-[0-9]+\\.apk$"
 api_version="2022-11-28"
 release_endpoint="repos/$GH_REPO/releases/tags/$RELEASE_TAG"
-release_title="CarPaly $RELEASE_TAG - Debug / HUD-test"
-release_notes="$(printf '%s\n\n%s\n' \
-  'Automated Android Debug / HUD-test build for development and installation checks.' \
-  'The APK signature and Android package structure were checked by CI. CarPlay and vehicle integration have not been verified in an actual Geely Xingyue L.')"
+release_title="CarPaly $RELEASE_TAG"
+release_notes="Android versionName: $version
+Android versionCode: $APK_VERSION_CODE
+APK file: $canonical_name
+
+Preview / Debug-HUD-test build; this is not a stable-signature package.
+CI checks package structure and signature format only. MFi authentication inputs and Geely in-car validation are not included or claimed."
 
 api() {
   gh api -H "Accept: application/vnd.github+json" \
@@ -40,6 +51,42 @@ asset_row() {
     <<<"$1"
 }
 
+release_index="$(api "repos/$GH_REPO/releases?per_page=100")"
+highest_version_code=0
+existing_tag_version_code=""
+while IFS= read -r encoded_release; do
+  prior_release="$(base64 --decode <<<"$encoded_release")"
+  prior_tag="$(jq -r '.tag_name // ""' <<<"$prior_release")"
+  prior_body="$(jq -r '.body // ""' <<<"$prior_release")"
+  prior_code="$(sed -nE 's/^Android versionCode: ([0-9]+)$/\1/p' <<<"$prior_body" | head -n 1)"
+  case "$prior_tag" in
+    v0.1.0)
+      if [[ -z "$prior_code" ]]; then prior_code=34; fi
+      ;;
+    v0.2.16)
+      if [[ -z "$prior_code" ]]; then prior_code=35; fi
+      ;;
+  esac
+  [[ "$prior_code" =~ ^[1-9][0-9]*$ ]] || continue
+  if [[ "$prior_tag" == "$RELEASE_TAG" ]]; then
+    existing_tag_version_code="$prior_code"
+    continue
+  fi
+  if (( prior_code > highest_version_code )); then
+    highest_version_code="$prior_code"
+  fi
+done < <(jq -r '.[] | @base64' <<<"$release_index")
+
+if [[ -n "$existing_tag_version_code" ]]; then
+  if [[ "$APK_VERSION_CODE" != "$existing_tag_version_code" ]]; then
+    echo "A rerun for $RELEASE_TAG must preserve versionCode $existing_tag_version_code." >&2
+    exit 1
+  fi
+elif (( APK_VERSION_CODE <= highest_version_code )); then
+  echo "APK versionCode $APK_VERSION_CODE must exceed the published maximum $highest_version_code." >&2
+  exit 1
+fi
+
 verify_asset() {
   local assets="$1" name="$2" expected_size="$3" expected_sha="$4"
   local count row id size digest state
@@ -52,10 +99,10 @@ verify_asset() {
 
 reject_unmanaged_assets() {
   local assets="$1" unexpected
-  unexpected="$(jq -r --arg canonical "$canonical_name" '
+  unexpected="$(jq -r --arg canonical "$canonical_name" --arg managed "$managed_asset_regex" '
     .[]
     | select(.name != $canonical)
-    | select((.name | test("^CarPaly-XingyueL-(upload|previous)-[0-9]+-[0-9]+\\.apk$")) | not)
+    | select((.name | test($managed)) | not)
     | .name
   ' <<<"$assets")"
   if [[ -n "$unexpected" ]]; then
@@ -115,12 +162,12 @@ fi
 # Recover an interrupted replacement if the prior APK was renamed to a
 # backup but the new APK had not yet received the canonical name.
 if (( canonical_count == 0 )); then
-  previous_count="$(jq '[.[] | select(.name | test("^CarPaly-XingyueL-previous-[0-9]+-[0-9]+\\.apk$"))] | length' <<<"$assets")"
+  previous_count="$(jq --arg previous "$previous_asset_regex" '[.[] | select(.name | test($previous))] | length' <<<"$assets")"
   if (( previous_count > 1 )); then
     echo "Multiple previous APK backups exist and need manual review." >&2
     exit 1
   elif (( previous_count == 1 )); then
-    previous_row="$(jq -r '.[] | select(.name | test("^CarPaly-XingyueL-previous-[0-9]+-[0-9]+\\.apk$")) | [.id, .name] | @tsv' <<<"$assets")"
+    previous_row="$(jq -r --arg previous "$previous_asset_regex" '.[] | select(.name | test($previous)) | [.id, .name] | @tsv' <<<"$assets")"
     IFS=$'\t' read -r previous_id previous_name <<<"$previous_row"
     patch_asset_name "$previous_id" "$canonical_name"
     assets="$(list_assets "$release_id")"
@@ -129,7 +176,7 @@ if (( canonical_count == 0 )); then
 fi
 
 run_suffix="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-temporary_name="CarPaly-XingyueL-upload-$run_suffix.apk"
+temporary_name="CarPaly-XingyueL$version-upload-$run_suffix.apk"
 temporary_path="$RUNNER_TEMP/$temporary_name"
 temporary_count="$(asset_count "$assets" "$temporary_name")"
 if (( temporary_count > 1 )); then
@@ -149,7 +196,7 @@ temporary_id="$(asset_row "$assets" "$temporary_name" | cut -f1)"
 
 canonical_count="$(asset_count "$assets" "$canonical_name")"
 old_asset_id=""
-backup_name="CarPaly-XingyueL-previous-$run_suffix.apk"
+backup_name="CarPaly-XingyueL$version-previous-$run_suffix.apk"
 if (( canonical_count == 1 )); then
   old_asset_id="$(asset_row "$assets" "$canonical_name" | cut -f1)"
   if (( $(asset_count "$assets" "$backup_name") != 0 )); then
@@ -185,7 +232,7 @@ fi
 while IFS=$'\t' read -r asset_id asset_name; do
   [[ -n "$asset_id" ]] || continue
   [[ "$asset_name" == "$canonical_name" ]] && continue
-  if [[ "$asset_name" =~ ^CarPaly-XingyueL-(upload|previous)-[0-9]+-[0-9]+\.apk$ ]]; then
+  if [[ "$asset_name" =~ $managed_asset_regex ]]; then
     delete_asset "$asset_id"
   else
     echo "Refusing to delete unmanaged release asset: $asset_name" >&2

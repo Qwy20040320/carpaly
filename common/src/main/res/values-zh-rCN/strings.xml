@@ -718,7 +718,15 @@
     <string name="update_up_to_date">已是最新版本</string>
     <string name="settings_auto_update_check">自动检查更新</string>
     <string name="settings_auto_update_check_description">最多每 24 小时检查一次已发布版本。关闭后不再于启动时自动检查；仍可手动检查。应用不会自动下载或安装 APK。</string>
+    <string name="update_available_title">发现新版本</string>
+    <string name="update_channel_title">更新通道</string>
+    <string name="update_channel_preview">预览版</string>
+    <string name="update_channel_stable">稳定版</string>
+    <string name="update_channel_row">更新通道：%1$s</string>
+    <string name="update_channel_description">预览通道检查预览版和稳定版；稳定通道只检查稳定版。CarPaly 实车验证期间默认使用预览通道。</string>
     <string name="update_available_details">当前版本：%1$s\n最新版本：%2$s\n安装包大小：%3$s</string>
+    <string name="update_apk_filename">APK 文件：%1$s</string>
+    <string name="update_manual_install_warning">这里只会打开 GitHub Release 页面；CarPaly 无法校验你之后下载的文件。不同预览/调试构建的签名可能不同，Android 可能会拒绝覆盖安装。请先备份数据；应用不会自动卸载任何内容。</string>
     <string name="update_preview_release">预览版</string>
     <string name="update_regular_release">非预览版</string>
     <string name="update_release_notes_heading">版本说明</string>
