@@ -67,8 +67,9 @@ release_notes="## 中文
 - Android versionCode: $APK_VERSION_CODE
 - APK：$canonical_apk
 - SHA-256：$APK_SHA256
-- 认证资源已按单独审核的授权范围包含在测试 APK 中；APK 内私钥可被提取。
-- Debug / HUD-test 预览版，不是生产签名，也不代表 Apple/吉利认证。
+- 认证资源已按单独审核的授权范围包含在 APK 中；APK 内私钥可被提取。
+- Android Release 签名预览版；不代表 Apple/吉利认证。
+- 已安装旧 Debug 测试包可能因签名不同而不能覆盖安装；卸载会清除应用私有数据，请先备份，且勿假设数据迁移可用。
 - Android 运行时认证和星越 L 实车功能：NOT_TESTED。
 
 ## English
@@ -77,8 +78,9 @@ release_notes="## 中文
 - Android versionCode: $APK_VERSION_CODE
 - APK: $canonical_apk
 - SHA-256: $APK_SHA256
-- Authentication assets are bundled for evaluation only under a separately reviewed grant; the private key is extractable from the APK.
-- Debug / HUD-test preview; not production-signed and not Apple or Geely certified.
+- Authentication assets are bundled under a separately reviewed grant; the private key is extractable from the APK.
+- Android Release-signed preview; not Apple or Geely certified.
+- An older Debug-signed test APK may not accept an in-place update. Uninstalling erases app-private data; back it up first and do not assume data migration is available.
 - Android runtime authentication and Geely in-vehicle functions: NOT_TESTED."
 
 release_json=""

@@ -91,7 +91,7 @@ jobs:
             apk-sha256.txt
             apk-metadata.txt
   authenticated_release:
-    name: Build and publish authenticated CarPaly preview
+    name: Build and publish Release-signed authenticated CarPaly preview
     needs: check
     if: startsWith(github.ref, 'refs/tags/v1.')
     runs-on: ubuntu-latest
@@ -101,7 +101,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: false
       - name: Require reviewed third-party public-distribution grant
         env:
@@ -122,6 +122,17 @@ jobs:
             echo "Only CarPaly v1.x.y release tags are accepted." >&2
             exit 1
           }
+      - name: Confirm release tag is contained in main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --no-tags
+          release_commit="$(git rev-parse "${GITHUB_REF_NAME}^{commit}")"
+          main_commit="$(git rev-parse origin/main)"
+          git merge-base --is-ancestor "$release_commit" "$main_commit" || {
+            echo "Release tag does not point to a commit contained in main." >&2
+            exit 1
+          }
       - name: Set up Java and Android SDK
         uses: actions/setup-java@v4
         with:
@@ -131,58 +142,71 @@ jobs:
         with:
           packages: platform-tools platforms;android-37.0 build-tools;36.0.0 ndk;28.2.13676358
       - uses: gradle/actions/setup-gradle@v4
-      - name: Provision protected MFi inputs and stable debug signer
+      - name: Provision protected MFi inputs and formal Release signer
         env:
           MFI_IDENTITY_PK8_BASE64: ${{ secrets.MFI_IDENTITY_PK8_BASE64 }}
           MFI_CERTIFICATE_P7B_BASE64: ${{ secrets.MFI_CERTIFICATE_P7B_BASE64 }}
-          CARPALY_DEBUG_KEYSTORE_BASE64: ${{ secrets.CARPALY_DEBUG_KEYSTORE_BASE64 }}
-          CARPALY_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.CARPALY_DEBUG_KEYSTORE_PASSWORD }}
-          CARPALY_DEBUG_KEY_ALIAS: ${{ secrets.CARPALY_DEBUG_KEY_ALIAS }}
-          CARPALY_DEBUG_KEY_PASSWORD: ${{ secrets.CARPALY_DEBUG_KEY_PASSWORD }}
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}
         shell: bash
         run: |
           set -euo pipefail
           umask 077
           : "${MFI_IDENTITY_PK8_BASE64:?MFI_IDENTITY_PK8_BASE64 is not configured}"
           : "${MFI_CERTIFICATE_P7B_BASE64:?MFI_CERTIFICATE_P7B_BASE64 is not configured}"
-          : "${CARPALY_DEBUG_KEYSTORE_BASE64:?CARPALY_DEBUG_KEYSTORE_BASE64 is not configured}"
-          : "${CARPALY_DEBUG_KEYSTORE_PASSWORD:?CARPALY_DEBUG_KEYSTORE_PASSWORD is not configured}"
-          : "${CARPALY_DEBUG_KEY_ALIAS:?CARPALY_DEBUG_KEY_ALIAS is not configured}"
-          : "${CARPALY_DEBUG_KEY_PASSWORD:?CARPALY_DEBUG_KEY_PASSWORD is not configured}"
+          : "${RELEASE_KEYSTORE_BASE64:?RELEASE_KEYSTORE_BASE64 is not configured}"
+          : "${RELEASE_STORE_PASSWORD:?RELEASE_STORE_PASSWORD is not configured}"
+          : "${RELEASE_KEY_ALIAS:?RELEASE_KEY_ALIAS is not configured}"
+          : "${RELEASE_KEY_PASSWORD:?RELEASE_KEY_PASSWORD is not configured}"
+          [[ "$RELEASE_SIGNING_CERT_SHA256" =~ ^[a-fA-F0-9]{64}$ ]] || {
+            echo "RELEASE_SIGNING_CERT_SHA256 must be a 64-digit SHA-256 fingerprint." >&2
+            exit 1
+          }
           auth_dir="$RUNNER_TEMP/carpaly-auth-assets"
           signing_dir="$RUNNER_TEMP/carpaly-signing"
           mkdir -p "$auth_dir/offline-mfi" "$signing_dir"
           printf '%s' "$MFI_IDENTITY_PK8_BASE64" | base64 --decode > "$auth_dir/offline-mfi/identity.pk8"
           printf '%s' "$MFI_CERTIFICATE_P7B_BASE64" | base64 --decode > "$auth_dir/offline-mfi/certificate.p7b"
-          printf '%s' "$CARPALY_DEBUG_KEYSTORE_BASE64" | base64 --decode > "$signing_dir/debug.keystore"
-          chmod 600 "$auth_dir/offline-mfi/identity.pk8" "$auth_dir/offline-mfi/certificate.p7b" "$signing_dir/debug.keystore"
+          printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$signing_dir/carpaly-release.p12"
+          chmod 600 "$auth_dir/offline-mfi/identity.pk8" "$auth_dir/offline-mfi/certificate.p7b" "$signing_dir/carpaly-release.p12"
           test -s "$auth_dir/offline-mfi/identity.pk8"
           test -s "$auth_dir/offline-mfi/certificate.p7b"
-          test -s "$signing_dir/debug.keystore"
-      - name: Build and verify authenticated standalone debug APK
+          test -s "$signing_dir/carpaly-release.p12"
+          keytool -list -v -alias "$RELEASE_KEY_ALIAS" -keystore "$signing_dir/carpaly-release.p12" \
+            -storetype PKCS12 -storepass:env RELEASE_STORE_PASSWORD > "$RUNNER_TEMP/release-keystore-inspection.txt"
+          signer_sha="$(awk -F': ' '/^SHA256: / { gsub(":", "", $2); print tolower($2); exit }' "$RUNNER_TEMP/release-keystore-inspection.txt")"
+          [[ "$signer_sha" == "${RELEASE_SIGNING_CERT_SHA256,,}" ]] || {
+            echo "Release keystore signer differs from the pinned environment certificate." >&2
+            exit 1
+          }
+      - name: Build authenticated standalone Release APK
         env:
           DIPLAY_AUTH_ASSETS_DIR: ${{ runner.temp }}/carpaly-auth-assets
-          CARPALY_DEBUG_KEYSTORE_PATH: ${{ runner.temp }}/carpaly-signing/debug.keystore
-          CARPALY_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.CARPALY_DEBUG_KEYSTORE_PASSWORD }}
-          CARPALY_DEBUG_KEY_ALIAS: ${{ secrets.CARPALY_DEBUG_KEY_ALIAS }}
-          CARPALY_DEBUG_KEY_PASSWORD: ${{ secrets.CARPALY_DEBUG_KEY_PASSWORD }}
-        run: ./gradlew :mobile:verifyStandaloneDebugApk --stacktrace
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/carpaly-signing/carpaly-release.p12
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: ./gradlew :mobile:verifyStandaloneAuthentication :mobile:assembleRelease --stacktrace
       - name: Verify APK metadata, signer, auth hashes and release name
         id: apk
         env:
           DIPLAY_AUTH_ASSETS_DIR: ${{ runner.temp }}/carpaly-auth-assets
+          RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}
         shell: bash
         run: |
           set -euo pipefail
-          apk="mobile/build/outputs/apk/debug/mobile-debug.apk"
+          apk="mobile/build/outputs/apk/release/mobile-release.apk"
           test -s "$apk"
           unzip -tq "$apk"
           build_tools="$ANDROID_HOME/build-tools/36.0.0"
           "$build_tools/apksigner" verify --verbose --print-certs "$apk"
           signer_sha="$("$build_tools/apksigner" verify --print-certs "$apk" | awk -F': ' '/Signer #1 certificate SHA-256 digest/ { print tolower($2); exit }')"
-          expected_signer_sha="7b729b4066beec0f8321963c3c8bc68fbbe2162120845c28263e8cae157bbdc0"
+          expected_signer_sha="${RELEASE_SIGNING_CERT_SHA256,,}"
           [[ "$signer_sha" == "$expected_signer_sha" ]] || {
-            echo "APK signer differs from the locally delivered v1.1.4 debug signer; refusing an incompatible update." >&2
+            echo "APK signer differs from the pinned Release certificate." >&2
             exit 1
           }
           badging="$("$build_tools/aapt" dump badging "$apk")"
@@ -191,6 +215,10 @@ jobs:
           grep -Fq "versionName='$expected_version'" <<<"$badging"
           version_code="$(sed -nE "s/.*versionCode='([0-9]+)'.*/\1/p" <<<"$badging" | head -n 1)"
           [[ "$version_code" =~ ^[1-9][0-9]*$ ]]
+          if [[ "$expected_version" == "1.1.4" && "$version_code" != "36" ]]; then
+            echo "CarPaly v1.1.4 must retain Android versionCode 36." >&2
+            exit 1
+          fi
           auth_dir="$DIPLAY_AUTH_ASSETS_DIR/offline-mfi"
           for name in identity.pk8 certificate.p7b; do
             source_sha="$(sha256sum "$auth_dir/$name" | awk '{ print $1 }')"
@@ -244,4 +272,4 @@ jobs:
           set -euo pipefail
           rm -rf -- "$RUNNER_TEMP/carpaly-auth-assets" "$RUNNER_TEMP/carpaly-release" \
             "$RUNNER_TEMP/carpaly-release-remote" "$RUNNER_TEMP/carpaly-release-published" \
-            "$RUNNER_TEMP/carpaly-signing"
+            "$RUNNER_TEMP/carpaly-signing" "$RUNNER_TEMP/release-keystore-inspection.txt"
