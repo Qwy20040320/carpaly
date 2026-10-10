@@ -82,6 +82,20 @@ class UsbReadQueueCompatibilityTest {
         checkFallbackDiagnostic(diagnostics, "NCM", 32_768)
     }
 
+    @Test fun ncmDoesNotConsumeTheNextNtbHeaderAsAnOptionalAlignedPad() {
+        val frame = ByteArray(32_740) { (it * 31).toByte() }
+        val followingFrame = byteArrayOf(0x33, 0x33, 0, 0, 0, 1, 0x86.toByte(), 0xdd.toByte())
+        val paddedBlock = Ntb16Codec.build(frame, 7)
+        assertEquals(32_769, paddedBlock.size)
+        val unpaddedBlock = paddedBlock.copyOf(paddedBlock.size - 1)
+        UsbQueueReplay.transfer = unpaddedBlock + Ntb16Codec.build(followingFrame, 8)
+        val ncm = ncm()
+        try {
+            assertArrayEquals(frame, ncm.recv(1_000))
+            assertArrayEquals(followingFrame, ncm.recv(1_000))
+        } finally { ncm.close() }
+    }
+
     @Test fun diagnosticCallbackFailureDoesNotInterruptEitherAcceptedFallback() {
         val failingDiagnostic: (String) -> Unit = { throw IllegalStateException("optional diagnostic failed") }
         UsbQueueReplay.outcomes.addAll(listOf(false, true))
@@ -95,14 +109,14 @@ class UsbReadQueueCompatibilityTest {
 
     @Test fun bothQueueRejectionsFailWithEndpointApiAndAttemptedSizes() {
         val pipe = pipe()
-        UsbQueueReplay.outcomes.addAll(listOf(false, false))
+        UsbQueueReplay.outcomes.addAll(listOf(false, false, false, false, false))
         try { checkQueueFailure { pipe.read(100) } } finally { pipe.close() }
-        assertEquals(listOf(65_536, 16_384), UsbQueueReplay.sizes)
+        assertEquals(listOf(65_536, 16_384, 8_192, 4_096, 2_048), UsbQueueReplay.sizes)
         UsbQueueReplay.reset()
         val ncm = ncm()
-        UsbQueueReplay.outcomes.addAll(listOf(false, false))
+        UsbQueueReplay.outcomes.addAll(listOf(false, false, false, false, false))
         try { checkQueueFailure { readChunk(ncm) } } finally { ncm.close() }
-        assertEquals(listOf(32_768, 16_384), UsbQueueReplay.sizes)
+        assertEquals(listOf(32_768, 16_384, 8_192, 4_096, 2_048), UsbQueueReplay.sizes)
     }
 
     @Test fun queueExceptionDoesNotTriggerCompatibilityRetryInEitherPipe() {
@@ -160,7 +174,7 @@ class UsbReadQueueCompatibilityTest {
         assertTrue(error.message!!.contains("api=28"))
         assertTrue(error.message!!.contains("endpoint=0x85"))
         assertTrue(error.message!!.contains("firstBytes="))
-        assertTrue(error.message!!.contains("fallbackBytes=16384"))
+        assertTrue(error.message!!.contains("fallbackBytes=2048"))
     }
 
     private fun checkFallbackDiagnostic(diagnostics: List<String>, pipe: String, firstBytes: Int) {

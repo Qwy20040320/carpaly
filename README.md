@@ -35,7 +35,7 @@ CarPaly 使用自己的版本序列：`1.1.1 → 1.1.2 → 1.1.3 → 1.1.4 → �
 | 历史 GitHub Release / 标签 | CarPaly 展示映射 | 实际 APK 元数据 | 历史资源 |
 | --- | --- | --- | --- |
 | [`v0.1.0`](https://github.com/Qwy20040320/carpaly/releases/tag/v0.1.0) | `v1.1.1`（仅映射） | `versionName=0.2.15-hud-test`，`versionCode=34`，`com.shihab.diplay.hudtest`，Android Debug 签名 | [原始 APK `CarPaly-XingyueL.apk`](https://github.com/Qwy20040320/carpaly/releases/download/v0.1.0/CarPaly-XingyueL.apk)；保留原链接 |
-| [`v0.1.1`](https://github.com/Qwy20040320/carpaly/releases/tag/v0.1.1) | `v1.1.2`（仅映射） | 没有 APK，无法提供 APK 内部版本或签名 | 只有 GitHub 自动生成的源码归档；保留原标签 |
+| [`v0.1.1`](https://github.com/Qwy20040320/carpaly/releases/tag/v0.1.1) | `v1.1.2`（仅映射） | Release 标记为 Debug/HUD-test；本轮未重新审计 APK 内部版本与签名 | [原始 APK `CarPaly-XingyueL.apk`](https://github.com/Qwy20040320/carpaly/releases/download/v0.1.1/CarPaly-XingyueL.apk)（22,384,502 bytes）；旧链接暂保留，待确认清理 |
 | [`v0.2.16`](https://github.com/Qwy20040320/carpaly/releases/tag/v0.2.16) | `v1.1.3`（仅映射） | `versionName=0.2.16-hud-test`，`versionCode=35`，`com.shihab.diplay.hudtest`，Android Debug 签名 | [原始 APK `CarPaly-XingyueL.apk`](https://github.com/Qwy20040320/carpaly/releases/download/v0.2.16/CarPaly-XingyueL.apk)；保留原链接 |
 
 上表中的新编号只是历史映射，不会改写旧 Git 标签、Release 标题、提交或 APK 二进制；因此不能把 `v0.2.16` 的旧 APK 说成内部版本 `1.1.3`。两份可下载的旧 APK 使用不同 Debug 证书，不保证可互相覆盖安装。旧链接和原始资产名保持不变。

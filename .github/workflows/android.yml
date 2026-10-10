@@ -61,6 +61,19 @@ jobs:
             echo "APK: $apk" | tee -a apk-metadata.txt
             "$build_tools/aapt" dump badging "$apk" | sed -n '1,2p' | tee -a apk-metadata.txt
           done
+      - name: Reject authentication credentials from public Actions artifacts
+        if: success()
+        run: |
+          set -euo pipefail
+          mapfile -d '' apks < <(find mobile samples/home samples/maphost -path '*/build/outputs/apk/debug/*.apk' -type f -print0 | sort -z)
+          test "${#apks[@]}" -gt 0
+          for apk in "${apks[@]}"; do
+            entries="$(unzip -Z1 "$apk")"
+            if grep -E '(^|/)(identity\.pk8|certificate\.p7b|[^/]+\.(key|pk8|p7b|pem|p12|pfx|jks|keystore))$' <<<"$entries"; then
+              echo "Refusing to upload authentication material in a public Actions artifact: $apk" >&2
+              exit 1
+            fi
+          done
       - name: Calculate debug APK SHA-256
         if: success()
         run: |
@@ -93,6 +106,18 @@ jobs:
         with:
           name: debug-apks-and-sha256
           path: dist
+      - name: Require local MFi assets (source-only APKs must not publish)
+        run: |
+          set -euo pipefail
+          apk="dist/mobile/build/outputs/apk/debug/mobile-debug.apk"
+          test -s "$apk"
+          entries="$(unzip -Z1 "$apk")"
+          for required in assets/offline-mfi/identity.pk8 assets/offline-mfi/certificate.p7b; do
+            if ! grep -Fxq "$required" <<<"$entries"; then
+              echo "Refusing to publish a source-only APK; missing required local MFi asset: $required" >&2
+              exit 1
+            fi
+          done
       - uses: android-actions/setup-android@v3
         with:
           packages: build-tools;36.0.0
