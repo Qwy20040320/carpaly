@@ -1,40 +1,15 @@
 package com.shilapi.xcertplay.update
 
-import android.content.Intent
-import android.os.Build
-import android.provider.Settings
 import com.shilapi.xcertplay.DiPlayActivity
-import java.io.File
-import org.junit.Assert.assertEquals
-import org.junit.Assume.assumeTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.Robolectric
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
-import org.robolectric.annotation.Config
 
-@RunWith(RobolectricTestRunner::class)
-@Config(sdk = [25, 28, 33])
 class UpdateInstallCompatibilityTest {
-    @Test fun installationUsesOnlySupportedPermissionApis() {
-        assumeTrue("Windows Robolectric SDK 25 does not resolve FileProvider cache roots; Linux CI covers this API branch",
-            Build.VERSION.SDK_INT >= 26 || !System.getProperty("os.name").orEmpty().contains("Windows", ignoreCase = true))
-        val activity = Robolectric.buildActivity(DiPlayActivity::class.java).get()
-        val apk = File(activity.cacheDir, "update/test/DiPlay.apk").apply {
-            parentFile!!.mkdirs()
-            writeBytes(byteArrayOf(1))
-        }
-        DiPlayActivity::class.java.getDeclaredField("updateFile")
-            .apply { isAccessible = true }.set(activity, apk)
-        DiPlayActivity::class.java.getDeclaredMethod("installUpdate")
-            .apply { isAccessible = true }.invoke(activity)
-        val intent = shadowOf(activity).nextStartedActivity
-        assertEquals(if (Build.VERSION.SDK_INT < 26) Intent.ACTION_VIEW
-            else Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, intent.action)
-        if (Build.VERSION.SDK_INT < 26) {
-            assertEquals("content", intent.data!!.scheme)
-            assertEquals("application/vnd.android.package-archive", intent.type)
-        }
+    @Test fun updaterDoesNotDownloadOrInstallApksInTheBackground() {
+        val methods = DiPlayActivity::class.java.declaredMethods.map { it.name }.toSet()
+        val fields = DiPlayActivity::class.java.declaredFields.map { it.name }.toSet()
+        assertFalse("Activity must not expose an in-app APK download path", "downloadUpdate" in methods)
+        assertFalse("Activity must not invoke the APK installer", "installUpdate" in methods)
+        assertFalse("Activity must not persist a downloaded installer APK", "updateFile" in fields)
     }
 }

@@ -35,7 +35,6 @@ import android.widget.*
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.FileProvider
 import androidx.core.view.doOnLayout
 import androidx.core.view.WindowCompat
 import androidx.core.view.ViewCompat
@@ -66,9 +65,8 @@ import com.shilapi.xcertplay.setup.DiLinkGeneration
 import com.shilapi.xcertplay.setup.SetupGuide
 import com.shilapi.xcertplay.transport.EvChargingConnectors
 import com.shilapi.xcertplay.update.UpdateCatalog
+import com.shilapi.xcertplay.update.UpdateCheckPolicy
 import com.shilapi.xcertplay.update.UpdateClient
-import com.shilapi.xcertplay.update.UpdateApkCompatibility
-import com.shilapi.xcertplay.update.UpdateChecksums
 import com.shilapi.xcertplay.update.UpdateRelease
 import com.shilapi.xcertplay.update.UpdateVersion
 import java.io.File
@@ -194,9 +192,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var adbStatus: TextView? = null
     @Volatile private var updateStage = UpdateStage.IDLE
     @Volatile private var updateGeneration = 0
-    @Volatile private var updateProgress: Int? = null
     private var updateRelease: UpdateRelease? = null
-    private var updateFile: File? = null
     private var updateMessage: String? = null
     private var carButtonCard: LinearLayout? = null
     private var bydAdbControls: LinearLayout? = null
@@ -343,6 +339,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             ?: if (setupError == null && SetupGuide.shouldOpenOnLaunch(SetupGuide.seen(this),
                     DiPlayPreferences.phoneAddress(this) != null)) "setup" else "home"
         render()
+        maybeCheckForUpdatesAutomatically()
         scheduleAutomaticVehicleValidation()
         handleWirelessRecovery()
         if (consumeBluetoothAutoConnectIntent(intent)) {
@@ -2009,6 +2006,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         content.addView(label(getString(R.string.carplay_at_home_in_your_car), 20, MUTED).apply { setPadding(0, dp(8), 0, dp(24)) })
         section(content, getString(R.string.about_public_preview_prefix, version())) { card ->
             card.addView(label(getString(R.string.an_independent_carplay_receiver_for_android_head_units_wir), 17, TEXT))
+            toggle(card, getString(R.string.settings_auto_update_check),
+                getString(R.string.settings_auto_update_check_description), autoUpdateChecksEnabled()) { enabled ->
+                getSharedPreferences("diplay", MODE_PRIVATE).edit()
+                    .putBoolean(UpdateCheckPolicy.AUTO_CHECK_ENABLED_KEY, enabled).apply()
+                if (enabled) maybeCheckForUpdatesAutomatically()
+            }
             card.addView(updateRow())
         }
         section(content, getString(R.string.made_possible_by_open_source)) { card ->
@@ -2016,7 +2019,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
     }
 
-    private enum class UpdateStage { IDLE, CHECKING, AVAILABLE, DOWNLOADING, VERIFYING, READY, FAILED }
+    private enum class UpdateStage { IDLE, CHECKING, AVAILABLE, FAILED }
 
     private fun updateRow(): View {
         val container = column().apply { setPadding(0, dp(12), 0, 0) }
@@ -2026,23 +2029,52 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 container.addView(button(getString(R.string.update_check), false) { checkForUpdates() },
                     matchButton(if (updateMessage == null) 0 else 10, 60))
             UpdateStage.CHECKING -> container.addView(label(getString(R.string.update_checking), 14, MUTED))
-            UpdateStage.AVAILABLE -> container.addView(
-                button(getString(R.string.update_download, updateRelease?.tagName.orEmpty()), true) { downloadUpdate() },
-                matchButton(10, 60))
-            UpdateStage.DOWNLOADING -> container.addView(label(getString(R.string.update_downloading, updateProgress ?: 0), 14, MUTED))
-            UpdateStage.VERIFYING -> container.addView(label(getString(R.string.update_verifying), 14, MUTED))
-            UpdateStage.READY -> container.addView(
-                button(getString(R.string.update_install, updateRelease?.tagName.orEmpty()), true) { installUpdate() },
-                matchButton(10, 60))
+            UpdateStage.AVAILABLE -> updateRelease?.let { release ->
+                val packageSize = android.text.format.Formatter.formatShortFileSize(this, release.sizeBytes)
+                container.addView(label(getString(R.string.update_available_details,
+                    version(), release.tagName, packageSize), 14, MUTED))
+                val releaseType = getString(if (release.isPrerelease) R.string.update_preview_release
+                    else R.string.update_regular_release)
+                container.addView(label(releaseType, 14, MUTED).apply { setPadding(0, dp(6), 0, 0) })
+                container.addView(label(getString(R.string.update_release_notes_heading), 14, TEXT, true)
+                    .apply { setPadding(0, dp(8), 0, 0) })
+                val notes = release.releaseNotes.trim().take(2_000)
+                    .ifBlank { getString(R.string.update_no_release_notes) }
+                container.addView(label(notes, 14, MUTED).apply { setPadding(0, dp(4), 0, dp(8)) })
+                container.addView(button(getString(R.string.update_open_release, release.tagName), true) {
+                    openUpdateRelease(release)
+                }, matchButton(4, 60))
+            }
         }
         return container
     }
 
+    private fun autoUpdateChecksEnabled(): Boolean = getSharedPreferences("diplay", MODE_PRIVATE)
+        .getBoolean(UpdateCheckPolicy.AUTO_CHECK_ENABLED_KEY, true)
+
+    private fun maybeCheckForUpdatesAutomatically() {
+        // Unit/UI tests use Robolectric, where a real GitHub request would make activity tests
+        // nondeterministic and could schedule a late render over the screen being exercised.
+        if (Build.FINGERPRINT.equals("robolectric", ignoreCase = true)) return
+        val preferences = getSharedPreferences("diplay", MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        if (UpdateCheckPolicy.isDue(
+                enabled = preferences.getBoolean(UpdateCheckPolicy.AUTO_CHECK_ENABLED_KEY, true),
+                lastCheckAtMillis = preferences.getLong(UpdateCheckPolicy.LAST_CHECK_AT_KEY, 0L),
+                nowMillis = now,
+            )) {
+            checkForUpdates()
+        }
+    }
+
     private fun checkForUpdates() {
+        getSharedPreferences("diplay", MODE_PRIVATE).edit()
+            .putLong(UpdateCheckPolicy.LAST_CHECK_AT_KEY, System.currentTimeMillis()).apply()
         updateStage = UpdateStage.CHECKING
         updateMessage = null
+        updateRelease = null
         val generation = ++updateGeneration
-        render()
+        if (page == "about") render()
         Thread({
             val outcome = runCatching { latestRelease() }
             runOnUiThread {
@@ -2060,9 +2092,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     },
                     { failure ->
                         Log.w("DiPlay-Update", "update check failed", failure)
-                        updateMessage = failure.message ?: getString(R.string.update_failed)
+                        updateMessage = getString(R.string.update_failed)
                         updateStage = UpdateStage.FAILED
-                        render()
+                        if (page == "about") render()
                     },
                 )
             }
@@ -2075,91 +2107,20 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             "application/vnd.github+json",
             userAgent(),
         )
-        val release = UpdateCatalog.parse(json) ?: return null
+        val release = UpdateCatalog.parse(json)
+        if (release == null && org.json.JSONArray(json).length() > 0) {
+            throw IOException("The latest GitHub release metadata could not be verified")
+        }
+        if (release == null) return null
         return release.takeIf { UpdateVersion.isNewer(it.tagName, version()) }
     }
 
-    private fun downloadUpdate() {
-        val release = updateRelease ?: return
-        updateStage = UpdateStage.DOWNLOADING
-        updateProgress = null
-        updateMessage = null
-        val generation = ++updateGeneration
-        render()
-        Thread({
-            // Each attempt owns its files, including across activity recreation.
-            val directory = File(cacheDir, "update/${java.util.UUID.randomUUID()}")
-            val outcome = runCatching {
-                val apkFile = File(directory, release.apkName)
-                UpdateClient.download(release.apkUrl, apkFile) { written, total ->
-                    val percent = total?.takeIf { it > 0 }?.let { (written * 100 / it).toInt() } ?: return@download
-                    if (percent != updateProgress) {
-                        updateProgress = percent
-                        refreshUpdateUi(generation)
-                    }
-                }
-                updateStage = UpdateStage.VERIFYING
-                refreshUpdateUi(generation)
-                val actual = UpdateChecksums.sha256Hex(apkFile)
-                if (!java.security.MessageDigest.isEqual(
-                        release.sha256.lowercase().toByteArray(Charsets.US_ASCII),
-                        actual.lowercase().toByteArray(Charsets.US_ASCII),
-                    )) {
-                    throw IOException("Checksum mismatch for ${release.apkName}")
-                }
-                val installed = UpdateApkCompatibility.inspectInstalled(packageManager, packageName)
-                    ?: throw IOException("Could not inspect the installed application's package signature")
-                val candidate = UpdateApkCompatibility.inspectArchive(packageManager, apkFile)
-                    ?: throw IOException("Downloaded file is not a valid, signed Android APK")
-                UpdateApkCompatibility.incompatibility(installed, candidate)?.let { throw IOException(it) }
-                apkFile
-            }.onFailure { directory.deleteRecursively() }
-            runOnUiThread {
-                if (generation != updateGeneration || isFinishing || isDestroyed) {
-                    directory.deleteRecursively()
-                    return@runOnUiThread
-                }
-                outcome.fold(
-                    { file ->
-                        updateFile = file
-                        updateStage = UpdateStage.READY
-                        render()
-                    },
-                    { failure ->
-                        Log.w("DiPlay-Update", "update download failed", failure)
-                        updateMessage = failure.message ?: getString(R.string.update_failed)
-                        updateStage = UpdateStage.FAILED
-                        render()
-                    },
-                )
-            }
-        }, "diplay-update-download").start()
-    }
-
-    private fun installUpdate() {
-        val file = updateFile ?: return
-        // Before Oreo, the installer handles the global unknown-sources setting.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()) {
-            installApk(file)
-        } else {
-            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
-        }
-    }
-
-    private fun installApk(file: File) {
-        val uri = FileProvider.getUriForFile(this, "$packageName.update-apks", file)
-        startActivity(
-            Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "application/vnd.android.package-archive")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-            },
-        )
-    }
-
-    private fun refreshUpdateUi(generation: Int) {
-        runOnUiThread {
-            if (generation != updateGeneration || isFinishing || isDestroyed || page != "about") return@runOnUiThread
-            render()
+    private fun openUpdateRelease(release: UpdateRelease) {
+        runCatching {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(release.releasePageUrl)))
+        }.onFailure {
+            Log.w("DiPlay-Update", "could not open the GitHub release page", it)
+            toast(getString(R.string.update_open_failed))
         }
     }
 
@@ -3178,7 +3139,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                         if (access != com.shilapi.xcertplay.adb.LocalAdb.Access.READY) {
                             toast(getString(R.string.wheel_keys_adb_failed, access.name))
                         }
-                        render()
+                        if (page == "about") render()
                     }
                 }, "diplay-wheel-keys-enable").start()
             }, matchButton(10, 56))
