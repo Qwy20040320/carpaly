@@ -76,3 +76,4 @@ release-signing.properties
 *.key
 *.apk
 *.aab
+/artifacts/

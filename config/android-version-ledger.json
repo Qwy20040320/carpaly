@@ -35,8 +35,8 @@
       "versionName": "1.1.51",
       "versionCode": 39,
       "channel": "test",
-      "status": "reserved",
-      "artifactSha256": null
+      "status": "delivered",
+      "artifactSha256": "222801dbc5e96b668c22a078da38d2b4ed184724c0b088c35d7d04c32752754a"
     }
   ]
 }

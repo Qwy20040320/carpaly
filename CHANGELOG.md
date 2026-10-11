@@ -2,7 +2,7 @@
 
 - `v1.1.4` is the published GitHub pre-release (package `com.shihab.diplay.hudtest`, versionCode 36).
 - `v1.1.5` is also a historical public pre-release (legacy code-37 APK asset); retain its existing title, tag and bytes unchanged.
-- Code 38 has been observed in a local historical build. `v1.1.51` / versionCode 39 is the current reserved target; no APK, tag or Release exists for it yet.
+- Code 38 has been observed in a local historical build. The `v1.1.51` / versionCode 39 fixed-signer Release APK is built and verified locally; no public tag or GitHub Release exists yet.
 - Every future user APK must be the Release build signed by the fixed v1.1.4 identity and named `CarPaly-XingyueL-v{versionName}.apk`. CI Debug compilation is internal only; Debug APKs are not user-delivery artifacts.
 - Allocate `v1.1.52` / code 40 only after the verified v1.1.51 Release APK is delivered and its SHA-256 recorded; `v1.1.6` must use a code above the complete previous high-water mark.
 - These status notes do not claim that unverified Geely audio, HUD, instrument cluster, steering controls, or other vehicle functions have passed.

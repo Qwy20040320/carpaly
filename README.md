@@ -40,7 +40,7 @@ CarPaly 使用自己的版本序列：`1.1.1 → 1.1.2 → 1.1.3 → 1.1.4 → �
 
 上表中的新编号只是历史映射，不代表旧 APK 的内部版本，也未改写其提交或二进制；例如不能把 `v0.2.16` 的旧 APK 说成内部版本 `1.1.3`。上述三个 GitHub Release、公开附件和 Git 标签现已清理；原提交仍可从项目分支历史追溯，旧 APK 只保存在本地受忽略的备份目录，旧下载链接不再可用。
 
-`v1.1.4` 已在 GitHub 发布，标签为 `v1.1.4`，附件为 `CarPaly-XingyueL1.1.4.apk`（包名 `com.shihab.diplay.hudtest`、`versionName=1.1.4`、`versionCode=36`）。历史 `v1.1.5` 也有预发布记录，原附件内部版本为 `1.1.5 / code 37`；其旧文件名仅作历史记录保留，不作为新版本规则。`versionCode=38` 已在本地历史构建中观察到，因此当前目标 `v1.1.51 / code 39` 无版本冲突，但尚无对应 APK。今后所有用户安装包（包括候选版本）必须使用 Android Release 构建、固定 v1.1.4 签名证书和包名 `com.shihab.diplay.hudtest`；文件名统一为 `CarPaly-XingyueL-v{versionName}.apk`。不得交付 Debug/Test/Upgrade-Test APK 或覆盖已交付历史文件。只有 `v1.1.51` 正式 Release APK 校验并登记 SHA-256 后，才分配 `v1.1.52 / code 40`；序号持续递增，后续 `v1.1.6` 的 code 必须大于高水位。DiPlay 上游版本只用于源码跟踪和移植，不改变 CarPaly 自身版本序列。
+`v1.1.4` 已在 GitHub 发布，标签为 `v1.1.4`，附件为 `CarPaly-XingyueL1.1.4.apk`（包名 `com.shihab.diplay.hudtest`、`versionName=1.1.4`、`versionCode=36`）。历史 `v1.1.5` 也有预发布记录，原附件内部版本为 `1.1.5 / code 37`；其旧文件名仅作历史记录保留，不作为新版本规则。`versionCode=38` 已在本地历史构建中观察到，因此 `v1.1.51 / code 39` 无版本冲突。当前已有经过固定 Release 签名及认证资源校验的本地 APK，尚无对应 GitHub 标签或公开 Release；本地文件不提供公共下载。今后所有用户安装包必须使用 Android Release 构建、固定 v1.1.4 签名证书和包名 `com.shihab.diplay.hudtest`；文件名统一为 `CarPaly-XingyueL-v{versionName}.apk`。不得交付 Debug/Test/Upgrade-Test APK 或覆盖已交付历史文件。`v1.1.52 / code 40` 仅在 v1.1.51 的交付登记条件满足后分配；序号持续递增，后续 `v1.1.6` 的 code 必须大于高水位。DiPlay 上游版本只用于源码跟踪和移植，不改变 CarPaly 自身版本序列。
 
 ## 车型兼容性
 
@@ -102,7 +102,7 @@ CarPaly 使用自己的版本序列：`1.1.1 → 1.1.2 → 1.1.3 → 1.1.4 → �
 
 **开发中 / 待设备验证**
 
-- v1.1.51（尚未交付）：排查导航语音无声、修复顶部状态栏遮挡并复测连接恢复；源码修改和自动化测试不能替代用户实车验证。
+- v1.1.51：本地固定签名 Release APK 已构建并校验；尚未创建 GitHub 标签或公开 Release。导航语音、顶部状态栏及连接恢复仍需用户在实车回归；自动化测试不能替代实车验证。
 - v1.1.5 是历史预发布版本；完成 `v1.1.51` Release APK 交付后再分配 `v1.1.52`，`v1.1.6` 是后续版本计划。
 - 2024 天际版优先：有线/无线 CarPlay、音视频和原车音频回归；收到的单车连接/音乐反馈不代替回归结果。
 - Siri、麦克风以及具体方向盘按键在目标车机上的映射。
@@ -130,7 +130,7 @@ CarPaly 使用自己的版本序列：`1.1.1 → 1.1.2 → 1.1.3 → 1.1.4 → �
 ## APK 下载与安装
 
 - **v1.1.4 APK：**[GitHub 下载](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.4/CarPaly-XingyueL1.1.4.apk)；[Release 说明](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.4)。此 Release 当前标记为预发布，附件清单以 GitHub 页面为准。
-- `v1.1.5` 是保留不变的历史预发布附件。当前 `v1.1.51`（versionCode 39）尚无正式 Release APK；用户安装包只能由固定 Release 签名构建，不能用 Debug 包替代。
+- `v1.1.5` 是保留不变的历史预发布附件。当前 `v1.1.51`（versionCode 39）已有本地正式构建类型且固定签名的 APK，但尚无 GitHub Release；用户安装包只能由固定 Release 签名构建，不能用 Debug 包替代。
 - `v1.1.52`（versionCode 40）仅在 v1.1.51 Release APK 实际交付并登记后分配；所有用户 APK 的文件名为 `CarPaly-XingyueL-v{versionName}.apk`，`v1.1.6` 的 code 高于所有历史版本。
 - **暂无覆盖全部车型、连接模式和功能的实车验证正式版本。**已有单车连接/音乐反馈，导航语音和顶部状态栏问题仍待解决。
 
@@ -170,7 +170,7 @@ CarPaly 使用自己的版本序列：`1.1.1 → 1.1.2 → 1.1.3 → 1.1.4 → �
 
 **在哪里下载 APK？**
 
-当前可从 [v1.1.4 Release](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.4) 下载 APK。GitHub 还保留 `v1.1.5` 历史预发布及旧格式附件；不会为适配新规则而改写历史资产。`v1.1.51` 尚未交付。后续用户 APK 只提供固定 Release 签名版本，不提供 Debug/Test/Upgrade-Test 下载包。
+当前可从 [v1.1.4 Release](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.4) 下载 APK。GitHub 还保留 `v1.1.5` 历史预发布及旧格式附件；不会为适配新规则而改写历史资产。`v1.1.51` 已有经签名/资源校验的本地 APK，但尚未公开发布，因此暂时没有公共下载链接。后续用户 APK 只提供固定 Release 签名版本，不提供 Debug/Test/Upgrade-Test 下载包。
 
 **音乐有声，为什么导航语音仍可能无声？**
 
@@ -251,11 +251,11 @@ CarPaly is a community Android CarPlay receiver derived from [DiPlay](https://gi
 - The read-only diagnostic center, opt-in bounded logs, filtering, redaction, and user-triggered ZIP export are implemented and covered by software tests.
 - Reverse-camera/360 takeover and Geely-specific HUD integration are not implemented.
 - Historical tags `v0.1.0`, `v0.1.1`, and `v0.2.16` are retained only as version-history mappings in this README; their GitHub Releases, public APK assets, and tags have been removed. Their commits remain reachable from project branches, while APK backups remain local and are not download links.
-- `v1.1.4` is available on GitHub as a pre-release (`com.shihab.diplay.hudtest`, versionName `1.1.4`, code 36). A historical `v1.1.5` pre-release contains an older code-37 asset; its filename is preserved but is not a future naming rule. Code 38 has also been observed locally. `v1.1.51` / code 39 is reserved and has no APK yet. All future user APKs must be Release builds with the pinned signer and the name `CarPaly-XingyueL-v{versionName}.apk`; Debug APKs are not deliverables. Allocate `v1.1.52` / code 40 only after the code-39 Release APK is verified and recorded. One user reported a Xingyue L connection and working music on v1.1.4; the setup was not independently reproduced, and navigation prompts were silent.
+- `v1.1.4` is available on GitHub as a pre-release (`com.shihab.diplay.hudtest`, versionName `1.1.4`, code 36). A historical `v1.1.5` pre-release contains an older code-37 asset; its filename is preserved but is not a future naming rule. Code 38 has also been observed locally. The v1.1.51 / code-39 fixed-signer Release APK is built and verified locally, but has no public tag or GitHub Release. All future user APKs must be Release builds with the pinned signer and the name `CarPaly-XingyueL-v{versionName}.apk`; Debug APKs are not deliverables. Allocate `v1.1.52` / code 40 only after the code-39 Release APK is delivered and recorded. One user reported a Xingyue L connection and working music on v1.1.4; the setup was not independently reproduced, and navigation prompts were silent.
 
 ### Download and setup
 
-Download the [v1.1.4 pre-release APK](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.4/CarPaly-XingyueL1.1.4.apk) or read its [release notes](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.4). No v1.1.51 Release APK has been delivered yet. Do not uninstall an existing install or clear app data to work around signer/version issues. This is not a claim of complete vehicle validation. The project requires Android API 25 or later. For source builds, use JDK 25, Gradle Wrapper 9.5, Android SDK Platform 37, and NDK 28.2.13676358, then run:
+Download the [v1.1.4 pre-release APK](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.4/CarPaly-XingyueL1.1.4.apk) or read its [release notes](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.4). A verified v1.1.51 / code-39 Release APK currently exists locally but has not been published to GitHub. Do not uninstall an existing install or clear app data to work around signer/version issues. This is not a claim of complete vehicle validation. The project requires Android API 25 or later. For source builds, use JDK 25, Gradle Wrapper 9.5, Android SDK Platform 37, and NDK 28.2.13676358, then run:
 
 ~~~powershell
 .\gradlew.bat :mobile:assembleDebug

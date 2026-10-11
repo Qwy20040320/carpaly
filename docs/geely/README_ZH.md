@@ -5,7 +5,7 @@ CarPaly 源自 [DiPlay](https://github.com/shihabal3amri/DiPlay)，保留 GPL-3.
 ## 版本状态
 
 - `v1.1.4`（code 36）和旧格式 `v1.1.5`（code 37）均有历史公开预发布记录；历史附件保持不变。
-- `versionCode=38` 已从本地历史构建观察到。当前目标 `v1.1.51` / Android `versionCode=39` 尚无 APK、标签或 Release，版本号无冲突。
+- `versionCode=38` 已从本地历史构建观察到。`v1.1.51` / Android `versionCode=39` 固定签名 Release APK 已在本地构建并核验，尚无公开标签或 GitHub Release；版本号无冲突。
 - 所有今后的用户 APK 都必须是固定签名的 Release 构建，唯一命名格式为 `CarPaly-XingyueL-v{versionName}.apk`；CI 内 Debug APK 仅供内部验证，不作为下载产物。
 - 只有 v1.1.51 Release APK 实际校验、交付并登记 SHA-256 后，才分配 `v1.1.52` / code 40；`v1.1.6` 的 code 必须高于所有既往版本。
 
