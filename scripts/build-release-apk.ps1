@@ -1,5 +1,6 @@
 param(
-    [string] $AndroidSdkPath = $(if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { 'D:\AndroidSdk' })
+    [string] $AndroidSdkPath = $(if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { 'D:\AndroidSdk' }),
+    [string] $PythonExecutable = $env:CARPALY_PYTHON
 )
 
 $ErrorActionPreference = 'Stop'
@@ -31,9 +32,26 @@ foreach ($name in @('identity.pk8', 'certificate.p7b')) {
 }
 
 $env:ANDROID_HOME = $AndroidSdkPath
-$python = Get-Command python -ErrorAction SilentlyContinue
-if (-not $python) { throw 'Python is required to verify the version ledger before building.' }
-& $python.Source (Join-Path $projectRoot 'scripts\android_versioning.py') check
+$pythonPath = $PythonExecutable
+if (-not $pythonPath) {
+    foreach ($commandName in @('python.exe', 'python3.exe', 'py.exe')) {
+        $candidate = Get-Command $commandName -ErrorAction SilentlyContinue |
+            Where-Object { $_.CommandType -eq 'Application' } |
+            Select-Object -First 1
+        if (-not $candidate -or $candidate.Source -match '\\WindowsApps\\python(?:3)?\.exe$') { continue }
+        & $candidate.Source --version *> $null
+        if ($LASTEXITCODE -eq 0) {
+            $pythonPath = $candidate.Source
+            break
+        }
+    }
+}
+if (-not $pythonPath -or -not (Test-Path -LiteralPath $pythonPath -PathType Leaf)) {
+    throw 'A working Python 3 executable is required; set CARPALY_PYTHON or pass -PythonExecutable.'
+}
+& $pythonPath --version *> $null
+if ($LASTEXITCODE -ne 0) { throw 'The configured Python executable could not run.' }
+& $pythonPath (Join-Path $projectRoot 'scripts\android_versioning.py') check
 if ($LASTEXITCODE -ne 0) { throw 'Version ledger validation failed; no APK was built.' }
 
 $artifacts = Join-Path $projectRoot 'artifacts'
@@ -46,7 +64,7 @@ foreach ($path in @($destination, $report, $checksum)) {
 }
 
 $gradle = Join-Path $projectRoot 'gradlew.bat'
-& $gradle -p $projectRoot :mobile:assembleRelease --stacktrace --no-configuration-cache
+& $gradle -p $projectRoot :mobile:assembleRelease --stacktrace --no-configuration-cache --no-daemon
 if ($LASTEXITCODE -ne 0) { throw 'Release build or pinned signing verification failed; no APK was copied.' }
 
 $builtApk = Join-Path $projectRoot 'mobile\build\outputs\apk\release\mobile-release.apk'

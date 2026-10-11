@@ -197,7 +197,7 @@ Windows 下运行单元测试和静态检查：
 
 Debug APK 输出位置：mobile/build/outputs/apk/debug/mobile-debug.apk。该变体包名带有 HUD-test 后缀。仓库 CI 会运行源码安全检查、单元测试、Lint、APK 签名/包元数据校验，并上传诊断构建产物；CI 通过不等于实车验证通过。
 
-除根目录 README.md 外，普通 Markdown 开发文档和报告只保存在本地，不会提交到 GitHub。
+根目录 README.md 和 `config/public-markdown-allowlist.json` 中列明的审阅版项目文档可以公开提交；其余普通 Markdown、个人授权记录、实车测试结果和临时开发日志仍只保存在本地。v1.1.51 七个 APK 的静态接口分析与适配进度见[吉利报告索引](docs/geely/README_ZH.md)。
 
 ## 问题反馈
 

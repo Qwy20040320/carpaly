@@ -15,4 +15,6 @@ CarPaly 源自 [DiPlay](https://github.com/shihabal3amri/DiPlay)，保留 GPL-3.
 
 GEELY 标签与吉利图标是车辆按钮默认值。方向盘按键、HUD、仪表、燃油、原车音频/麦克风、倒车和 360 接管均未取得足以确认星越 L OEM 方法与权限的证据，未验证功能保持关闭或未实现；不得向车辆控制总线发送猜测命令。
 
-请查看[根目录 README](../../README.md) 获取当前功能矩阵、安装和安全说明；报告与接口研究文档保留在本地开发目录，不随源码发布。
+本轮七 APK 交叉结论与实现边界见[接口提取报告](v1.1.51/APK_INTERFACE_EXTRACTION.md)、[OEM 接口矩阵](v1.1.51/GEELY_OEM_API_MATRIX.md)、[新增样本分析](v1.1.51/FAKE_ULTRA_APK_ANALYSIS.md)、[第二屏分析](v1.1.51/GEELY_HDMI2_DISPLAY_ANALYSIS.md)、[媒体卡片分析](v1.1.51/GEELY_MEDIA_CARD_ANALYSIS.md)、[车辆数据模型](v1.1.51/VEHICLE_SENSOR_API.md)和[实车测试计划](v1.1.51/GEELY_VEHICLE_TEST_PLAN.md)。只有 `config/public-markdown-allowlist.json` 精确列明的报告可公开提交；聊天截图、认证材料、车辆日志和临时分析输出留在本地私有目录。
+
+请查看[根目录 README](../../README.md) 获取当前功能矩阵、安装和安全说明。

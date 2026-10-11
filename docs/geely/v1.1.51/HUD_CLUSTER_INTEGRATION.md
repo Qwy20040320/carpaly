@@ -47,3 +47,7 @@
 | 2024 天际版运行验证 | `NOT_TESTED` | 本次没有连接实车 |
 
 解锁所需证据：吉利/ECARX 正式 SDK 或书面集成规范、可验证的 service/AIDL 版本、目标固件调用权限和系统允许的安装身份，再在驻车实车上仅做只读探测，获得授权后才逐步验证显示输出。不得从现有样本中复制 Native 注入/Hook 实现。
+
+## Fake Ultra 新样本核对
+
+新样本 `io.dushu.car` 的 `DisplayManager`/第二屏 Surface 静态调用点已补充到 `GEELY_HDMI2_DISPLAY_ANALYSIS.md`。`HDMI2` 日志文字与默认 `display_id=2` 不构成物理 HDMI、原厂仪表或 HUD 映射证据；样本未发现可确认 DIM/HUD OEM service、permission 或写入契约。车速/RPM/油量等开关目前没有闭合到可信车辆 provider 的静态路径。CarPaly 不新增 Geely 输出器，不把 app-drawn 第二屏描述为仪表接管。

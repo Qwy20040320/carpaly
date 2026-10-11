@@ -29,3 +29,7 @@
 ## 安全回退
 
 不要调用样本中找不到的 AudioPolicy hidden API，不强制切换原车 source，不声明不存在的输入设备。不改变 CarPlay 已有通用 AudioFocus 管理来伪造“导航已修复”。没有 `AudioDeviceInfo` / OEM route 的受支持契约时，使用 Android 默认设备选择，并保留用户配置的 route 选项；测试录音或电话时车辆必须驻车。
+
+## 新样本与诊断变化
+
+Fake Ultra/Glauncher 未增加任何可确认的 Geely AudioPolicy、原车音源切换或扬声器路由 API。CarPaly 在现有 `AndroidMediaSink.startPlayback()` 真正调用 `AudioTrack.play()` 后记录 channel/type、track/play state、session、AudioAttributes usage、Android routed-device type 与 underrun 数；不记设备名称/address，读取失败不会影响播放。现有 KX11 首装导航 `STREAM_MUSIC` 策略和用户覆写保持不变。本日志只是观察 Android 路由，不证明 OEM 输出；当前导航无声仍需实车采集定位，音乐/Siri/电话/麦克风亦为 `NOT_TESTED`。

@@ -52,6 +52,12 @@
 
 车控 1.1 与马大师样本以加固 loader/native stub 为主；当前没有可审计的传感器、方向盘、HUD、DIM、音频方法签名及调用链，统一为 `UNKNOWN`。本轮没有破解加固、复用私钥、执行 Hook/注入、发送 Binder/车控命令或将任何第三方库放入 CarPaly。
 
+## 本轮补充：Fake Ultra 与 Glauncher
+
+新增样本及完整分析见 `FAKE_ULTRA_APK_ANALYSIS.md` 与 `GLAUNCHER_APK_ANALYSIS.md`。Fake Ultra 是 `io.dushu.car` 0.3.2-protected-test，SHA-256 `5b0b367d34650b029997e461b4de2fb6c1e9407636faf19bbb7a4e15a83019fd`；Glauncher 是 `com.maxinf.car` 1.0，SHA-256 `bbbbb4fdcdc784a53c88cf7605a8a3c35be442068ee06d1e3db583541c337dcd`。两份样本 v2 签名检查通过且 signer 相同，但该签名不证明发布者/OEM 身份。
+
+Fake Ultra 新增的是 Android `DisplayManager` 选择第二显示器并创建 Surface/内部视频路径的 `CALL_SITE_CONFIRMED` 静态证据；未发现 OneOS、ECARX、DIM 或 Geely AudioPolicy 调用契约。Glauncher 是包启动器，未发现车辆接口。Fake Ultra JADX 处理 3,718 项但有 88 个解码错误，结论限于可交叉验证的可读路径。两个 APK 均未运行，未使用其 Native/注入载荷；没有样本/接口达到 `RUNTIME_VERIFIED`。
+
 ## 小结
 
 五个样本均在本地找到且哈希/签名/Manifest 已检查；部分静态调用点可恢复，保护/加固边界也已保留。没有任何 Geely 车辆接口达到 `RUNTIME_VERIFIED`，也没有证据证明 2024 天际版对普通第三方 APK 开放这些能力。无需为这轮分析重新下载 APK 或重复 JADX 全量输出。

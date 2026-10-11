@@ -23,6 +23,19 @@
 - `WheelKeyService` 的默认 BYD wheel code 对 `GEELY_XINGYUE_L` 禁用；显式用户映射仍保留。`WheelKeyServiceTest.geelyProfileDoesNotApplyHistoricBydWheelCodesButKeepsLearnedKeys` 覆盖该回退。
 - 本次新增 `BydOptionalOutputSettingsTest.geelyKx11IdentityNeverPassesTheBydVehicleWriterGate`，测试 GEELY/KX11 Build fingerprint 即使误开 BYD 开关也无法通过车辆 writer gate。它验证安全门，不证明任何 Geely 功能已连车。
 
+## 新增样本交叉检查
+
+| 能力 | Fake Ultra / Glauncher 新证据 | CarPaly 状态 |
+|---|---|---|
+| OneOS 方向盘 | 新 APK 中未找到 `IServiceManager`、`IInputManager`、`IInputListener` 或 `registerListener` 调用链 | 继续仅 Android KeyEvent/学习映射；OEM `BLOCKED` |
+| ECARX 车辆传感器 | 新 APK 未发现 `ISensor`、`CarSensor`、VHAL 或已确认 `fuelPercent` provider | 无 OEM reader；只增加单位/来源/时间/有效期模型，默认无值 |
+| DIM/HUD | 没有新 DIM Binder/AIDL/权限契约；Fake Ultra 的第二屏是 Android DisplayManager/Surface | OEM 输出 `BLOCKED`；不执行注入/Hook |
+| HDMI2/Presentation | Fake Ultra 存在 DisplayManager/第二屏 Surface 静态调用点 | 通用 API 路径可参考，真实车机 display 映射 `NOT_TESTED` |
+| Media card | Fake Ultra 有应用绘制 artwork 的线索，未找到 OneOS 原车媒体发布服务 | 复用现有 Android MediaSession，不重复建卡片；OEM sink `UNKNOWN` |
+| 音频 | 两个新 APK 未发现 Geely AudioPolicy/route API | 现有 Android AudioTrack 路径，增加 playback-active 诊断；实车 `NOT_TESTED` |
+
+完整新样本哈希、权限与调用路径分别记录于 `FAKE_ULTRA_APK_ANALYSIS.md` 和 `GLAUNCHER_APK_ANALYSIS.md`；七样本对照见 `SEVEN_APK_INTERFACE_COMPARISON.md`。
+
 ## 决策
 
 本轮没有新增 Geely OEM 运行时代码：没有一个 OEM 接口同时满足可复现方法契约、系统授予条件及 2024 天际版适用性证据。贸然复制样本声明或按字符串绑定会把未经授权/固件私有接口变成写操作。本地 Profile、CarPlay 通用音频、BYD 保护门及用户学习键保持原样。

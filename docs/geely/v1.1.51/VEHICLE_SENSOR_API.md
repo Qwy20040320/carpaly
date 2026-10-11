@@ -45,3 +45,7 @@ CarPaly 尚无 Geely Fuel/ECARX sensor adapter。现有 `BydBatteryStatus`、`By
 ## 允许继续的下一步
 
 取得针对目标固件的官方 ECARX SDK/权限说明后，先实现只读能力检查：服务不存在、权限拒绝、unsupported、NaN/Infinity、超时及陈旧值一律显示“未知”；只有收到有效 callback 且单位/范围由文档确认后才显示读数。以驻车日志证明数据来源和变化，不使用模拟值作为车辆数据，不从 APK 注入代码推测 ID。
+
+## 新样本与安全数据模型
+
+Fake Ultra 与 Glauncher 均未增加可复用的 `ISensor`/VHAL/车辆速度、转速、燃油或挡位读取调用链。CarPaly 新增 `common/.../geely/GeelyVehicleData.kt` 的领域模型，但未增加 provider：样本类型区分 km/h、燃油百分比、RPM 与挡位；宽松的 0–350 km/h、0–100%、0–20,000 RPM 仅是拒绝损坏数据的本地防御性边界，不是 Geely/ECARX 规格。每条有效值必须有非 UNKNOWN 来源、非负时间戳和正 freshness window。拒权、断连、不支持及 UNKNOWN 均不含值；非法输入不保留数值，过期读数变为 `STALE` 且 `isUsableAt=false`。单测不使用伪造值接入 UI；它只验证模型边界，不验证 ECARX 或任何实车读数。

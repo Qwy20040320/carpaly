@@ -47,3 +47,7 @@ OneOS 接口描述符：`com.geely.lib.oneosapi.IServiceManager`、`com.geely.li
 | 2024 天际版方向盘 | `NOT_TESTED` | 驻车时记录按键与 CarPaly 诊断日志 |
 
 安全回退：找不到服务、权限拒绝、签名不匹配、回调未知时不消费事件；保持无动作并保留用户原映射。不得卸载原车服务或改系统签名权限。
+
+## Fake Ultra / Glauncher 复核
+
+两份新增 APK 未发现 OneOS 管理器、方向盘 listener/AIDL、注册/注销调用点或 ECARX 输入服务。它们不增强星舱 OneOS 的权限或事件值证据。CarPaly 继续只消费 Android KeyEvent 和用户学习映射；真实方向盘到 Android 的事件注入链仍为 `NOT_TESTED`。没有补写未经确认的 key code、长按语义或 service id。

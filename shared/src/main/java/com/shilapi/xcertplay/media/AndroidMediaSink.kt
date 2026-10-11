@@ -1884,6 +1884,22 @@ private class AudioRenderer(
         underrunsAtPlaybackStart = track.underrunCount
         track.play()
         playbackStarted = true
+        // A track being constructed does not prove it reached an output route. Capture the
+        // observed Android route state when audio actually starts; never log device names or device IDs.
+        runCatching {
+            val routeType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                runCatching { track.routedDevice?.type?.toString() ?: "none" }
+                    .getOrDefault("unavailable")
+            } else {
+                "api-legacy"
+            }
+            report(
+                "Audio: playback active audioType=${format.audioType} channel=${mappedChannel ?: "unknown"} " +
+                    "trackState=${track.state} playState=${track.playState} session=${track.audioSessionId} " +
+                    "usage=${trackAttributes?.usage ?: "unknown"} routeDeviceType=$routeType " +
+                    "underruns=${track.underrunCount}",
+            )
+        }
     }
 
     private fun maintainPlaybackBuffer() {
