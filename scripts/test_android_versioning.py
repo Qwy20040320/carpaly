@@ -1,4 +1,7 @@
 import json
+import shutil
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -83,11 +86,48 @@ class AndroidVersioningTests(unittest.TestCase):
         require_current_delivery_recorded(ledger)
 
     def test_allocator_does_not_advance_reserved_release_version(self):
-        root = Path(__file__).resolve().parents[1]
-        with self.assertRaisesRegex(ValueError, "verified Release APK delivery SHA-256"):
-            allocate(root, "test")
-        current = check_project(root)
-        self.assertEqual(("1.1.51", 39), (current.version_name, current.version_code))
+        project = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory(prefix="carpaly-version-reservation-") as temporary:
+            root = Path(temporary)
+            gradle_path = root / "mobile/build.gradle.kts"
+            ledger_path = root / "config/android-version-ledger.json"
+            gradle_path.parent.mkdir(parents=True)
+            ledger_path.parent.mkdir(parents=True)
+            shutil.copyfile(project / gradle_path.relative_to(root), gradle_path)
+
+            ledger = json.loads((project / ledger_path.relative_to(root)).read_text(encoding="utf-8"))
+            current = ledger["current"]
+            allocation = next(
+                item
+                for item in ledger["allocations"]
+                if item["versionName"] == current["versionName"]
+                and item["versionCode"] == current["versionCode"]
+                and item["channel"] == current["channel"]
+            )
+            allocation["status"] = "reserved"
+            allocation["artifactSha256"] = None
+            ledger_path.write_text(json.dumps(ledger, indent=2) + "\n", encoding="utf-8")
+
+            subprocess.run(["git", "init", "--quiet"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.name", "CarPaly Test"], cwd=root, check=True)
+            subprocess.run(
+                ["git", "config", "user.email", "carpaly-test@example.invalid"],
+                cwd=root,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "add", "mobile/build.gradle.kts", "config/android-version-ledger.json"],
+                cwd=root,
+                check=True,
+            )
+            subprocess.run(["git", "commit", "--quiet", "-m", "fixture"], cwd=root, check=True)
+
+            before_gradle = gradle_path.read_bytes()
+            before_ledger = ledger_path.read_bytes()
+            with self.assertRaisesRegex(ValueError, "verified Release APK delivery SHA-256"):
+                allocate(root, "test")
+            self.assertEqual(before_gradle, gradle_path.read_bytes())
+            self.assertEqual(before_ledger, ledger_path.read_bytes())
 
 
 if __name__ == "__main__":
