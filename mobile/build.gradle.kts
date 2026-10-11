@@ -1,6 +1,8 @@
 import java.io.ByteArrayInputStream
+import java.io.FileInputStream
 import java.nio.file.Files
 import java.security.KeyFactory
+import java.security.KeyStore
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.security.Signature
@@ -34,9 +36,60 @@ val gitCommit = providers.exec {
     commandLine("git", "rev-parse", "--short=12", "HEAD")
 }.standardOutput.asText.map { it.trim() }
 
+// This is the signing identity already present in the published v1.1.4 APK. Do not change it
+// to accommodate a different local or CI keystore: that would break the installed upgrade chain.
+val CARPALY_RELEASE_CERT_SHA256 =
+    "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90"
+
 fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
     .digest(bytes)
     .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+
+val verifyCarPalyReleaseSigning by tasks.registering {
+    group = "verification"
+    description = "Require the original v1.1.4 Release signing identity before any Release build."
+    notCompatibleWithConfigurationCache("Reads protected signing inputs only when a Release build is requested.")
+    doLast {
+        fun requiredSecret(name: String): String = providers.environmentVariable(name).orNull
+            ?.takeIf { it.isNotBlank() }
+            ?: error("Authorized Release signing input $name is not configured")
+
+        val keystorePath = requiredSecret("ANDROID_KEYSTORE_PATH")
+        val storePassword = requiredSecret("ANDROID_KEYSTORE_PASSWORD").toCharArray()
+        val keyAlias = requiredSecret("ANDROID_KEY_ALIAS")
+        val keyPassword = requiredSecret("ANDROID_KEY_PASSWORD").toCharArray()
+        try {
+            val keystoreFile = file(keystorePath).canonicalFile
+            check(keystoreFile.isFile && keystoreFile.length() > 0L) {
+                "Authorized Release keystore is missing or empty"
+            }
+            val keystore = KeyStore.getInstance("PKCS12")
+            FileInputStream(keystoreFile).use { keystore.load(it, storePassword) }
+            check(keystore.isKeyEntry(keyAlias)) { "Configured Release alias is not a private-key entry" }
+            val certificate = keystore.getCertificate(keyAlias) as? X509Certificate
+                ?: error("Configured Release alias has no X.509 signing certificate")
+            check(keystore.getKey(keyAlias, keyPassword) != null) {
+                "Configured Release key password does not unlock the signing key"
+            }
+            val actualFingerprint = sha256(certificate.encoded)
+            check(actualFingerprint == CARPALY_RELEASE_CERT_SHA256) {
+                "Release keystore does not match the v1.1.4 signing certificate"
+            }
+            val configuredFingerprint = providers.environmentVariable("RELEASE_SIGNING_CERT_SHA256").orNull
+                ?.filter(Char::isLetterOrDigit)
+                ?.lowercase()
+            check(configuredFingerprint == null || configuredFingerprint == CARPALY_RELEASE_CERT_SHA256) {
+                "Configured Release certificate pin does not match the fixed v1.1.4 signing identity"
+            }
+            logger.lifecycle("SIGNING_CERTIFICATE_MATCH=PASS (fixed v1.1.4 certificate)")
+        } catch (_: Exception) {
+            error("Release signing identity could not be verified; no Release APK may be produced")
+        } finally {
+            storePassword.fill('\u0000')
+            keyPassword.fill('\u0000')
+        }
+    }
+}
 
 fun verifyMfiIdentity(directory: java.io.File): Map<String, String> {
     val identityFile = directory.resolve("offline-mfi/identity.pk8")
@@ -104,8 +157,8 @@ android {
         applicationId = "com.shihab.diplay.hudtest"
         minSdk = 25
         targetSdk = 37
-        versionCode = 38
-        versionName = "1.1.5"
+        versionCode = 39
+        versionName = "1.1.51"
         buildConfigField("String", "GIT_COMMIT", "\"${gitCommit.get()}\"")
 
     }
@@ -156,6 +209,11 @@ android {
         compose = true
         buildConfig = true
     }
+}
+
+// A Release APK must never silently fall back to the developer/debug signer.
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    dependsOn(verifyCarPalyReleaseSigning)
 }
 
 dependencies {
@@ -290,5 +348,16 @@ tasks.register("verifyStandaloneDebugApk") {
             },
         )
         logger.lifecycle("Authenticated APK asset hashes verified; report: ${report.absolutePath}")
+    }
+}
+
+tasks.register("assembleCarPalyUpgradeTest") {
+    group = "build"
+    description = "Build the authenticated v1.1.51 upgrade-test APK with the pinned Release signer."
+    dependsOn(verifyStandaloneAuthentication, verifyCarPalyReleaseSigning, "assembleRelease")
+    doLast {
+        val apk = layout.buildDirectory.file("outputs/apk/release/mobile-release.apk").get().asFile
+        check(apk.isFile && apk.length() > 0L) { "Release-signed CarPaly upgrade-test APK was not produced" }
+        logger.lifecycle("Release-signed upgrade-test APK ready for verification: ${apk.absolutePath}")
     }
 }

@@ -33,6 +33,8 @@ jobs:
           python3 -m py_compile scripts/package_source_archive.py
           python3 scripts/check_workflow_action_pins.py
           python3 scripts/test_release_pipeline.py
+          python3 -m unittest scripts/test_android_versioning.py
+          python3 scripts/android_versioning.py check
       - name: Validate clean source archive packaging
         shell: bash
         run: |
