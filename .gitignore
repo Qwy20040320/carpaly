@@ -6,6 +6,8 @@
 # Gradle and local tooling
 .gradle/
 .kotlin/
+__pycache__/
+*.py[cod]
 .android-sdk/
 build/
 local.properties
@@ -18,9 +20,23 @@ captures/
 # Local agent working notes
 /agent_docs/
 
-# Keep reports local; the root README is the sole public Markdown exception.
+# Keep reports and task logs local. Only the reviewed public docs below are tracked.
 *.md
 !/README.md
+!/AGENTS.md
+!/CHANGELOG.md
+!/README.zh-CN.md
+!/SECURITY.md
+!/docs/BUILD.md
+!/docs/COMPATIBILITY.md
+!/docs/GEELY_BRANDING_POLICY.md
+!/docs/GEELY_XINGYUE_L.md
+!/docs/INSTALL.md
+!/docs/RELEASE_SIGNING_POLICY.md
+!/docs/TESTING.md
+!/docs/THIRD_PARTY_NOTICES.md
+!/docs/VERSIONING_POLICY.md
+!/docs/geely/README_ZH.md
 /docs/geely/v1.1.5/interfaces/APK_EVIDENCE_MATRIX.csv
 
 # OS files

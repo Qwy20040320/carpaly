@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "publicMarkdown": [
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "README.md",
+    "README.zh-CN.md",
+    "SECURITY.md",
+    "docs/BUILD.md",
+    "docs/COMPATIBILITY.md",
+    "docs/GEELY_BRANDING_POLICY.md",
+    "docs/GEELY_XINGYUE_L.md",
+    "docs/INSTALL.md",
+    "docs/RELEASE_SIGNING_POLICY.md",
+    "docs/TESTING.md",
+    "docs/THIRD_PARTY_NOTICES.md",
+    "docs/VERSIONING_POLICY.md",
+    "docs/geely/README_ZH.md"
+  ]
+}

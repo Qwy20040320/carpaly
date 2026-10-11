@@ -140,19 +140,26 @@ def sha256(payload: bytes) -> str:
 
 
 class SourceArchiveTests(unittest.TestCase):
-    def test_release_workflow_follows_authenticated_release_build_steps_without_local_policy_flags(self):
+    def test_authenticated_release_requires_explicit_manual_dispatch(self):
         workflow = (ROOT / ".github/workflows/android.yml").read_text(encoding="utf-8")
         self.assertIn(":mobile:lintRelease", workflow)
         self.assertIn(":mobile:verifyStandaloneAuthentication", workflow)
         self.assertIn(":mobile:assembleRelease", workflow)
         self.assertNotIn("MFI_PUBLIC_DISTRIBUTION_REVIEWED", workflow)
         self.assertNotIn("MFI_PUBLIC_DISTRIBUTION_AUTHORIZATION_REF", workflow)
-        self.assertIn("verify distribution rights before tagging", workflow)
+        self.assertIn("publish_authenticated_release:", workflow)
+        self.assertIn("default: false", workflow)
+        self.assertIn("github.event_name == 'workflow_dispatch'", workflow)
+        self.assertIn("inputs.publish_authenticated_release == true", workflow)
+        self.assertNotIn("tags: ['v1.*']", workflow)
+        self.assertNotIn("debug-apks-and-sha256", workflow)
+        self.assertNotIn("mobile/build/outputs/apk/debug/*.apk", workflow)
+        self.assertIn("Debug APK must not contain user authentication identity", workflow)
 
     def test_release_signer_uses_environment_pin_and_reports_only_public_fingerprints(self):
         workflow = (ROOT / ".github/workflows/android.yml").read_text(encoding="utf-8")
         release_job = workflow.split("  authenticated_release:", 1)[1]
-        provision_step = release_job.split("- name: Build authenticated standalone Release APK", 1)[0]
+        provision_step = release_job.split("- name: Build authenticated Release APK", 1)[0]
 
         self.assertIn("environment: mfi-public-release", release_job)
         self.assertIn("RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}", provision_step)
@@ -178,6 +185,10 @@ class SourceArchiveTests(unittest.TestCase):
                     entry = tarfile.TarInfo(name)
                     entry.size = len(payload)
                     archive.addfile(entry, fileobj=io.BytesIO(payload))
+                manifest_payload = json.dumps({"schemaVersion": 1, "publicMarkdown": ["README.md"]}).encode()
+                manifest = tarfile.TarInfo("CarPaly/config/public-markdown-allowlist.json")
+                manifest.size = len(manifest_payload)
+                archive.addfile(manifest, fileobj=io.BytesIO(manifest_payload))
                 link = tarfile.TarInfo("CarPaly/docs/outside")
                 link.type = tarfile.SYMTYPE
                 link.linkname = "../../../../outside"
@@ -201,7 +212,19 @@ class SourceArchiveTests(unittest.TestCase):
                     archiver.build_archive("HEAD", output)
             self.assertFalse(output.exists())
 
-    def test_real_commit_archive_keeps_only_home_markdown_and_no_symlinks(self):
+    def test_real_commit_archive_keeps_only_allowlisted_markdown_and_no_symlinks(self):
+        markdown_config = json.loads(
+            (ROOT / "config/public-markdown-allowlist.json").read_text(encoding="utf-8")
+        )
+        allowed_markdown = {
+            f"CarPaly/{name}" for name in markdown_config["publicMarkdown"]
+        }
+        tracked = set(subprocess.check_output(
+            ["git", "ls-tree", "-r", "--name-only", "HEAD"], cwd=ROOT, text=True
+        ).splitlines())
+        if "config/public-markdown-allowlist.json" not in tracked:
+            self.skipTest("source-archive integration runs after the public allow-list is committed")
+        expected_markdown = {name for name in allowed_markdown if name.removeprefix("CarPaly/") in tracked}
         with tempfile.TemporaryDirectory() as folder:
             output = Path(folder) / "source.zip"
             subprocess.run(
@@ -215,17 +238,18 @@ class SourceArchiveTests(unittest.TestCase):
                 names = set(archive.namelist())
                 self.assertIn("CarPaly/README.md", names)
                 self.assertIn("CarPaly/LICENSE", names)
-                self.assertFalse(any(name.lower().endswith(".md") and name != "CarPaly/README.md" for name in names))
+                included_markdown = {name for name in names if name.lower().endswith(".md")}
+                self.assertEqual(expected_markdown, included_markdown)
                 self.assertTrue(all(((item.external_attr >> 16) & 0o170000) != stat.S_IFLNK for item in archive.infolist()))
                 self.assertIsNone(archive.testzip())
 
 
 @unittest.skipUnless(shutil.which("bash"), "publisher integration tests run on Linux CI with Bash")
 class PublisherTests(unittest.TestCase):
-    tag = "v1.1.4"
-    version = "1.1.4"
-    apk_name = f"CarPaly-XingyueL{version}.apk"
-    source_name = f"CarPaly-XingyueL{version}-source.zip"
+    tag = "v1.1.51"
+    version = "1.1.51"
+    apk_name = f"CarPaly-XingyueL-v{version}.apk"
+    source_name = f"CarPaly-XingyueL-v{version}-source.zip"
     sums_name = "SHA256SUMS.txt"
 
     def prepare(self, *, initial_release=None, initial_assets=None, corrupt_download=False, fail_upload_name=None):
@@ -274,7 +298,7 @@ class PublisherTests(unittest.TestCase):
             "APK_NAME": self.apk_name,
             "APK_SHA256": apk_sha,
             "APK_SIZE": str(apk.stat().st_size),
-            "APK_VERSION_CODE": "36",
+            "APK_VERSION_CODE": "39",
             "SOURCE_ZIP_PATH": str(source),
             "SOURCE_ZIP_NAME": self.source_name,
             "SOURCE_ZIP_SHA256": source_sha,
@@ -323,7 +347,7 @@ class PublisherTests(unittest.TestCase):
     def test_conflicting_existing_asset_is_preserved_without_upload_or_patch(self):
         wrong_sha = "0" * 64
         release = {"id": 4242, "tag_name": self.tag, "draft": True, "prerelease": True,
-                   "body": "Android versionCode: 36\n"}
+                   "body": "Android versionCode: 39\n"}
         asset = {"name": self.apk_name, "size": 32, "digest": "sha256:" + wrong_sha, "state": "uploaded"}
         folder, env, state_path, _, _, _ = self.prepare(initial_release=release, initial_assets=[asset])
         with folder:
@@ -354,7 +378,7 @@ class PublisherTests(unittest.TestCase):
 
     def test_public_release_missing_asset_is_not_mutated(self):
         release = {"id": 4242, "tag_name": self.tag, "draft": False, "prerelease": True,
-                   "body": "Android versionCode: 36\n"}
+                   "body": "Android versionCode: 39\n"}
         folder, env, state_path, apk, _, _ = self.prepare(initial_release=release)
         state = self.read_state(state_path)
         state["assets"] = [{"name": self.apk_name, "size": apk.stat().st_size,

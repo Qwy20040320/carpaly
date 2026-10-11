@@ -101,7 +101,7 @@
     <string name="a_familiar_drive">Знайома подорож.</string>
     <string name="a_previous_wi_fi_direct_connection_is_still_running_reset">Попереднє з’єднання Wi-Fi Direct ще активне. Скиньте його, щоб підключитися.</string>
     <string name="about">Про застосунок</string>
-    <string name="about_diplay">Про DiPlay</string>
+    <string name="about_diplay">Про CarPaly</string>
     <string name="active">Активно</string>
     <string name="advanced_audio_channel_mapping">Розширене налаштування аудіоканалів</string>
     <string name="airplay_icon">Значок AirPlay</string>
@@ -298,7 +298,7 @@
     <string name="preparing_mfi_authentication">Підготовка автентифікації MFi</string>
     <string name="ready">Готово</string>
     <string name="ready_when_you_are">Готово до підключення</string>
-    <string name="receiver_based_on_xcertplay_licensed_under_gpl_3_0_diplay">Приймач створено на основі xcertplay за ліцензією GPL-3.0. Інтерфейс DiPlay наслідує дизайн DiAuto за ліцензією AGPL-3.0.\n\nВикористовуються AndroidX, Bouncy Castle, JmDNS і SLF4J. Вихідний код і повідомлення про ліцензії додаються до цього випуску.\n\nCarPlay і його значок належать Apple Inc. DiPlay — незалежний проєкт.</string>
+    <string name="receiver_based_on_xcertplay_licensed_under_gpl_3_0_diplay">CarPaly створено на основі xcertplay і DiPlay та ліцензовано за GPL-3.0. Деякі компоненти інтерфейсу походять із DiAuto за AGPL-3.0; дивіться повідомлення про авторські права й ліцензії в репозиторії.\n\nВикористовуються AndroidX, Bouncy Castle, JmDNS і SLF4J. Вихідний код і повідомлення про ліцензії доступні в репозиторії проєкту.\n\nCarPlay і його значок належать Apple Inc. CarPaly — незалежний громадський проєкт, не пов’язаний з Apple.</string>
     <string name="reconnecting_to_your_iphone">Повторне підключення до iPhone…</string>
     <string name="remote">Віддалено</string>
     <string name="remote_server_address_contains_u_0000">Адреса віддаленого сервера містить U+0000</string>

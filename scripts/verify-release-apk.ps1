@@ -5,7 +5,7 @@ param(
     [string] $AuthenticationAssetsRoot = $env:DIPLAY_AUTH_ASSETS_DIR,
     [string] $AndroidSdkPath = $(if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { 'D:\AndroidSdk' }),
     [string] $ReportPath,
-
+    [switch] $RequireCanonicalFileName,
     [switch] $RecordDelivery
 )
 
@@ -34,18 +34,20 @@ foreach ($tool in @($aapt, $apksigner)) {
         throw "Required Android SDK verification tool is missing: $tool"
     }
 }
-if ($expectedPackage -notmatch '^com\.shihab\.diplay\.hudtest$' -or
-    $ledger.applicationId -ne $expectedPackage -or
+if ($RequireCanonicalFileName -and [IO.Path]::GetFileName($apk) -ne "CarPaly-XingyueL-v$expectedName.apk") {
+    throw "User APK name must be CarPaly-XingyueL-v$expectedName.apk."
+}
+if ($expectedPackage -ne $ledger.applicationId -or
     $gradle -notmatch ('(?m)^\s*applicationId\s*=\s*"' + [regex]::Escape($expectedPackage) + '"\s*$')) {
-    throw 'Project applicationId does not match the permanent upgrade identity.'
+    throw 'Project applicationId does not match the permanent user-install identity.'
 }
 if ($expectedCode -le $baselineCode -or
     $gradle -notmatch ('(?m)^\s*versionCode\s*=\s*' + $expectedCode + '\s*$') -or
     $gradle -notmatch ('(?m)^\s*versionName\s*=\s*"' + [regex]::Escape($expectedName) + '"\s*$')) {
-    throw 'Gradle version metadata is not the reserved, monotonic user-delivery version.'
+    throw 'Gradle version metadata is not the reserved, strictly increasing user version.'
 }
 if ($ledger.releaseCertificateSha256 -ne $expectedSigner -or $gradle -notmatch [regex]::Escape($expectedSigner)) {
-    throw 'The fixed v1.1.4 Release signer pin is absent or inconsistent.'
+    throw 'The permanent Release signer pin is absent or inconsistent.'
 }
 if (-not $AuthenticationAssetsRoot) {
     throw 'DIPLAY_AUTH_ASSETS_DIR is required to compare packaged runtime authentication files.'
@@ -61,9 +63,10 @@ try {
     if (-not $signerMatch.Success) { throw 'APK signer fingerprint was not reported.' }
     if ($signatureText -notmatch '(?m)^Number of signers:\s*1\s*$') { throw 'APK must have exactly one signing identity.' }
     $signerSha256 = ($signerMatch.Groups[1].Value -replace ':', '').ToLowerInvariant()
-    if ($signerSha256 -ne $expectedSigner) { throw 'APK signer is not the fixed v1.1.4 Release identity.' }
-    $schemeMatch = [regex]::Match($signatureText, '(?m)^Verified using v2 scheme \(APK Signature Scheme v2\): true\s*$')
-    if (-not $schemeMatch.Success) { throw 'APK Signature Scheme v2 was not verified.' }
+    if ($signerSha256 -ne $expectedSigner) { throw 'APK signer is not the pinned Release identity.' }
+    if ($signatureText -notmatch '(?m)^Verified using v2 scheme \(APK Signature Scheme v2\): true\s*$') {
+        throw 'APK Signature Scheme v2 was not verified.'
+    }
     $checks['APK_SIGNATURE'] = 'PASS'
 
     $badgingOutput = & $aapt dump badging $apk 2>&1
@@ -74,7 +77,7 @@ try {
     $packageName = $packageMatch.Groups[1].Value
     $versionCode = [int] $packageMatch.Groups[2].Value
     $versionName = $packageMatch.Groups[3].Value
-    if ($packageName -ne $expectedPackage) { throw 'APK applicationId differs from the installed upgrade identity.' }
+    if ($packageName -ne $expectedPackage) { throw 'APK applicationId differs from the permanent application identity.' }
     if ($versionName -ne $expectedName -or $versionCode -ne $expectedCode -or $versionCode -le $baselineCode) {
         throw 'APK versionName/versionCode does not match the reserved monotonic version.'
     }
@@ -89,7 +92,7 @@ try {
     $manifestOutput = & $aapt dump xmltree $apk AndroidManifest.xml 2>&1
     if ($LASTEXITCODE -ne 0) { throw 'AndroidManifest.xml could not be inspected.' }
     if (($manifestOutput -join "`n") -match 'android:debuggable') {
-        throw 'Debuggable APKs are not eligible as user upgrade-test packages.'
+        throw 'Debuggable APKs are not eligible as user-delivery packages.'
     }
     $checks['RELEASE_VARIANT_NOT_DEBUGGABLE'] = 'PASS'
 
@@ -101,7 +104,7 @@ try {
     } | Sort-Object -Unique)
     if ($abiNames -notcontains 'arm64-v8a') { throw 'APK does not include the required arm64-v8a native ABI.' }
     if ($entries | Where-Object { $_.FullName -match '\.(p12|pfx|jks|keystore)$' }) {
-        throw 'APK unexpectedly contains a Release keystore file.'
+        throw 'APK unexpectedly contains an Android Release keystore file.'
     }
 
     $authRoot = (Resolve-Path -LiteralPath $AuthenticationAssetsRoot).Path
@@ -109,7 +112,7 @@ try {
         $sourcePath = Join-Path $authRoot "offline-mfi\$name"
         if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) { throw "Authorized runtime input is missing: offline-mfi\$name" }
         $entry = $zip.GetEntry("assets/offline-mfi/$name")
-        if (-not $entry) { throw "Standalone APK is missing assets/offline-mfi/$name" }
+        if (-not $entry) { throw "Release APK is missing assets/offline-mfi/$name" }
         $sourceHash = (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash.ToLowerInvariant()
         $entryStream = $entry.Open()
         try {
@@ -118,12 +121,11 @@ try {
             finally { $sha.Dispose() }
         }
         finally { $entryStream.Dispose() }
-        if ($packagedHash -ne $sourceHash) { throw "Packaged runtime input does not match the authorized local input: $name" }
+        if ($packagedHash -ne $sourceHash) { throw "Packaged runtime input does not match the local authorized input: $name" }
     }
     $checks['AUTH_ASSETS_MATCH_LOCAL_INPUTS'] = 'PASS'
     $checks['NATIVE_ABI'] = 'PASS'
 
-    # Force full decompression of every ZIP entry, in addition to apksigner's digest checks.
     foreach ($entry in $entries) {
         if ($entry.Length -eq 0) { continue }
         $stream = $entry.Open()
@@ -141,7 +143,7 @@ try {
     $allocation = @($ledger.allocations | Where-Object { $_.versionName -eq $versionName -and $_.versionCode -eq $versionCode }) | Select-Object -First 1
     if (-not $allocation) { throw 'APK version does not have a unique allocation in the version ledger.' }
     if ($allocation.artifactSha256 -and $allocation.artifactSha256 -ne $apkSha256) {
-        throw 'This version already has a delivered APK with different bytes; allocate the next version instead.'
+        throw 'This version already has a delivered APK with different bytes; allocate a new version instead.'
     }
     if ($RecordDelivery -and -not $allocation.artifactSha256) {
         $allocation.artifactSha256 = $apkSha256

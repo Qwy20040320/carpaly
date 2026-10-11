@@ -689,8 +689,14 @@ object WheelZoomSettings {
         return active.firstOrNull { it != role && (it == Role.SIRI || role == Role.SIRI) && key(context, it) == key }
     }
 
-    fun key(context: Context, role: Role): WheelKey? =
-        WheelKey.decode(prefs(context).getString("key_${role.name}", null)) ?: role.defaultKey
+    fun key(context: Context, role: Role): WheelKey? {
+        WheelKey.decode(prefs(context).getString("key_${role.name}", null))?.let { return it }
+        // These built-in event codes describe a historic BYD wheel, not the Geely KX11.
+        // Keep existing user-learned mappings, but require an explicit mapping on Geely.
+        return role.defaultKey.takeUnless {
+            HeadUnitProfile.active(context) == HeadUnitProfile.GEELY_XINGYUE_L
+        }
+    }
 
     fun assign(context: Context, role: Role, key: WheelKey) {
         prefs(context).edit().putString("key_${role.name}", key.encode()).apply()

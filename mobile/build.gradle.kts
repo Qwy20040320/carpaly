@@ -10,7 +10,6 @@ import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 import java.security.interfaces.ECPublicKey
 import java.security.spec.PKCS8EncodedKeySpec
-import java.util.zip.ZipFile
 import org.gradle.api.tasks.Sync
 
 plugins {
@@ -164,10 +163,10 @@ android {
     }
 
 
-    // Stage only the two selected runtime inputs. DIPLAY_AUTH_ASSETS_DIR may be the repository
-    // root, so never register that parent directory itself as an APK assets source.
+    // Stage only the two selected runtime inputs and expose them to Release only.
+    // DIPLAY_AUTH_ASSETS_DIR may be the repository root, so never register that parent directory itself.
     localAuthenticationAssets?.let {
-        sourceSets.getByName("main").assets.directories.add(stagedAuthenticationAssets.get().asFile.absolutePath)
+        sourceSets.getByName("release").assets.directories.add(stagedAuthenticationAssets.get().asFile.absolutePath)
     }
 
     signingConfigs {
@@ -259,15 +258,15 @@ val rejectBundledCredentials by tasks.registering {
 }
 tasks.named("preBuild") { dependsOn(rejectBundledCredentials) }
 
-// Car-test packages must be standalone. Keep ordinary source/CI builds identity-free.
+// Only user-facing Release builds may receive explicit runtime authentication assets.
 val verifyStandaloneAuthentication by tasks.registering {
     group = "verification"
-    description = "Require the explicit runtime authentication input for a standalone car-test APK."
+    description = "Validate the explicit runtime authentication inputs for a user Release APK."
     notCompatibleWithConfigurationCache("Validates local authentication material without serializing it into the configuration cache.")
     val directory = localAuthenticationAssets
     doLast {
         check(directory != null) {
-            "Standalone car builds require DIPLAY_AUTH_ASSETS_DIR; assembleDebug alone is source-only."
+            "Authenticated Release builds require DIPLAY_AUTH_ASSETS_DIR; Debug builds stay identity-free."
         }
         val authDirectory = directory.resolve("offline-mfi")
         val expectedPaths = setOf(
@@ -294,70 +293,7 @@ val verifyStandaloneAuthentication by tasks.registering {
     }
 }
 if (localAuthenticationAssets != null) {
-    tasks.named("preBuild") { dependsOn(verifyStandaloneAuthentication) }
-}
-tasks.register("assembleStandaloneDebug") {
-    group = "build"
-    description = "Build a standalone car-test APK with explicitly provisioned authentication."
-    dependsOn(verifyStandaloneAuthentication, "assembleDebug")
-}
-
-tasks.register("verifyStandaloneDebugApk") {
-    group = "verification"
-    description = "Build a standalone authenticated debug APK and verify both embedded identity assets."
-    notCompatibleWithConfigurationCache("Validates local authentication material without serializing it into the configuration cache.")
-    dependsOn("assembleStandaloneDebug")
-    doLast {
-        val directory = checkNotNull(localAuthenticationAssets)
-        val sourceHashes = verifyMfiIdentity(directory)
-        val apk = layout.buildDirectory.file("outputs/apk/debug/mobile-debug.apk").get().asFile
-        check(apk.isFile && apk.length() > 0) { "Standalone mobile APK was not produced" }
-
-        ZipFile(apk).use { archive ->
-            for ((name, expectedHash) in sourceHashes) {
-                val entryName = "assets/offline-mfi/$name"
-                val entry = archive.getEntry(entryName)
-                    ?: error("Authenticated APK is missing $entryName")
-                val actualHash = archive.getInputStream(entry).use { input ->
-                    val digest = MessageDigest.getInstance("SHA-256")
-                    val buffer = ByteArray(8192)
-                    while (true) {
-                        val count = input.read(buffer)
-                        if (count < 0) break
-                        digest.update(buffer, 0, count)
-                    }
-                    digest.digest().joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
-                }
-                check(actualHash == expectedHash) { "Authenticated APK asset hash mismatch for $name" }
-            }
-        }
-
-        val report = layout.buildDirectory.file("reports/standalone-authentication-verification.txt").get().asFile
-        report.parentFile.mkdirs()
-        report.writeText(
-            buildString {
-                appendLine("APK: ${apk.name}")
-                appendLine("Bytes: ${apk.length()}")
-                appendLine("Application ID: ${android.defaultConfig.applicationId}${android.buildTypes.getByName("debug").applicationIdSuffix}")
-                appendLine("Version name: ${android.defaultConfig.versionName}")
-                appendLine("Version code: ${android.defaultConfig.versionCode}")
-                sourceHashes.toSortedMap().forEach { (name, hash) -> appendLine("$name SHA-256: $hash") }
-                appendLine("APK SHA-256: ${sha256(apk.readBytes())}")
-                appendLine("Signature: verify separately with apksigner")
-                appendLine("Vehicle and iPhone CarPlay runtime: NOT_TESTED")
-            },
-        )
-        logger.lifecycle("Authenticated APK asset hashes verified; report: ${report.absolutePath}")
-    }
-}
-
-tasks.register("assembleCarPalyUpgradeTest") {
-    group = "build"
-    description = "Build the authenticated v1.1.51 upgrade-test APK with the pinned Release signer."
-    dependsOn(verifyStandaloneAuthentication, verifyCarPalyReleaseSigning, "assembleRelease")
-    doLast {
-        val apk = layout.buildDirectory.file("outputs/apk/release/mobile-release.apk").get().asFile
-        check(apk.isFile && apk.length() > 0L) { "Release-signed CarPaly upgrade-test APK was not produced" }
-        logger.lifecycle("Release-signed upgrade-test APK ready for verification: ${apk.absolutePath}")
+    tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+        dependsOn(verifyStandaloneAuthentication)
     }
 }

@@ -91,7 +91,7 @@
     <string name="a_familiar_drive">熟悉的駕駛體驗。</string>
     <string name="a_previous_wi_fi_direct_connection_is_still_running_reset">先前的 Wi-Fi Direct 連線仍在執行。請重設後再連線。</string>
     <string name="about">關於</string>
-    <string name="about_diplay">關於 DiPlay</string>
+    <string name="about_diplay">關於 CarPaly</string>
     <string name="active">已啟用</string>
     <string name="advanced_audio_channel_mapping">進階音訊聲道對應</string>
     <string name="airplay_icon">AirPlay 圖示</string>
@@ -298,7 +298,7 @@
     <string name="preparing_mfi_authentication">正在準備 MFi 認證</string>
     <string name="ready">就緒</string>
     <string name="ready_when_you_are">一切就緒</string>
-    <string name="receiver_based_on_xcertplay_licensed_under_gpl_3_0_diplay">接收器以採用 GPL-3.0 授權的 xcertplay 為基礎。DiPlay 介面沿用採用 AGPL-3.0 授權的 DiAuto 設計。\n\n專案包含 AndroidX、Bouncy Castle、JmDNS 和 SLF4J。本版本附有原始碼和授權聲明。\n\nCarPlay 和 CarPlay 圖示為 Apple Inc. 所有。DiPlay 為獨立專案。</string>
+    <string name="receiver_based_on_xcertplay_licensed_under_gpl_3_0_diplay">CarPaly 接收器源自 xcertplay 和 DiPlay，採用 GPL-3.0 授權。部分介面元件源自採用 AGPL-3.0 授權的 DiAuto；請參閱專案儲存庫中的版權與授權聲明。\n\n專案包含 AndroidX、Bouncy Castle、JmDNS 和 SLF4J。原始碼和授權聲明可於專案儲存庫查閱。\n\nCarPlay 及其圖示為 Apple Inc. 所有。CarPaly 是獨立社群專案，與 Apple 無隸屬關係。</string>
     <string name="reconnecting_to_your_iphone">正在重新連線 iPhone…</string>
     <string name="remote">遠端</string>
     <string name="remote_server_address_contains_u_0000">遠端伺服器位址包含 U+0000</string>

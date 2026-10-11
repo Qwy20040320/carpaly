@@ -16,7 +16,7 @@ done
   exit 1
 }
 version="${RELEASE_TAG#v}"
-canonical_apk="CarPaly-XingyueL${version}.apk"
+canonical_apk="CarPaly-XingyueL-v${version}.apk"
 canonical_source="${canonical_apk%.apk}-source.zip"
 canonical_sums="SHA256SUMS.txt"
 [[ "$APK_NAME" == "$canonical_apk" ]] || {

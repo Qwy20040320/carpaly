@@ -1,11 +1,14 @@
+import json
 import unittest
 from pathlib import Path
 
 from scripts.android_versioning import (
+    allocate,
     check_project,
     next_test_name,
     parse_gradle_version,
     parse_version_tuple,
+    require_current_delivery_recorded,
 )
 
 
@@ -40,6 +43,51 @@ class AndroidVersioningTests(unittest.TestCase):
         version = check_project(root)
         self.assertEqual("1.1.51", version.version_name)
         self.assertEqual(39, version.version_code)
+        ledger = json.loads((root / "config/android-version-ledger.json").read_text(encoding="utf-8"))
+        history = {
+            item["tag"]: (item["versionName"], item["versionCode"])
+            for item in ledger["verifiedHistoricalDeliveries"]
+        }
+        self.assertEqual(("1.1.4", 36), history["v1.1.4"])
+        self.assertEqual(("1.1.5", 37), history["v1.1.5"])
+
+    def test_next_version_is_blocked_until_current_release_artifact_is_recorded(self):
+        ledger = {
+            "current": {"versionName": "1.1.51", "versionCode": 39, "channel": "test"},
+            "allocations": [
+                {
+                    "versionName": "1.1.51",
+                    "versionCode": 39,
+                    "channel": "test",
+                    "status": "reserved",
+                    "artifactSha256": None,
+                }
+            ],
+        }
+        with self.assertRaisesRegex(ValueError, "verified Release APK delivery SHA-256"):
+            require_current_delivery_recorded(ledger)
+
+    def test_next_version_requires_a_sha256_record_for_the_delivered_release(self):
+        ledger = {
+            "current": {"versionName": "1.1.51", "versionCode": 39, "channel": "test"},
+            "allocations": [
+                {
+                    "versionName": "1.1.51",
+                    "versionCode": 39,
+                    "channel": "test",
+                    "status": "delivered",
+                    "artifactSha256": "a" * 64,
+                }
+            ],
+        }
+        require_current_delivery_recorded(ledger)
+
+    def test_allocator_does_not_advance_reserved_release_version(self):
+        root = Path(__file__).resolve().parents[1]
+        with self.assertRaisesRegex(ValueError, "verified Release APK delivery SHA-256"):
+            allocate(root, "test")
+        current = check_project(root)
+        self.assertEqual(("1.1.51", 39), (current.version_name, current.version_code))
 
 
 if __name__ == "__main__":

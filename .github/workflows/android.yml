@@ -2,9 +2,14 @@ name: Android checks
 on:
   push:
     branches: [main, 'feature/**']
-    tags: ['v1.*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      publish_authenticated_release:
+        description: Explicitly publish the authenticated Release APK from a reviewed version tag
+        required: true
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -35,6 +40,7 @@ jobs:
           python3 scripts/test_release_pipeline.py
           python3 -m unittest scripts/test_android_versioning.py
           python3 scripts/android_versioning.py check
+          python3 scripts/check_project_docs.py
       - name: Validate clean source archive packaging
         shell: bash
         run: |
@@ -43,16 +49,20 @@ jobs:
           python3 scripts/package_source_archive.py --ref "$GITHUB_SHA" --output "$archive"
           python3 - "$archive" <<'PY'
           from pathlib import PurePosixPath
+          import json
           import sys
           from zipfile import ZipFile
 
+          with open("config/public-markdown-allowlist.json", encoding="utf-8") as manifest:
+              allowed_markdown = {f"CarPaly/{path}" for path in json.load(manifest)["publicMarkdown"]}
           with ZipFile(sys.argv[1]) as source:
               names = set(source.namelist())
               assert "CarPaly/LICENSE" in names
               assert "CarPaly/README.md" in names
               assert "CarPaly/docs/licenses/DiAuto-AGPL-3.0.txt" in names
               assert "CarPaly/shared/src/main/jni/speexdsp/COPYING" in names
-              assert all(name.lower().endswith(".md") is False or name == "CarPaly/README.md" for name in names)
+              included_markdown = {name for name in names if name.lower().endswith(".md")}
+              assert included_markdown == allowed_markdown
               blocked = {".apk", ".aab", ".pk8", ".p7b", ".pem", ".key", ".p12", ".pfx", ".jks", ".keystore"}
               assert all(PurePosixPath(name).suffix.lower() not in blocked for name in names)
               assert all(((info.external_attr >> 16) & 0o170000) != 0o120000 for info in source.infolist())
@@ -94,40 +104,15 @@ jobs:
             "$build_tools/apksigner" verify --verbose "$apk"
             echo "APK: $apk" | tee -a apk-metadata.txt
             "$build_tools/aapt" dump badging "$apk" | sed -n '1,2p' | tee -a apk-metadata.txt
-          done
-      - name: Reject authentication credentials from public Actions artifacts
-        if: success()
-        run: |
-          set -euo pipefail
-          mapfile -d '' apks < <(find mobile samples/home samples/maphost -path '*/build/outputs/apk/debug/*.apk' -type f -print0 | sort -z)
-          test "${#apks[@]}" -gt 0
-          for apk in "${apks[@]}"; do
-            entries="$(unzip -Z1 "$apk")"
-            if grep -E '(^|/)(identity\.pk8|certificate\.p7b|[^/]+\.(key|pk8|p7b|pem|p12|pfx|jks|keystore))$' <<<"$entries"; then
-              echo "Refusing to upload authentication material in a public Actions artifact: $apk" >&2
+            if unzip -Z1 "$apk" | grep -Eq '^assets/offline-mfi/(identity\.pk8|certificate\.p7b)$'; then
+              echo "Debug APK must not contain user authentication identity: $apk" >&2
               exit 1
             fi
           done
-      - name: Calculate debug APK SHA-256
-        if: success()
-        run: |
-          find mobile samples/home samples/maphost -path '*/build/outputs/apk/debug/*.apk' -type f -print0 | sort -z | xargs -0 -r sha256sum | tee apk-sha256.txt
-          test -s apk-sha256.txt
-      - name: Debug APKs and checksums
-        if: success()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # actions/upload-artifact v7
-        with:
-          name: debug-apks-and-sha256
-          path: |
-            mobile/build/outputs/apk/debug/*.apk
-            samples/home/build/outputs/apk/debug/*.apk
-            samples/maphost/build/outputs/apk/debug/*.apk
-            apk-sha256.txt
-            apk-metadata.txt
   authenticated_release:
-    name: Build and publish Release-signed authenticated CarPaly preview
+    name: Manually build and publish authenticated Release APK
     needs: check
-    if: startsWith(github.ref, 'refs/tags/v1.')
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_authenticated_release == true && startsWith(github.ref, 'refs/tags/v1.')
     runs-on: ubuntu-latest
     # This environment scopes the existing release secrets/tag policy; it does not require an approval reviewer.
     environment: mfi-public-release
@@ -138,7 +123,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      # Creating a v1.x.y tag is the maintainer's public-release action; verify distribution rights before tagging.
+      # A tag push alone never publishes. This job runs only after an explicit manual dispatch input.
       - name: Confirm release tag is contained in main
         shell: bash
         run: |
@@ -204,7 +189,7 @@ jobs:
               "$actual_signer_sha" "$expected_signer_sha" >&2
             exit 1
           fi
-      - name: Build authenticated standalone Release APK
+      - name: Build authenticated Release APK
         env:
           DIPLAY_AUTH_ASSETS_DIR: ${{ runner.temp }}/carpaly-auth-assets
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/carpaly-signing/carpaly-release.p12
@@ -261,7 +246,7 @@ jobs:
           fi
           release_dir="$RUNNER_TEMP/carpaly-release"
           mkdir -p "$release_dir"
-          release_name="CarPaly-XingyueL${expected_version}.apk"
+          release_name="CarPaly-XingyueL-v${expected_version}.apk"
           release_apk="$release_dir/$release_name"
           cp "$apk" "$release_apk"
           test "$(sha256sum "$release_apk" | awk '{ print $1 }')" = "$actual_sha"
@@ -304,7 +289,7 @@ jobs:
           echo "sums_path=$sums_path" >> "$GITHUB_OUTPUT"
           echo "sums_sha256=$sums_sha" >> "$GITHUB_OUTPUT"
           echo "sums_size=$sums_size" >> "$GITHUB_OUTPUT"
-      - name: Publish and verify authenticated pre-release
+      - name: Publish and verify authenticated Release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}

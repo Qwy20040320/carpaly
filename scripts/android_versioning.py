@@ -115,6 +115,47 @@ def validate_ledger(ledger: dict) -> None:
         for item in allocations
     ):
         raise ValueError("The current version assignment is absent from the immutable allocation ledger")
+    policy = ledger.get("deliveryPolicy", {})
+    if (
+        policy.get("buildType") != "release"
+        or policy.get("apkFileNamePattern") != "CarPaly-XingyueL-v{versionName}.apk"
+        or policy.get("applicationId") != APPLICATION_ID
+        or policy.get("releaseCertificateSha256", "").lower() != RELEASE_CERT_SHA256
+        or policy.get("debugApkUserDeliverable") is not False
+        or policy.get("overwriteDeliveredArtifact") is not False
+    ):
+        raise ValueError("Version ledger does not enforce the permanent Release APK delivery policy")
+    historical = ledger.get("verifiedHistoricalDeliveries", [])
+    historical_names = [item["versionName"] for item in historical]
+    historical_codes = [item["versionCode"] for item in historical]
+    if len(historical_names) != len(set(historical_names)) or len(historical_codes) != len(set(historical_codes)):
+        raise ValueError("Verified historical deliveries reuse a versionName or versionCode")
+    if set(historical_names).intersection(names) or set(historical_codes).intersection(codes):
+        raise ValueError("An allocated versionName or versionCode conflicts with a published historical version")
+    if any(item.get("status") != "published" for item in historical):
+        raise ValueError("Historical version records must describe verified published deliveries")
+    if ledger.get("highestObservedVersionCode", 0) < max(historical_codes, default=0):
+        raise ValueError("The Android version-code high-water mark is below a published historical version")
+
+
+def require_current_delivery_recorded(ledger: dict) -> None:
+    current = ledger["current"]
+    allocation = next(
+        (
+            item
+            for item in ledger["allocations"]
+            if item["versionName"] == current["versionName"]
+            and item["versionCode"] == current["versionCode"]
+            and item["channel"] == current["channel"]
+        ),
+        None,
+    )
+    if allocation is None or allocation.get("status") != "delivered" or not re.fullmatch(
+        r"[a-f0-9]{64}", (allocation.get("artifactSha256") or "").lower()
+    ):
+        raise ValueError(
+            "The current version must have a verified Release APK delivery SHA-256 before another version is allocated"
+        )
 
 
 def check_project(root: Path) -> AndroidVersion:
@@ -157,6 +198,7 @@ def check_project(root: Path) -> AndroidVersion:
     highest_previous = max(
         [ledger.get("highestObservedVersionCode", 0)]
         + [item.version_code for item in history]
+        + [item["versionCode"] for item in ledger.get("verifiedHistoricalDeliveries", [])]
         + allocated_codes
     )
     if version.version_code <= highest_previous:
@@ -189,6 +231,7 @@ def update_gradle_version(root: Path, version_name: str, version_code: int) -> N
 def allocate(root: Path, channel: str) -> AndroidVersion:
     current_version = check_project(root)
     ledger = read_ledger(root)
+    require_current_delivery_recorded(ledger)
     if channel == "test":
         version_name = next_test_name(current_version.version_name)
     else:
@@ -202,6 +245,7 @@ def allocate(root: Path, channel: str) -> AndroidVersion:
     highest = max(
         [ledger.get("highestObservedVersionCode", 0), current_version.version_code]
         + [item.version_code for item in history]
+        + [item["versionCode"] for item in ledger.get("verifiedHistoricalDeliveries", [])]
         + [item["versionCode"] for item in ledger["allocations"]]
     )
     version = AndroidVersion(APPLICATION_ID, version_name, highest + 1)
