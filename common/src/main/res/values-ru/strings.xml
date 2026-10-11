@@ -717,5 +717,4 @@
     <string name="head_unit_profile_description">Профиль Xingyue L использует опубликованную геометрию центрального экрана 1920 × 720, физическую ширину 300 мм, полный экран, H.264 и 60 кадров/с. Он не обращается к данным автомобиля, приборной панели или органам управления. После изменения переподключите CarPlay.</string>
     <string name="geely_kx11_candidate_profile">Кандидатный профиль Geely KX11</string>
     <string name="geely_kx11_detection_evidence">Определение KX11: %1$s · %2$s</string>
-    <string name="settings_open_diagnostics">Открыть диагностику и журналы</string>
 </resources>

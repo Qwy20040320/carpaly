@@ -393,7 +393,6 @@
     <string name="settings_wheel_keys">Wheel keys</string>
     <string name="settings_experimental_display">Display (experimental)</string>
     <string name="settings_diagnostics_summary">Live receiver status, local logs, and a combined diagnostic report.</string>
-    <string name="settings_open_diagnostics">Open diagnostics and logs</string>
     <string name="settings_full_screen_description">Hide the status and navigation bars in DiPlay and CarPlay.</string>
     <string name="settings_vehicle_description">Vehicle and dashboard features vary by model and firmware. Review them in Advanced settings before enabling experimental controls.</string>
     <string name="settings_open_advanced">Open Advanced settings</string>

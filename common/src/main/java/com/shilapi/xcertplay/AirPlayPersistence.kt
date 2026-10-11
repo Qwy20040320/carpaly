@@ -1,6 +1,7 @@
 package com.shilapi.xcertplay
 
 import android.content.Context
+import android.media.AudioManager
 import android.os.Build
 import com.shilapi.xcertplay.airplay.AirPlayDisplaySettings
 import com.shilapi.xcertplay.airplay.AirPlayPhysicalSizeBasis
@@ -236,8 +237,19 @@ object AirPlayPersistence {
 
     fun loadNavigationAudioChannel(context: Context): Int {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        // Inherit the legacy value only when the new key is absent; preserve fresh-install and explicit 0 defaults.
-        return prefs.getInt(KEY_NAVIGATION_AUDIO_CHANNEL, prefs.getInt(KEY_NAVIGATION_STREAM_TYPE, 0))
+        // The Geely head unit has a user-reported working media path while navigation guidance
+        // is silent. For a fresh Geely profile, request Android's standard media stream so the
+        // OEM media route can carry prompts. Explicit and legacy preferences always win; users
+        // can still select 0 to return to usage-based navigation routing.
+        val geelyDefault = if (HeadUnitProfile.active(context) == HeadUnitProfile.GEELY_XINGYUE_L) {
+            AudioManager.STREAM_MUSIC
+        } else {
+            0
+        }
+        return prefs.getInt(
+            KEY_NAVIGATION_AUDIO_CHANNEL,
+            prefs.getInt(KEY_NAVIGATION_STREAM_TYPE, geelyDefault),
+        )
             .takeIf { it in AUDIO_CHANNELS } ?: 0
     }
 

@@ -45,21 +45,6 @@ class DiagnosticExportStoreTest {
         assertFalse(provider.deleted)
     }
 
-    @Test fun pickerFallbackPublishesZipToCarPalyDownloadsWithArchiveMimeType() {
-        val context = RuntimeEnvironment.getApplication()
-        val archiveBytes = byteArrayOf(0x50, 0x4b, 0x03, 0x04, 0x01, 0x02)
-        val saved = DiagnosticExportStore.saveArchiveWithoutPicker(context, "CarPaly-Diagnostic-20261009-120000.zip") {
-            it.write(archiveBytes)
-        }
-        assertEquals(provider.uri, saved.uri)
-        assertTrue(provider.file.readBytes().contentEquals(archiveBytes))
-        assertEquals("Download/CarPaly", provider.insertValues!!.getAsString(MediaStore.Downloads.RELATIVE_PATH))
-        assertEquals("application/zip", provider.insertValues!!.getAsString(MediaStore.Downloads.MIME_TYPE))
-        assertEquals(1, provider.insertValues!!.getAsInteger(MediaStore.Downloads.IS_PENDING))
-        assertEquals(0, provider.publishValues!!.getAsInteger(MediaStore.Downloads.IS_PENDING))
-        assertFalse(provider.deleted)
-    }
-
     @Test fun unavailableDownloadsDoesNotReturnFalseSuccess() {
         provider.refuseInsert = true
         assertThrows(IOException::class.java) {

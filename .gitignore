@@ -21,6 +21,7 @@ captures/
 # Keep reports local; the root README is the sole public Markdown exception.
 *.md
 !/README.md
+/docs/geely/v1.1.5/interfaces/APK_EVIDENCE_MATRIX.csv
 
 # OS files
 .DS_Store

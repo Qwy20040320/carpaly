@@ -1,6 +1,7 @@
 package com.shilapi.xcertplay
 
 import android.content.Context
+import android.media.AudioManager
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
@@ -14,15 +15,29 @@ import org.robolectric.annotation.Config
 class AudioChannelPersistenceTest {
     private val context get() = RuntimeEnvironment.getApplication()
     private val prefs get() = context.getSharedPreferences("xcertplay_airplay", Context.MODE_PRIVATE)
+    private val profilePrefs get() = context.getSharedPreferences("diplay", Context.MODE_PRIVATE)
 
     @Before fun clearPreferences() {
         prefs.edit().clear().apply()
+        profilePrefs.edit().clear().apply()
     }
 
     @Test fun freshInstallUsesAutomaticRouting() {
+        HeadUnitProfile.save(context, HeadUnitProfile.GENERIC)
         assertEquals(0, AirPlayPersistence.loadMediaAudioChannel(context))
         assertEquals(0, AirPlayPersistence.loadNavigationAudioChannel(context))
         org.junit.Assert.assertTrue(AirPlayPersistence.loadAudioFocusAutoYield(context))
+    }
+
+    @Test fun freshGeelyProfileRoutesNavigationGuidanceThroughMediaStream() {
+        HeadUnitProfile.save(context, HeadUnitProfile.GEELY_XINGYUE_L)
+        assertEquals(AudioManager.STREAM_MUSIC, AirPlayPersistence.loadNavigationAudioChannel(context))
+    }
+
+    @Test fun explicitAutomaticRoutingOverridesGeelyNavigationDefault() {
+        HeadUnitProfile.save(context, HeadUnitProfile.GEELY_XINGYUE_L)
+        AirPlayPersistence.saveNavigationAudioChannel(context, 0)
+        assertEquals(0, AirPlayPersistence.loadNavigationAudioChannel(context))
     }
 
     @Test fun audioFocusAutoYieldCanBeSavedAndRestored() {

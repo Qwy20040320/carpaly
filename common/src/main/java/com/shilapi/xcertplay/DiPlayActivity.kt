@@ -60,7 +60,6 @@ import com.shilapi.xcertplay.network.CarHotspotSettings
 import com.shilapi.xcertplay.network.CarHotspotTethering
 import com.shilapi.xcertplay.network.WifiP2pChannels
 import com.shilapi.xcertplay.orchestration.WirelessHotspotMode
-import com.shilapi.xcertplay.orchestration.MfiTarget
 import com.shilapi.xcertplay.settings.SettingsTheme
 import com.shilapi.xcertplay.settings.SettingsWidgets
 import com.shilapi.xcertplay.setup.DiLinkGeneration
@@ -1493,19 +1492,14 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         filteredSection(content, SettingsSection.DIAGNOSTICS,
             getString(R.string.diagnostics), R.drawable.ic_dp_diagnostics) { card ->
-            card.addView(label(getString(R.string.settings_diagnostics_summary), 16, MUTED))
-            card.addView(button(getString(R.string.settings_open_diagnostics), true) {
-                val authStatus = when {
-                    setupError != null -> "UNAVAILABLE"
-                    AirPlayPersistence.loadMfiTarget(this) == MfiTarget.LOCAL -> "LOADED_NOT_TRUSTED"
-                    else -> "CONFIGURED_NOT_VERIFIED"
-                }
-                startActivity(Intent(this, GeelyDiagnosticCenterActivity::class.java)
-                    .putExtra(GeelyDiagnosticCenterActivity.EXTRA_MFI_AUTH_STATUS, authStatus))
-            }, matchButton(12, 60))
-            card.addView(label(getString(R.string.reports_save_to_downloads_diplay) +
-                getString(R.string.nothing_is_sent_automatically_protocol_payloads_and_creden), 14, MUTED)
-                .apply { setPadding(0, dp(12), 0, 0) })
+            exportButton = button(if (exportInProgress) getString(R.string.saving_report) else getString(R.string.save_diagnostic_report), false) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) exportDiagnostics()
+                else chooseReportDestination()
+            }.apply { isEnabled = !exportInProgress }
+            card.addView(exportButton, matchButton(10, 60))
+            card.addView(button(getString(R.string.choose_save_location), false) { chooseReportDestination() }, matchButton(10, 60))
+            val destination = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) getString(R.string.reports_save_to_downloads_diplay) else getString(R.string.choose_where_to_save_your_report)
+            card.addView(label(destination + getString(R.string.nothing_is_sent_automatically_protocol_payloads_and_creden), 14, MUTED).apply { setPadding(0, dp(12), 0, 0) })
         }
         filteredSection(content, SettingsSection.AUTOMATIC_CONNECTION,
             getString(R.string.automatic_connection), R.drawable.ic_dp_automation) { card ->

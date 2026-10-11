@@ -104,8 +104,8 @@ android {
         applicationId = "com.shihab.diplay.hudtest"
         minSdk = 25
         targetSdk = 37
-        versionCode = 36
-        versionName = "1.1.4"
+        versionCode = 37
+        versionName = "1.1.5"
         buildConfigField("String", "GIT_COMMIT", "\"${gitCommit.get()}\"")
 
     }
