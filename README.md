@@ -234,13 +234,14 @@ Geely CarPlay 返回图标采用 [Geely Auto 2023 标志](https://commons.wikime
 
 ## English
 
-CarPaly is a community Android CarPlay receiver derived from [DiPlay](https://github.com/shihabal3amri/DiPlay), with candidate profiles for Geely Xingyue L / KX11. The 2024 Tianji edition is the first validation target. Profiles and unit tests are not proof of vehicle compatibility: every listed model and every in-car feature remains **NOT_TESTED** until verified by a user in the real vehicle.
+CarPaly is a community Android CarPlay receiver derived from [DiPlay](https://github.com/shihabal3amri/DiPlay), with candidate profiles for Geely Xingyue L / KX11. The 2024 Tianji edition is the first validation target. Profiles and unit tests are not proof of vehicle compatibility: no model year has complete vehicle validation. One user reported a successful CarPlay connection and music playback on a Xingyue L; the setup was not independently reproduced and must not be generalized to other trims or connection modes.
 
 ### Current status
 
 - Candidate model-year profiles, conservative build-identity detection, and manual profile selection are implemented.
 - An active Geely profile selects the “Geely” vehicle label and Geely return icon; user-selected icons retain priority. This UI has not been validated in a Geely vehicle.
-- USB and Wi-Fi receiver paths, media/audio handling, and generic CarPlay cluster-related code are present, but no Geely in-car integration is confirmed.
+- USB and Wi-Fi receiver paths, media/audio handling, and generic CarPlay cluster-related code are present; no Geely OEM integration has been independently confirmed.
+- The user-reported v1.1.4 connection mode and vehicle configuration were not recorded. Navigation prompts were silent and the OEM top status bar reportedly obstructed the picture; both need v1.1.5 in-car retesting. Siri, microphone, steering-wheel keys, HUD, instrument-cluster guidance, and fuel data remain **NOT_TESTED**.
 - The read-only diagnostic center, opt-in bounded logs, filtering, redaction, and user-triggered ZIP export are implemented and covered by software tests.
 - Reverse-camera/360 takeover and Geely-specific HUD integration are not implemented.
 - Historical tags `v0.1.0`, `v0.1.1`, and `v0.2.16` are retained only as version-history mappings in this README; their GitHub Releases, public APK assets, and tags have been removed. Their commits remain reachable from project branches, while APK backups remain local and are not download links.
