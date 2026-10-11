@@ -24,9 +24,10 @@ internal class AudioChannelPreview(private val onUnavailable: (Int) -> Unit) : C
     private var pending: Future<*>? = null
     @Volatile private var closed = false
 
-    fun play(channel: Int, navigation: Boolean) {
+    fun play(channel: Int, navigation: Boolean, phone: Boolean = false) {
         if (closed) return
-        require(channel in AirPlayPersistence.AUDIO_CHANNELS)
+        require(if (phone) channel in AirPlayPersistence.CALL_AUDIO_CHANNELS
+            else channel in AirPlayPersistence.AUDIO_CHANNELS)
         val request = generation.incrementAndGet()
         pending?.cancel(true)
         activeTrack.get()?.let { runCatching { it.stop() } }
@@ -40,13 +41,17 @@ internal class AudioChannelPreview(private val onUnavailable: (Int) -> Unit) : C
                 )
                 check(minimum > 0) { "No PCM output buffer is available" }
                 val bufferBytes = maxOf(minimum, SAMPLE_RATE / 10 * 2)
-                val built = if (channel == 0) {
+                val automaticRoute = if (phone) channel == AirPlayPersistence.CALL_AUDIO_AUTO else channel == 0
+                val built = if (automaticRoute) {
                     AudioTrack.Builder()
                         .setAudioAttributes(
                             AudioAttributes.Builder()
-                                .setUsage(if (navigation) AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE
-                                    else AudioAttributes.USAGE_MEDIA)
-                                .setContentType(if (navigation) AudioAttributes.CONTENT_TYPE_SPEECH
+                                .setUsage(when {
+                                    phone -> AudioAttributes.USAGE_VOICE_COMMUNICATION
+                                    navigation -> AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE
+                                    else -> AudioAttributes.USAGE_MEDIA
+                                })
+                                .setContentType(if (navigation || phone) AudioAttributes.CONTENT_TYPE_SPEECH
                                     else AudioAttributes.CONTENT_TYPE_MUSIC)
                                 .build(),
                         )
@@ -81,7 +86,7 @@ internal class AudioChannelPreview(private val onUnavailable: (Int) -> Unit) : C
                     written += count
                 }
                 if (!closed && generation.get() == request && written == pcm.size) {
-                    Log.i(TAG, "Preview started channel=$channel navigation=$navigation")
+                    Log.i(TAG, "Preview started channel=$channel navigation=$navigation phone=$phone")
                 }
                 Thread.sleep(120L)
             } catch (_: InterruptedException) {

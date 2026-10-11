@@ -682,7 +682,6 @@ class CarPlayHostActivity : ComponentActivity() {
         if (activeHeadUnitProfile == HeadUnitProfile.GEELY_XINGYUE_L) {
             manufacturer = GeelyXingyueLProfile.CARPLAY_MANUFACTURER
             model = GeelyXingyueLProfile.CARPLAY_MODEL
-            oemLabel = GeelyXingyueLProfile.CARPLAY_OEM_LABEL
             hevcEnabled = false
             hideTopBar = true
             hideBottomBar = true
@@ -3778,12 +3777,9 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private fun defaultAirPlayIconBytes(): ByteArray {
         // The default app-list icon is shown as CarPlay's "back to the car" button.
-        if (!CarPlayVehicleBranding.usesGeelyIcon(activeHeadUnitProfile)) {
-            return resources.openRawResource(R.raw.ic_car_home).use { it.readBytes() }
-        }
         val bitmap = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888)
         return try {
-            resources.getDrawable(R.drawable.ic_geely_auto_2023, theme)
+            resources.getDrawable(CarPlayVehicleBranding.DEFAULT_ICON_RESOURCE, theme)
                 .apply { setBounds(0, 0, bitmap.width, bitmap.height) }
                 .draw(Canvas(bitmap))
             ByteArrayOutputStream().use { output ->
@@ -3810,11 +3806,7 @@ class CarPlayHostActivity : ComponentActivity() {
         if (customBitmap != null) {
             preview.setImageBitmap(customBitmap)
         } else {
-            preview.setImageResource(if (CarPlayVehicleBranding.usesGeelyIcon(activeHeadUnitProfile)) {
-                R.drawable.ic_geely_auto_2023
-            } else {
-                R.raw.ic_car_home
-            })
+            preview.setImageResource(CarPlayVehicleBranding.DEFAULT_ICON_RESOURCE)
         }
         iconStatusView?.text =
             if (customBitmap != null) getString(R.string.custom_1_1_icon) else getString(R.string.default_placeholder_icon)
@@ -3949,6 +3941,7 @@ class CarPlayHostActivity : ComponentActivity() {
             audioFocusAutoYield = AirPlayPersistence.loadAudioFocusAutoYield(this),
             mediaChannel = AirPlayPersistence.loadMediaAudioChannel(this),
             navigationChannel = AirPlayPersistence.loadNavigationAudioChannel(this),
+            phoneChannel = AirPlayPersistence.loadCallAudioChannel(this),
             context = this,
             navigationStreamType = navigationStreamType,
             onScreenStreamActiveChanged = { type, active ->

@@ -153,7 +153,9 @@ object BydCarPlayCall {
         }
         Log.i(TAG, "CarPlay call ${card?.phase ?: "ended"}")
         val app = context ?: return
-        if (BydOutputSettings.carPlayCalls(app)) writer.execute { apply(app, card); if (card == null) arm(app) }
+        if (BydOutputSettings.isBydHeadUnit(app) && BydOutputSettings.carPlayCalls(app)) {
+            writer.execute { apply(app, card); if (card == null) arm(app) }
+        }
     }
 
     /** The setting changed: show the current call now, or end the one DiPlay showed. */
@@ -169,10 +171,15 @@ object BydCarPlayCall {
 
     /** The session ended: forget the calls and end the one DiPlay showed. */
     fun end() {
-        sessionActive = false
-        synchronized(state) { state.clear() }
+        clearSessionState()
         val app = context ?: return
         writer.execute { resetRetry(null); apply(app, null); disarm(app) }
+    }
+
+    /** Clears in-memory iAP2 call state without invoking BYD-specific vehicle writers. */
+    fun clearSessionState() {
+        sessionActive = false
+        synchronized(state) { state.clear() }
     }
 
     /**

@@ -15,6 +15,7 @@ import android.view.ViewGroup
 import android.view.Surface
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContract
@@ -40,6 +41,24 @@ import org.robolectric.util.ReflectionHelpers
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28, 33], qualifiers = "en", manifest = Config.NONE)
 class CarButtonImagePickerTest {
+    @Test fun defaultCarButtonUsesGeelyNameAndPackagedIconWithoutASelectedGeelyProfile() = withHome { activity ->
+        val prefs = activity.getSharedPreferences("xcertplay_airplay", 0)
+        prefs.edit().remove("manufacturer").remove("model").remove("oem_label")
+            .remove("manufacturer_customized").remove("model_customized").remove("oem_label_customized")
+            .remove("geely_branding_defaults_migrated_v1").commit()
+        HeadUnitProfile.save(activity, HeadUnitProfile.GENERIC)
+        val controls = LinearLayout(activity)
+        DiPlayActivity::class.java.getDeclaredMethod("carButtonControls", LinearLayout::class.java)
+            .apply { isAccessible = true }.invoke(activity, controls)
+
+        val name = views(controls).filterIsInstance<Button>().single {
+            it.text.startsWith(activity.getString(R.string.car_button_name) + " · ")
+        }
+        assertEquals(activity.getString(R.string.car_button_name) + " · GEELY", name.text.toString())
+        assertNotNull(views(controls).filterIsInstance<ImageView>().single().drawable)
+        assertEquals(R.drawable.ic_geely_auto_2023, CarPlayVehicleBranding.DEFAULT_ICON_RESOURCE)
+    }
+
     @Test fun carButtonHasOneImageChoiceThatOpensDocumentLocations() = withHome { activity ->
         val buttons = homeButtons(activity)
         val choose = buttons.single { it.text == activity.getString(R.string.choose_image) }

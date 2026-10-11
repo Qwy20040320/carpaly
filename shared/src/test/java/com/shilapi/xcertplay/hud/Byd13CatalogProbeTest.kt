@@ -12,6 +12,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowBuild
 
 class Byd13CatalogProbeTest {
     @Test fun parsesController13FirmwareSymbolsAndDevices() {
@@ -150,6 +151,7 @@ class BydVehicleFieldStoreTest {
     private val context get() = RuntimeEnvironment.getApplication()
 
     @Before fun setUp() {
+        ShadowBuild.setFingerprint("BYD/DiLink5:test")
         context.getSharedPreferences("diplay_byd_vehicle_fields", Context.MODE_PRIVATE).edit().clear().commit()
         context.getSharedPreferences("diplay_byd_outputs", Context.MODE_PRIVATE).edit().clear().commit()
         BydVehicleFieldStore.clearMemoryForTests()

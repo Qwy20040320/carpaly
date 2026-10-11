@@ -1,5 +1,6 @@
 package com.shilapi.xcertplay
 
+import com.shilapi.xcertplay.host.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -28,12 +29,11 @@ class HeadUnitProfileTest {
         assertFalse(GeelyXingyueLProfile.matchesViewport(3840, 720))
     }
 
-    @Test fun `only the active Geely profile selects the Geely CarPlay icon`() {
-        assertEquals("Geely", GeelyXingyueLProfile.CARPLAY_OEM_LABEL)
-        assertTrue(CarPlayVehicleBranding.usesGeelyIcon(HeadUnitProfile.GEELY_XINGYUE_L))
-        assertFalse(CarPlayVehicleBranding.usesGeelyIcon(HeadUnitProfile.AUTOMATIC))
-        assertFalse(CarPlayVehicleBranding.usesGeelyIcon(HeadUnitProfile.GENERIC))
-        assertFalse(CarPlayVehicleBranding.usesGeelyIcon(null))
+    @Test fun `Geely car identity defaults do not depend on hardware profile detection`() {
+        assertEquals("Geely", CarPlayVehicleBranding.DEFAULT_MANUFACTURER)
+        assertEquals("Xingyue L", CarPlayVehicleBranding.DEFAULT_MODEL)
+        assertEquals("GEELY", GeelyXingyueLProfile.CARPLAY_OEM_LABEL)
+        assertEquals(R.drawable.ic_geely_auto_2023, CarPlayVehicleBranding.DEFAULT_ICON_RESOURCE)
     }
 
     @Test fun `vehicle adapter never identifies KX11 from screen or platform evidence alone`() {

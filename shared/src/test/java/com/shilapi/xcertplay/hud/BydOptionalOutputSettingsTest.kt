@@ -28,6 +28,18 @@ class BydOptionalOutputSettingsTest {
         assertEquals(BydOemClusterHold.COMPONENT, BydOutputSettings.oemClusterHold(app))
     }
 
+    @Test fun bydVehicleOutputsRequireBothExplicitOptInAndBydIdentity() {
+        val app = RuntimeEnvironment.getApplication()
+        app.getSharedPreferences("diplay_byd_outputs", Context.MODE_PRIVATE).edit().clear().commit()
+        ShadowBuild.setFingerprint("generic/test-device")
+        assertFalse(BydOutputSettings.enabled(app))
+        assertFalse(BydOutputSettings.vehicleOutputsAllowed(app))
+
+        BydOutputSettings.setEnabled(app, true)
+        assertTrue(BydOutputSettings.enabled(app))
+        assertFalse(BydOutputSettings.vehicleOutputsAllowed(app))
+    }
+
     @Test fun installedStockReceiverDoesNotEnableUnverifiedDilink4Hud() {
         val app = RuntimeEnvironment.getApplication()
         val knownApp = object : ContextWrapper(app) {

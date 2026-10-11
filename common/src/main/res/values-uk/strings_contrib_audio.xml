@@ -4,6 +4,10 @@
     <string name="contrib_audio_home_choice_summary">%1$s · %2$s</string>
     <string name="contrib_audio_home_media_channel_label">Аудіопотік мультимедіа</string>
     <string name="contrib_audio_home_nav_channel_label">Аудіопотік навігації</string>
+    <string name="contrib_audio_home_call_channel_label">Аудіопотік виклику</string>
+    <string name="contrib_audio_home_channel_automatic">Автоматично</string>
+    <string name="contrib_audio_home_call_stream_voice_call">0 · Голосовий виклик</string>
+    <string name="contrib_audio_home_call_channel_note">Автоматичний режим використовує маршрутизацію Android для голосового зв’язку. Потік Android 0 — голосовий виклик; 1–10 — стандартні потоки Android, а 11–20 — спроби для конкретної ROM і можуть перейти на резервний маршрут. Зміни набудуть чинності після повторного підключення. Маршрут динаміка й мікрофона залежить від підтримки головного пристрою.</string>
     <string name="contrib_audio_home_nav_channel_note">0 = автоматичне спрямування. Значення 1–20 — старі ідентифікатори аудіопотоків Android, які головний пристрій може спрямовувати на виходи автомобіля. Торкніться значення, щоб прослухати. Зміни набудуть чинності після повторного підключення.</string>
     <string name="contrib_audio_home_toggle_audio_focus">Аудіофокус</string>
     <string name="contrib_audio_home_toggle_audio_focus_desc">Мультимедіа CarPlay отримує аудіофокус. Якщо звук зникає, коли цю функцію ввімкнено (деякі головні пристрої погано обробляють аудіофокус), вимкніть її. Зміни набудуть чинності після повторного підключення.</string>

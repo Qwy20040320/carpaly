@@ -1,6 +1,7 @@
 package com.shilapi.xcertplay.hud
 
 import android.content.Context
+import org.robolectric.shadows.ShadowBuild
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
@@ -28,6 +29,7 @@ class DiLink3ClusterRecoveryTest {
 
     @Before fun setup() {
         drain()
+        ShadowBuild.setFingerprint("BYD/DiLink3:test")
         app.getSharedPreferences("xcertplay_airplay", 0).edit().clear().commit()
         Shell.commands.clear()
         Shell.response = { "Result: Parcel(00000000 00000000 '........')" }
@@ -56,6 +58,18 @@ class DiLink3ClusterRecoveryTest {
         drain()
         assertEquals(listOf(stock, stock), Shell.commands.toList())
         assertFalse(prefs.contains("restore_stock_mode"))
+    }
+
+    @Test fun appOpeningOnNonBydLeavesVendorRecoveryJournalInert() {
+        ShadowBuild.setFingerprint("generic/kx11:test")
+        prefs.edit().putBoolean("restore_stock_mode", true).commit()
+        BydOutputSettings.setEnabled(app, true)
+
+        BydNavigationOutputs.onAppOpened(app)
+        drain()
+
+        assertTrue(Shell.commands.isEmpty())
+        assertTrue(prefs.getBoolean("restore_stock_mode", false))
     }
 
     @Test fun failedStockRestoreKeepsItsDurableJournalUntilTheWorkerRetries() {

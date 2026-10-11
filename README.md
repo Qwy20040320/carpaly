@@ -65,13 +65,14 @@ CarPaly 使用自己的版本序列：`1.1.1 → 1.1.2 → 1.1.3 → 1.1.4 → �
 | --- | --- | --- | --- |
 | 车型自动识别 | 已实现保守的构建身份识别和候选年型映射 | 合成身份规则有单元测试 | **NOT_TESTED** |
 | 手动车型选择 | 已实现候选配置选择与本机持久化 | 未做车机端到端验证 | **NOT_TESTED** |
-| Geely CarPlay 车辆按钮 | 活跃 Geely 配置显示 “Geely” 名称和吉利标志；自定义图标优先，其他配置保留上游图标 | Geely 选择逻辑有单测 | **NOT_TESTED** |
+| Geely CarPlay 车辆按钮 | 默认名称 `GEELY`、吉利图标独立于车型识别；自定义名称/图标优先 | 默认值、旧默认迁移与设置 UI 有单测 | **NOT_TESTED** |
 | 视频显示 | 接收端视频解码/显示代码保留；KX11 配置检查实际视口，不伪造屏幕尺寸 | 有软件级单元/组件测试 | **NOT_TESTED** |
 | 有线 CarPlay | USB、iAP2/USBMux 等接收路径代码存在 | 有协议/组件测试；认证与设备互通未验证 | **NOT_TESTED** |
 | 无线 CarPlay | Wi-Fi/网络发现及连接路径代码存在 | 有网络状态和组件测试 | **NOT_TESTED** |
 | CarPlay 实车连接（模式未记录） | 用户反馈 v1.1.4 在一辆星越 L 上连接成功；维护者未独立复测 | 软件测试不验证真实握手 | **USER_REPORTED_PASS（单车反馈，不代表全车型）** |
 | 原车音乐音频 | 用户反馈音乐可播放；应用保留 Android 音频输出和媒体路由策略 | 音频映射、AudioTrack 和 AudioFocus 有软件测试；OEM 混音策略未知 | **USER_REPORTED_PASS（单车反馈）** |
 | 导航语音 | Geely 配置默认把导航提示路由到 `STREAM_MUSIC`；保留可调路由和诊断日志 | 默认值及映射有单元测试 | **USER_REPORTED_FAIL：用户反馈无声，待实车回归** |
+| 通话音频流 | 新增独立设置；自动模式使用通信用途，手动模式可选 Android 流编号；0 明确代表 `STREAM_VOICE_CALL` | 路由映射、独立持久化、AudioFocus 与麦克风通路有软件测试 | **NOT_TESTED** |
 | Siri | Siri 请求和媒体按键转发代码存在 | 无星越 L 端到端 Siri 测试 | **NOT_TESTED** |
 | 麦克风 | 有可选 CarPlay 麦克风上行代码；诊断页麦克风自检需用户授权 | 本机自检不等于 CarPlay 通话验证 | **NOT_TESTED** |
 | 方向盘按键 | Android MediaSession 可转发常见播放/暂停/上一曲/下一曲媒体键 | 车机实体按键映射未验证 | **NOT_TESTED** |
@@ -90,6 +91,8 @@ CarPaly 使用自己的版本序列：`1.1.1 → 1.1.2 → 1.1.3 → 1.1.4 → �
 **已实现（软件层面）**
 
 - KX11 年型候选配置、保守的自动识别和手动选择。
+- 默认 CarPlay 车辆按钮名称为 `GEELY`，默认图标为吉利标志，与车型检测结果无关；用户自定义名称和图标优先。仅对旧版完整的 DiPlay/DiPlay/BYD 默认三元组执行迁移，无法确认来源的单独 BYD 值按用户数据保留。
+- 媒体、导航和通话音频流独立保存；通话自动路由与 Android 真实流编号 `0` 分开处理。是否能通过星越 L 原车扬声器/麦克风仍需实车确认。
 - 只读诊断中心；不读取车辆身份信息，不调用 CAN、UDS、Vehicle HAL 或 Geely 私有 Binder 接口。
 - 默认关闭、手动开启/停止的日志管理；日志状态持久化。
 - 实时与历史日志、模块/错误筛选、路径显示与复制、手动清理。
@@ -239,7 +242,8 @@ CarPaly is a community Android CarPlay receiver derived from [DiPlay](https://gi
 ### Current status
 
 - Candidate model-year profiles, conservative build-identity detection, and manual profile selection are implemented.
-- An active Geely profile selects the “Geely” vehicle label and Geely return icon; user-selected icons retain priority. This UI has not been validated in a Geely vehicle.
+- The default CarPlay vehicle button uses the `GEELY` label and Geely icon regardless of profile detection; user-selected names/icons take priority. Legacy migration only rewrites the exact known default tuple. This UI has not been validated in a Geely vehicle.
+- Media, navigation, and call stream preferences are independent. Call “Auto” uses voice-communication attributes; a manual Android stream value of `0` remains selectable as `STREAM_VOICE_CALL`. Head-unit routing has not been validated in a vehicle.
 - USB and Wi-Fi receiver paths, media/audio handling, and generic CarPlay cluster-related code are present; no Geely OEM integration has been independently confirmed.
 - The user-reported v1.1.4 connection mode and vehicle configuration were not recorded. Navigation prompts were silent and the OEM top status bar reportedly obstructed the picture; both need v1.1.5 in-car retesting. Siri, microphone, steering-wheel keys, HUD, instrument-cluster guidance, and fuel data remain **NOT_TESTED**.
 - The read-only diagnostic center, opt-in bounded logs, filtering, redaction, and user-triggered ZIP export are implemented and covered by software tests.

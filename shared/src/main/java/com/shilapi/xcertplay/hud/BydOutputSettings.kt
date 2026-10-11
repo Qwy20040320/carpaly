@@ -26,7 +26,25 @@ object BydOutputSettings {
     const val DEFAULT_LOW_CHARGE_PERCENT = 20
     val lowChargePresets = listOf(10, 15, 20, 25, 30)
 
-    fun enabled(context: Context): Boolean = prefs(context).getBoolean(KEY_ENABLED, true)
+    /** Vehicle-specific BYD output is opt-in and never starts from a fresh installation. */
+    fun enabled(context: Context): Boolean = prefs(context).getBoolean(KEY_ENABLED, false)
+
+    /** An explicit opt-in is still insufficient on a non-BYD head unit. */
+    fun vehicleOutputsAllowed(context: Context): Boolean = enabled(context) && isBydHeadUnit(context)
+
+    fun isBydHeadUnit(context: Context): Boolean {
+        val buildIdentity = listOf(
+            android.os.Build.FINGERPRINT,
+            android.os.Build.BRAND,
+            android.os.Build.MANUFACTURER,
+            android.os.Build.PRODUCT,
+            android.os.Build.DEVICE,
+        ).any { it.contains("BYD", ignoreCase = true) }
+        val bydSystemPackage = listOf(
+            "com.byd.carsettings", "com.byd.appmgr", "com.byd.deviceinfo", "com.byd.service",
+        ).any { installed(context, it) }
+        return buildIdentity || bydSystemPackage
+    }
 
     fun setEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_ENABLED, enabled).apply()
 
@@ -45,7 +63,8 @@ object BydOutputSettings {
 
     /** Default mode uses the DiLink 5.0 addresses; legacy mode exposes only fields its saved probe confirmed. */
     fun batteryToIphoneActive(context: Context): Boolean =
-        batteryToIphone(context) && supportedInSelectedMode(context) { it.batterySupported }
+        isBydHeadUnit(context) && batteryToIphone(context) &&
+            supportedInSelectedMode(context) { it.batterySupported }
 
     /** The charging inlets the iPhone is told about; applies on the next connection. */
     fun chargingConnectors(context: Context): EvChargingConnectors =
@@ -65,7 +84,8 @@ object BydOutputSettings {
     }
 
     fun wheelSpeedToIphoneActive(context: Context): Boolean =
-        wheelSpeedToIphone(context) && supportedInSelectedMode(context) { it.motionSupported }
+        isBydHeadUnit(context) && wheelSpeedToIphone(context) &&
+            supportedInSelectedMode(context) { it.motionSupported }
     /** Offer iOS 27 video in car, played only while the gear reads P (needs ADB over network). */
     fun videoWhileParked(context: Context): Boolean = prefs(context).getBoolean(KEY_VIDEO_WHILE_PARKED, false)
 
@@ -99,7 +119,8 @@ object BydOutputSettings {
         prefs(context).edit().putBoolean(KEY_CLUSTER_SONG_ON_CHANGE, enabled).apply()
 
     fun videoWhileParkedActive(context: Context): Boolean =
-        videoWhileParked(context) && supportedInSelectedMode(context) { it.gearSupported }
+        isBydHeadUnit(context) && videoWhileParked(context) &&
+            supportedInSelectedMode(context) { it.gearSupported }
 
     /**
      * Use addresses saved by the legacy head-unit probe. Existing installations with a saved probe

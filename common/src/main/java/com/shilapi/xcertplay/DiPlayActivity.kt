@@ -19,6 +19,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioTrack
 import android.net.Uri
 import android.os.Build
@@ -1727,6 +1728,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             getString(R.string.audio_routing), R.drawable.ic_dp_audio) { card ->
             mediaChannelControl(card)
             navigationChannelControl(card)
+            callChannelControl(card)
             val bufferPresets = com.shilapi.xcertplay.media.MediaAudioBuffer.presets
             choice(card, getString(R.string.music_buffer), listOf(getString(R.string.s_300_ms_default), getString(R.string.s_500_ms), getString(R.string.s_1000_ms_most_stable)),
                 bufferPresets.indexOf(AirPlayPersistence.loadMediaBufferMillis(this)).coerceAtLeast(0)) {
@@ -2944,17 +2946,45 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         })
     }
 
-    private fun showChannelDialog(title: String, current: Int, navigation: Boolean, onApply: (Int) -> Unit) {
+    private fun callChannelControl(parent: LinearLayout) {
+        val summary: (Int) -> String = {
+            getString(R.string.contrib_audio_home_choice_summary,
+                getString(R.string.contrib_audio_home_call_channel_label), callChannelLabel(it))
+        }
+        val control = button(summary(AirPlayPersistence.loadCallAudioChannel(this)), false) {}
+        control.setOnClickListener {
+            val current = AirPlayPersistence.loadCallAudioChannel(this)
+            showChannelDialog(
+                title = getString(R.string.contrib_audio_home_call_channel_label),
+                current = current,
+                navigation = false,
+                phone = true,
+                onApply = { value -> applyCallChannel(value, current, control, summary) },
+            )
+        }
+        parent.addView(control, matchButton(10, 60))
+        parent.addView(label(getString(R.string.contrib_audio_home_call_channel_note), 14, MUTED).apply {
+            setPadding(0, dp(8), 0, dp(18))
+        })
+    }
+
+    private fun showChannelDialog(
+        title: String,
+        current: Int,
+        navigation: Boolean,
+        phone: Boolean = false,
+        onApply: (Int) -> Unit,
+    ) {
         val preview = AudioChannelPreview { channel ->
             toast(getString(R.string.contrib_audio_home_channel_preview_unavailable, channel))
         }
-        val channels = AirPlayPersistence.AUDIO_CHANNELS
-        val labels = channels.map(Int::toString).toTypedArray()
-        var selection = current.coerceIn(channels.first, channels.last)
+        val channels = if (phone) AirPlayPersistence.CALL_AUDIO_CHANNELS else AirPlayPersistence.AUDIO_CHANNELS
+        val labels = channels.map { if (phone) callChannelLabel(it) else channelLabel(it) }.toTypedArray()
+        var selection = current.takeIf { it in channels } ?: channels.first
         appDialogBuilder().setTitle(title)
-            .setSingleChoiceItems(labels, selection) { _, which ->
-                selection = which
-                preview.play(which, navigation)
+            .setSingleChoiceItems(labels, channels.indexOf(selection)) { _, which ->
+                selection = channels.elementAt(which)
+                preview.play(selection, navigation, phone)
             }
             .setPositiveButton(if (CarPlayBackgroundSession.hasSession()) getString(R.string.apply_and_reconnect) else getString(R.string.save)) { _, _ ->
                 onApply(selection)
@@ -2978,7 +3008,21 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         if (CarPlayBackgroundSession.hasSession()) connect(AirPlayPersistence.loadWirelessEnabled(this))
     }
 
-    private fun channelLabel(value: Int): String = value.toString()
+    private fun applyCallChannel(value: Int, previous: Int, control: Button, summary: (Int) -> String) {
+        if (value == previous) return
+        AirPlayPersistence.saveCallAudioChannel(this, value)
+        control.text = summary(value)
+        if (CarPlayBackgroundSession.hasSession()) connect(AirPlayPersistence.loadWirelessEnabled(this))
+    }
+
+    private fun channelLabel(value: Int): String =
+        if (value == 0) getString(R.string.contrib_audio_home_channel_automatic) else value.toString()
+
+    private fun callChannelLabel(value: Int): String = when (value) {
+        AirPlayPersistence.CALL_AUDIO_AUTO -> getString(R.string.contrib_audio_home_channel_automatic)
+        AudioManager.STREAM_VOICE_CALL -> getString(R.string.contrib_audio_home_call_stream_voice_call)
+        else -> value.toString()
+    }
 
     private fun storedSsid() = AirPlayPersistence.loadManualHotspotSsid(this)
     private fun storedPassword() = AirPlayPersistence.loadManualHotspotPassphrase(this)
@@ -4558,8 +4602,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun carButtonControls(parent: LinearLayout) {
         val custom = AirPlayPersistence.loadCustomAirPlayIconFile(this)?.let { BitmapFactory.decodeFile(it.absolutePath) }
-        val geelyBranding = CarPlayVehicleBranding.usesGeelyIcon(HeadUnitProfile.active(this))
-        val defaultIcon = if (geelyBranding) R.drawable.ic_geely_auto_2023 else R.raw.ic_car_home
+        val defaultIcon = CarPlayVehicleBranding.DEFAULT_ICON_RESOURCE
         val preview = row().apply { gravity = Gravity.CENTER_VERTICAL }
         preview.addView(ImageView(this).apply {
             if (custom != null) setImageBitmap(custom) else setImageResource(defaultIcon)
@@ -4585,8 +4628,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             refreshCarButton()
             carButtonSaved()
         }, matchButton(10, 60))
-        val name = if (geelyBranding) GeelyXingyueLProfile.CARPLAY_OEM_LABEL
-            else AirPlayPersistence.loadOemLabel(this)
+        val name = AirPlayPersistence.loadOemLabel(this)
         parent.addView(button("${getString(R.string.car_button_name)} · $name", false) {
             textInput(getString(R.string.car_button_name), name, secret = false) {
                 AirPlayPersistence.saveOemLabel(this, it)

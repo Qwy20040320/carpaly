@@ -2,6 +2,7 @@ package com.shilapi.xcertplay
 
 import android.content.Context
 import android.os.Build
+import com.shilapi.xcertplay.host.R
 
 /**
  * A conservative, display-only head-unit profile.
@@ -71,17 +72,22 @@ enum class HeadUnitProfile(val key: String) {
 internal object GeelyXingyueLProfile {
     const val VIEWPORT_WIDTH = 1920
     const val VIEWPORT_HEIGHT = 720
-    const val CARPLAY_MANUFACTURER = "Geely"
-    const val CARPLAY_MODEL = "Xingyue L"
-    const val CARPLAY_OEM_LABEL = "Geely"
+    const val CARPLAY_MANUFACTURER = CarPlayVehicleBranding.DEFAULT_MANUFACTURER
+    const val CARPLAY_MODEL = CarPlayVehicleBranding.DEFAULT_MODEL
+    const val CARPLAY_OEM_LABEL = CarPlayVehicleBranding.DEFAULT_OEM_LABEL
 
     /** The app must use its actual window dimensions; the profile must never fabricate a 1920 x 720 surface. */
     fun matchesViewport(width: Int, height: Int): Boolean =
         width == VIEWPORT_WIDTH && height == VIEWPORT_HEIGHT
 }
 
-/** Preserve the upstream vehicle icon except when a Geely receiver profile is actually selected. */
+/** CarPaly defaults its app-list vehicle identity to Geely independently of hardware detection. */
 internal object CarPlayVehicleBranding {
-    fun usesGeelyIcon(profile: HeadUnitProfile?): Boolean =
-        profile == HeadUnitProfile.GEELY_XINGYUE_L
+    const val DEFAULT_MANUFACTURER = "Geely"
+    const val DEFAULT_MODEL = "Xingyue L"
+    const val DEFAULT_OEM_LABEL = "GEELY"
+    const val LEGACY_DEFAULT_MANUFACTURER = "DiPlay"
+    const val LEGACY_DEFAULT_MODEL = "DiPlay"
+    const val LEGACY_DEFAULT_OEM_LABEL = "BYD"
+    val DEFAULT_ICON_RESOURCE = R.drawable.ic_geely_auto_2023
 }
