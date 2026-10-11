@@ -149,6 +149,21 @@ class SourceArchiveTests(unittest.TestCase):
         self.assertNotIn("MFI_PUBLIC_DISTRIBUTION_AUTHORIZATION_REF", workflow)
         self.assertIn("verify distribution rights before tagging", workflow)
 
+    def test_release_signer_uses_environment_pin_and_reports_only_public_fingerprints(self):
+        workflow = (ROOT / ".github/workflows/android.yml").read_text(encoding="utf-8")
+        release_job = workflow.split("  authenticated_release:", 1)[1]
+        provision_step = release_job.split("- name: Build authenticated standalone Release APK", 1)[0]
+
+        self.assertIn("environment: mfi-public-release", release_job)
+        self.assertIn("RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}", provision_step)
+        self.assertIn("RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}", provision_step)
+        self.assertIn("RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}", provision_step)
+        self.assertIn("RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}", provision_step)
+        self.assertIn('gsub(":", "", $2); print tolower($2)', provision_step)
+        self.assertIn('[[ ! "$signer_sha" =~ ^[a-f0-9]{64}$', provision_step)
+        self.assertIn("actual SHA-256=%s; expected SHA-256=%s", provision_step)
+        self.assertNotIn("RELEASE_SIGNING_CERT_SHA256: ${{ secrets.", provision_step)
+
     def test_member_paths_reject_absolute_parent_and_windows_paths(self):
         archiver = load_archiver()
         for name in ("../outside", "/absolute", "CarPaly/../../outside", "CarPaly\\outside"):

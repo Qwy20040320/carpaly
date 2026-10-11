@@ -194,11 +194,14 @@ jobs:
           test -s "$signing_dir/carpaly-release.p12"
           keytool -list -v -alias "$RELEASE_KEY_ALIAS" -keystore "$signing_dir/carpaly-release.p12" \
             -storetype PKCS12 -storepass:env RELEASE_STORE_PASSWORD > "$RUNNER_TEMP/release-keystore-inspection.txt"
-          signer_sha="$(awk -F': ' '/^SHA256: / { gsub(":", "", $2); print tolower($2); exit }' "$RUNNER_TEMP/release-keystore-inspection.txt")"
-          [[ "$signer_sha" == "${RELEASE_SIGNING_CERT_SHA256,,}" ]] || {
-            echo "Release keystore signer differs from the pinned environment certificate." >&2
+          signer_sha="$(awk -F': ' '/^[[:space:]]*SHA256: / { gsub(":", "", $2); print tolower($2); exit }' "$RUNNER_TEMP/release-keystore-inspection.txt")"
+          expected_signer_sha="${RELEASE_SIGNING_CERT_SHA256,,}"
+          if [[ ! "$signer_sha" =~ ^[a-f0-9]{64}$ || "$signer_sha" != "$expected_signer_sha" ]]; then
+            actual_signer_sha="${signer_sha:-unavailable}"
+            printf 'Release keystore signer mismatch (actual SHA-256=%s; expected SHA-256=%s).\n' \
+              "$actual_signer_sha" "$expected_signer_sha" >&2
             exit 1
-          }
+          fi
       - name: Build authenticated standalone Release APK
         env:
           DIPLAY_AUTH_ASSETS_DIR: ${{ runner.temp }}/carpaly-auth-assets
