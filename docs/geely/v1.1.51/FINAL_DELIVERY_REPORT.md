@@ -65,8 +65,9 @@
 
 ## Git 与发布状态
 
-- 工作分支：`feature/carpaly-v1.1.5`
-- 最新代码提交：`ee7a6afd675deb3a02c6c35ac870eef32899f9ba`
+- 工作分支：`feature/carpaly-v1.1.5`；本报告整理时分支头为 `edaa95757d30ff971e852ce829fa4fe2b8e9708a`。
+- APK 中嵌入的应用源码提交：`ee7a6afd675deb3a02c6c35ac870eef32899f9ba`。之后的 `124b6273` 只更新台账/文档/忽略规则，`edaa9575` 修正版本分配测试夹具；均未改变 APK 中的应用源码。
+- 上述应用源码和测试头的 GitHub Actions push CI 及 PR CI 均通过：[push run](https://github.com/Qwy20040320/carpaly/actions/runs/38132174203)、[PR run](https://github.com/Qwy20040320/carpaly/actions/runs/38132176807)。
 - 更新范围：原有 Draft PR #6；未合并 `main`、未创建版本标签、未创建或更新 GitHub Release。
 - 本地 APK 仅供在用户知情下进行签名兼容性与车机测试；在授权身份/范围获得独立核验前，不作为公开下载文件。
 - 本地诊断采集脚本的既有用户修改保持未暂存、未提交。
