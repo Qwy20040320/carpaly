@@ -15,6 +15,13 @@
     "docs/TESTING.md",
     "docs/THIRD_PARTY_NOTICES.md",
     "docs/VERSIONING_POLICY.md",
-    "docs/geely/README_ZH.md"
+    "docs/geely/README_ZH.md",
+    "docs/geely/v1.1.51/APK_INTERFACE_EXTRACTION.md",
+    "docs/geely/v1.1.51/AUDIO_OEM_INTEGRATION.md",
+    "docs/geely/v1.1.51/FINAL_DELIVERY_REPORT.md",
+    "docs/geely/v1.1.51/GEELY_OEM_API_MATRIX.md",
+    "docs/geely/v1.1.51/HUD_CLUSTER_INTEGRATION.md",
+    "docs/geely/v1.1.51/STEERING_WHEEL_API.md",
+    "docs/geely/v1.1.51/VEHICLE_SENSOR_API.md"
   ]
 }

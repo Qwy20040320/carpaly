@@ -40,6 +40,17 @@ class BydOptionalOutputSettingsTest {
         assertFalse(BydOutputSettings.vehicleOutputsAllowed(app))
     }
 
+    @Test fun geelyKx11IdentityNeverPassesTheBydVehicleWriterGate() {
+        val app = RuntimeEnvironment.getApplication()
+        app.getSharedPreferences("diplay_byd_outputs", Context.MODE_PRIVATE).edit().clear().commit()
+        ShadowBuild.setFingerprint("GEELY/KX11/Monjaro:Android12/user")
+        BydOutputSettings.setEnabled(app, true)
+
+        assertTrue(BydOutputSettings.enabled(app))
+        assertFalse(BydOutputSettings.isBydHeadUnit(app))
+        assertFalse(BydOutputSettings.vehicleOutputsAllowed(app))
+    }
+
     @Test fun installedStockReceiverDoesNotEnableUnverifiedDilink4Hud() {
         val app = RuntimeEnvironment.getApplication()
         val knownApp = object : ContextWrapper(app) {
