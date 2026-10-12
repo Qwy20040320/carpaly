@@ -22,6 +22,8 @@ def main() -> int:
         failures.append("Android CI and the main-only release-intent gate are not both configured")
     if "name: Run full CI and gate an explicit release intent" not in android or "github.event_name != 'workflow_dispatch'" not in android:
         failures.append("Full Android CI must run for PR/push events and skip only signer-only dispatches")
+    if "    timeout-minutes: 30\n    permissions:\n      contents: read\n      pull-requests: read" not in android:
+        failures.append("Full Android CI/release-intent job timeout must accommodate Gradle verification")
     if "./gradlew :shared:testDebugUnitTest" not in android or "scripts/test_release_pipeline.py" not in android:
         failures.append("Full Android and Bash publisher CI is not present in the always-on CI job")
     if (

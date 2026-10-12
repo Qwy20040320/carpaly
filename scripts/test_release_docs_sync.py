@@ -503,6 +503,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("github.event_name != 'workflow_dispatch'", gate)
         self.assertIn("inputs.verify_release_signer_only != true", gate)
         self.assertIn("./gradlew :shared:testDebugUnitTest", gate)
+        self.assertIn("timeout-minutes: 30", gate)
         self.assertIn("event != \"push\" or branch != \"main\"", intent_source)
         self.assertIn("github.event_name == 'push' && github.ref == 'refs/heads/main'", release_job)
         self.assertIn("needs.release_intent.result == 'success'", release_job)
