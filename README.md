@@ -12,7 +12,48 @@
 
 CarPaly 基于开源项目 DiPlay 持续开发，重点为吉利星越 L（内部代号 KX11）提供一个可审慎选择的接收端配置，并完善只读诊断、可控日志和开发者构建流程。2024 天际版是当前优先验证目标。
 
-车型配置、协议代码或自动化测试通过，都不等于所有年款已经兼容。用户曾反馈 v1.1.4 在一辆星越 L 上成功连接 CarPlay、音乐可播放；该反馈未记录有线/无线模式和完整车辆配置，也不是维护者独立复测。导航播报无声、顶部原车状态栏遮挡仍是待处理反馈；Siri、麦克风、HUD、仪表和方向盘按键没有可核实的实车结果。不能把单车反馈外推为全系支持。
+车型配置、协议代码或自动化测试通过，都不等于所有年款已经兼容。用户曾反馈 v1.1.4 在一辆星越 L 上连接 CarPlay、音乐可播放；另一次近期反馈称连接、Siri 双向语音和方向盘按键有响应，但音乐会自动暂停、导航播报无声、顶部原车状态栏仍遮挡画面。后一次测试包版本及有线/无线模式未记录，维护者也未独立复测；不能把单车反馈外推为全系支持。
+
+## 当前发布状态
+
+以下发布信息从 GitHub Releases、标签、资产校验记录与本地版本台账生成。只有实际发布的 Release 才提供公开下载链接；本地候选版本不会被显示为已发布版本。
+
+<!-- CARPALY:RELEASES:START -->
+### GitHub 发布状态（自动同步）
+
+GitHub 最新正式 Release：[v1.1.51](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.51)，发布于 2026-10-11。[下载 APK](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.51/CarPaly-XingyueL-v1.1.51.apk) 已核对包名 `1.1.51` / versionCode `39`、签名指纹及 GitHub 资产 SHA-256 `222801dbc5e96b668c22a078da38d2b4ed184724c0b088c35d7d04c32752754a`。
+**说明状态冲突：** GitHub 将该 Release 标记为正式版，但人工说明仍写有预发布措辞；自动同步保留原说明，不擅自改写。
+
+最近已发布的版本：
+
+| 标签 | 类型 | 日期 | APK 附件 | 源码提交 |
+| --- | --- | --- | --- | --- |
+| [v1.1.51](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.51) | 正式 | 2026-10-11 | [CarPaly-XingyueL-v1.1.51.apk](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.51/CarPaly-XingyueL-v1.1.51.apk) | `ef8bec6e0d20` |
+| [v1.1.5](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.5) | 预发布 | 2026-10-11 | [CarPaly-XingyueL1.1.5-Upgrade-Test-build20261011.apk](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.5/CarPaly-XingyueL1.1.5-Upgrade-Test-build20261011.apk) | `ef8bec6e0d20` |
+| [v1.1.4](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.4) | 预发布 | 2026-10-11 | [CarPaly-XingyueL1.1.4.apk](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.4/CarPaly-XingyueL1.1.4.apk) | `ef8bec6e0d20` |
+<!-- CARPALY:RELEASES:END -->
+
+### 当前候选版本
+
+<!-- CARPALY:CANDIDATE:START -->
+**本地候选：v1.1.52 / versionCode 40。** 尚无公开标签或 Release；不提供公开下载链接。本地候选版本；尚无 GitHub 标签或公开 Release。当前资料没有证明本候选修复了任何实车 CarPlay、音频或车机显示故障。后续版本号按台账递增（v1.1.53、v1.1.54……至 v1.1.6）；未发布版本不预先宣称功能已完成。
+<!-- CARPALY:CANDIDATE:END -->
+
+### 近期实车反馈（用户报告，非维护者复测）
+
+<!-- CARPALY:VEHICLE_FEEDBACK:START -->
+| 功能 | 近期实车反馈 | 证据说明 |
+| --- | --- | --- |
+| CarPlay 连接 | 用户反馈通过（未独立复现） | 用户反馈连接正常；测试 APK 版本、车型配置及有线/无线模式未记录，维护者未独立复现。 |
+| 音乐播放 | 用户反馈问题 | 用户反馈音乐播放约一秒后自动暂停；唤醒 Siri 时音乐可播放。 |
+| 导航语音 | 用户反馈失败 | 用户反馈导航提示音无声；根因及修复状态尚未由本轮新实车复测确认。 |
+| Siri 双向语音 | 用户反馈通过（未独立复现） | 用户反馈可听见 Siri 且 Siri 能听见用户；未独立复现。 |
+| 方向盘按键 | 用户反馈通过（未独立复现） | 用户反馈按键有响应；具体按键与映射未记录，未独立复现。 |
+| 顶部原车状态栏 | 用户反馈失败 | 用户反馈仍遮挡 CarPlay 画面。 |
+| HUD、仪表与燃油数据 | NOT_TESTED | 没有可核实的实车接口调用或验收证据。 |
+
+以上是用户反馈，不等于维护者验证；测试 APK 版本和连接模式未记录的结果不会外推到全系车型。
+<!-- CARPALY:VEHICLE_FEEDBACK:END -->
 
 ## 项目定位与目标
 
@@ -40,7 +81,7 @@ CarPaly 使用自己的版本序列：`1.1.1 → 1.1.2 → 1.1.3 → 1.1.4 → �
 
 上表中的新编号只是历史映射，不代表旧 APK 的内部版本，也未改写其提交或二进制；例如不能把 `v0.2.16` 的旧 APK 说成内部版本 `1.1.3`。上述三个 GitHub Release、公开附件和 Git 标签现已清理；原提交仍可从项目分支历史追溯，旧 APK 只保存在本地受忽略的备份目录，旧下载链接不再可用。
 
-`v1.1.4` 已在 GitHub 发布，标签为 `v1.1.4`，附件为 `CarPaly-XingyueL1.1.4.apk`（包名 `com.shihab.diplay.hudtest`、`versionName=1.1.4`、`versionCode=36`）。历史 `v1.1.5` 也有预发布记录，原附件内部版本为 `1.1.5 / code 37`；其旧文件名仅作历史记录保留，不作为新版本规则。`versionCode=38` 已在本地历史构建中观察到，因此 `v1.1.51 / code 39` 无版本冲突。当前已有经过固定 Release 签名及认证资源校验的本地 APK，尚无对应 GitHub 标签或公开 Release；本地文件不提供公共下载。今后所有用户安装包必须使用 Android Release 构建、固定 v1.1.4 签名证书和包名 `com.shihab.diplay.hudtest`；文件名统一为 `CarPaly-XingyueL-v{versionName}.apk`。不得交付 Debug/Test/Upgrade-Test APK 或覆盖已交付历史文件。`v1.1.52 / code 40` 仅在 v1.1.51 的交付登记条件满足后分配；序号持续递增，后续 `v1.1.6` 的 code 必须大于高水位。DiPlay 上游版本只用于源码跟踪和移植，不改变 CarPaly 自身版本序列。
+GitHub 发布标签、日期、正式/预发布状态、实际附件及可验证的资产摘要，以本页“当前发布状态”同步区和 GitHub Releases API 为准。Android `versionCode` 的不可变分配由 `config/android-version-ledger.json` 管理；本地候选不等于 GitHub 发布。所有用户 APK 必须使用固定 Release 签名、包名 `com.shihab.diplay.hudtest` 与 `CarPaly-XingyueL-v{versionName}.apk` 命名规则。不得交付 Debug APK 或覆盖已交付历史文件。DiPlay 上游版本只用于源码跟踪和移植，不改变 CarPaly 自身版本序列。
 
 ## 车型兼容性
 
@@ -70,12 +111,12 @@ CarPaly 使用自己的版本序列：`1.1.1 → 1.1.2 → 1.1.3 → 1.1.4 → �
 | 有线 CarPlay | USB、iAP2/USBMux 等接收路径代码存在 | 有协议/组件测试；认证与设备互通未验证 | **NOT_TESTED** |
 | 无线 CarPlay | Wi-Fi/网络发现及连接路径代码存在 | 有网络状态和组件测试 | **NOT_TESTED** |
 | CarPlay 实车连接（模式未记录） | 用户反馈 v1.1.4 在一辆星越 L 上连接成功；维护者未独立复测 | 软件测试不验证真实握手 | **USER_REPORTED_PASS（单车反馈，不代表全车型）** |
-| 原车音乐音频 | 用户反馈音乐可播放；应用保留 Android 音频输出和媒体路由策略 | 音频映射、AudioTrack 和 AudioFocus 有软件测试；OEM 混音策略未知 | **USER_REPORTED_PASS（单车反馈）** |
+| 原车音乐音频 | v1.1.4 有单车可播放反馈；近期另有约一秒后自动暂停的用户反馈（测试包版本未记录） | 音频映射、AudioTrack 和 AudioFocus 有软件测试；OEM 混音策略未知 | **USER_REPORTED_ISSUE（待复现）** |
 | 导航语音 | Geely 配置默认把导航提示路由到 `STREAM_MUSIC`；保留可调路由和诊断日志 | 默认值及映射有单元测试 | **USER_REPORTED_FAIL：用户反馈无声，待实车回归** |
 | 通话音频流 | 新增独立设置；自动模式使用通信用途，手动模式可选 Android 流编号；0 明确代表 `STREAM_VOICE_CALL` | 路由映射、独立持久化、AudioFocus 与麦克风通路有软件测试 | **NOT_TESTED** |
-| Siri | Siri 请求和媒体按键转发代码存在 | 无星越 L 端到端 Siri 测试 | **NOT_TESTED** |
+| Siri | Siri 请求和媒体按键转发代码存在；用户近期反馈 Siri 双向语音正常 | 维护者未独立复现，且测试包版本未记录 | **USER_REPORTED_PASS（未独立复现）** |
 | 麦克风 | 有可选 CarPlay 麦克风上行代码；诊断页麦克风自检需用户授权 | 本机自检不等于 CarPlay 通话验证 | **NOT_TESTED** |
-| 方向盘按键 | Android MediaSession 可转发常见播放/暂停/上一曲/下一曲媒体键 | 车机实体按键映射未验证 | **NOT_TESTED** |
+| 方向盘按键 | Android MediaSession 可转发常见播放/暂停/上一曲/下一曲媒体键；用户近期反馈按键有响应 | 具体按键映射未记录，维护者未独立复现 | **USER_REPORTED_PASS（未独立复现）** |
 | 全屏与系统栏 | 有沉浸式显示及系统栏 Insets 安全区回退 | 有视口/Insets 软件测试 | **用户反馈顶部原车状态栏仍遮挡，修复及实车回归待完成** |
 | 倒车/360 优先级 | 未实现星越 L 专用倒车或 360 接管接口 | 无 | **NOT_IMPLEMENTED** |
 | HUD/仪表 | 有通用 CarPlay cluster/副屏相关代码；无星越 L OEM HUD 接口 | 不代表仪表显示通过 | **NOT_TESTED** |
@@ -102,8 +143,7 @@ CarPaly 使用自己的版本序列：`1.1.1 → 1.1.2 → 1.1.3 → 1.1.4 → �
 
 **开发中 / 待设备验证**
 
-- v1.1.51：本地固定签名 Release APK 已构建并校验；尚未创建 GitHub 标签或公开 Release。导航语音、顶部状态栏及连接恢复仍需用户在实车回归；自动化测试不能替代实车验证。
-- v1.1.5 是历史预发布版本；完成 `v1.1.51` Release APK 交付后再分配 `v1.1.52`，`v1.1.6` 是后续版本计划。
+- 当前候选版本与公开 Release 的状态见本页顶部自动同步区；`versionCode` 分配以 `config/android-version-ledger.json` 为准。
 - 2024 天际版优先：有线/无线 CarPlay、音视频和原车音频回归；收到的单车连接/音乐反馈不代替回归结果。
 - Siri、麦克风以及具体方向盘按键在目标车机上的映射。
 - 诊断状态与实车行为的对照及性能观察。
@@ -129,9 +169,12 @@ CarPaly 使用自己的版本序列：`1.1.1 → 1.1.2 → 1.1.3 → 1.1.4 → �
 
 ## APK 下载与安装
 
-- **v1.1.4 APK：**[GitHub 下载](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.4/CarPaly-XingyueL1.1.4.apk)；[Release 说明](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.4)。此 Release 当前标记为预发布，附件清单以 GitHub 页面为准。
-- `v1.1.5` 是保留不变的历史预发布附件。当前 `v1.1.51`（versionCode 39）已有本地正式构建类型且固定签名的 APK，但尚无 GitHub Release；用户安装包只能由固定 Release 签名构建，不能用 Debug 包替代。
-- `v1.1.52`（versionCode 40）仅在 v1.1.51 Release APK 实际交付并登记后分配；所有用户 APK 的文件名为 `CarPaly-XingyueL-v{versionName}.apk`，`v1.1.6` 的 code 高于所有历史版本。
+<!-- CARPALY:DOWNLOADS:START -->
+- **最新正式 APK：** [CarPaly-XingyueL-v1.1.51.apk](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.51/CarPaly-XingyueL-v1.1.51.apk)；版本 `1.1.51` / versionCode `39`，GitHub 资产 SHA-256 `222801dbc5e96b668c22a078da38d2b4ed184724c0b088c35d7d04c32752754a`。
+- **Release 页面：** [v1.1.51](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.51)。
+- **本地候选：** v1.1.52 / versionCode 40，尚未公开发布，不提供下载链接。
+- 预发布及历史附件仅在各自 Release 页面标示，不代表当前正式推荐版本。
+<!-- CARPALY:DOWNLOADS:END -->
 - **暂无覆盖全部车型、连接模式和功能的实车验证正式版本。**已有单车连接/音乐反馈，导航语音和顶部状态栏问题仍待解决。
 
 ### 安装要求
@@ -170,7 +213,7 @@ CarPaly 使用自己的版本序列：`1.1.1 → 1.1.2 → 1.1.3 → 1.1.4 → �
 
 **在哪里下载 APK？**
 
-当前可从 [v1.1.4 Release](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.4) 下载 APK。GitHub 还保留 `v1.1.5` 历史预发布及旧格式附件；不会为适配新规则而改写历史资产。`v1.1.51` 已有经签名/资源校验的本地 APK，但尚未公开发布，因此暂时没有公共下载链接。后续用户 APK 只提供固定 Release 签名版本，不提供 Debug/Test/Upgrade-Test 下载包。
+下载入口与附件名称请查看[当前 APK 下载与安装](#apk-下载与安装)中的自动同步区。旧 Release 资产保留原有标题、标签与字节，不为适配新规则而改写；本地候选不会显示为公开下载。
 
 **音乐有声，为什么导航语音仍可能无声？**
 
@@ -247,15 +290,43 @@ CarPaly is a community Android CarPlay receiver derived from [DiPlay](https://gi
 - The default CarPlay vehicle button uses the `GEELY` label and Geely icon regardless of profile detection; user-selected names/icons take priority. Legacy migration only rewrites the exact known default tuple. This UI has not been validated in a Geely vehicle.
 - Media, navigation, and call stream preferences are independent. Call “Auto” uses voice-communication attributes; a manual Android stream value of `0` remains selectable as `STREAM_VOICE_CALL`. Head-unit routing has not been validated in a vehicle.
 - USB and Wi-Fi receiver paths, media/audio handling, and generic CarPlay cluster-related code are present; no Geely OEM integration has been independently confirmed.
-- The user-reported v1.1.4 connection mode and vehicle configuration were not recorded. Navigation prompts were silent and the OEM top status bar reportedly obstructed the picture; both need v1.1.5 in-car retesting. Siri, microphone, steering-wheel keys, HUD, instrument-cluster guidance, and fuel data remain **NOT_TESTED**.
+- A later user report says CarPlay connected and Siri/steering keys responded, while music paused after about one second outside Siri use, navigation prompts were silent, and the OEM top status bar still overlapped the display. The tested APK version and connection mode were not recorded, and these reports have not been independently reproduced. HUD, instrument-cluster guidance, and fuel data remain **NOT_TESTED**.
+#### Recent vehicle reports (user-reported, not independently reproduced)
+
+<!-- CARPALY:ENGLISH_VEHICLE_FEEDBACK:START -->
+| Feature | Reported status | Evidence note |
+| --- | --- | --- |
+| CarPlay connection | User reported pass (not independently reproduced) | User reported a normal connection; APK version, vehicle trim, and wired/wireless mode were not recorded and have not been independently reproduced. |
+| Media playback | User reported issue | User reported that music pauses after about one second, while playback works when Siri is active. |
+| Navigation prompts | User reported fail | User reported silent navigation prompts; the root cause and any fix have not been confirmed by a new vehicle retest. |
+| Siri two-way audio | User reported pass (not independently reproduced) | User reported hearing Siri and being heard by Siri; not independently reproduced. |
+| Steering-wheel keys | User reported pass (not independently reproduced) | User reported responsive keys; individual keys and mappings were not recorded and have not been independently reproduced. |
+| OEM top status bar | User reported fail | User reported that the OEM status bar still overlaps the CarPlay view. |
+| HUD, cluster, and fuel data | NOT_TESTED | No verifiable in-vehicle interface call or acceptance evidence is available. |
+
+The tested APK version is not recorded for this report; do not infer full-model or connection-mode compatibility.
+<!-- CARPALY:ENGLISH_VEHICLE_FEEDBACK:END -->
+
 - The read-only diagnostic center, opt-in bounded logs, filtering, redaction, and user-triggered ZIP export are implemented and covered by software tests.
 - Reverse-camera/360 takeover and Geely-specific HUD integration are not implemented.
 - Historical tags `v0.1.0`, `v0.1.1`, and `v0.2.16` are retained only as version-history mappings in this README; their GitHub Releases, public APK assets, and tags have been removed. Their commits remain reachable from project branches, while APK backups remain local and are not download links.
-- `v1.1.4` is available on GitHub as a pre-release (`com.shihab.diplay.hudtest`, versionName `1.1.4`, code 36). A historical `v1.1.5` pre-release contains an older code-37 asset; its filename is preserved but is not a future naming rule. Code 38 has also been observed locally. The v1.1.51 / code-39 fixed-signer Release APK is built and verified locally, but has no public tag or GitHub Release. All future user APKs must be Release builds with the pinned signer and the name `CarPaly-XingyueL-v{versionName}.apk`; Debug APKs are not deliverables. Allocate `v1.1.52` / code 40 only after the code-39 Release APK is delivered and recorded. One user reported a Xingyue L connection and working music on v1.1.4; the setup was not independently reproduced, and navigation prompts were silent.
+<!-- CARPALY:ENGLISH_RELEASES:START -->
+Latest formal Release: [v1.1.51](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.51) (2026-10-11); [download APK](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.51/CarPaly-XingyueL-v1.1.51.apk) — package/version metadata, pinned signer, and uploaded asset digest verified.
+
+Release metadata conflict: GitHub marks the latest item as formal, but its hand-written notes still describe a pre-release; the notes are preserved.
+
+Local candidate: `v1.1.52` / versionCode `40`; it has no public tag or Release and no public download URL.
+
+Vehicle notes below are user-reported only; no unverified feature is presented as independently tested.
+<!-- CARPALY:ENGLISH_RELEASES:END -->
 
 ### Download and setup
 
-Download the [v1.1.4 pre-release APK](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.4/CarPaly-XingyueL1.1.4.apk) or read its [release notes](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.4). A verified v1.1.51 / code-39 Release APK currently exists locally but has not been published to GitHub. Do not uninstall an existing install or clear app data to work around signer/version issues. This is not a claim of complete vehicle validation. The project requires Android API 25 or later. For source builds, use JDK 25, Gradle Wrapper 9.5, Android SDK Platform 37, and NDK 28.2.13676358, then run:
+<!-- CARPALY:ENGLISH_DOWNLOADS:START -->
+Download the [latest formal APK](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.51/CarPaly-XingyueL-v1.1.51.apk) (`1.1.51`, code `39`; SHA-256 `222801dbc5e96b668c22a078da38d2b4ed184724c0b088c35d7d04c32752754a`) or view the [v1.1.51 Release](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.51). Local candidate `v1.1.52` / code `40` is not public.
+<!-- CARPALY:ENGLISH_DOWNLOADS:END -->
+
+Do not uninstall an existing install or clear app data to work around signer/version issues. This is not a claim of complete vehicle validation. The project requires Android API 25 or later. For source builds, use JDK 25, Gradle Wrapper 9.5, Android SDK Platform 37, and NDK 28.2.13676358, then run:
 
 ~~~powershell
 .\gradlew.bat :mobile:assembleDebug

@@ -7,10 +7,11 @@
 - `v1.1.4`: public pre-release, `versionName=1.1.4`, `versionCode=36`.
 - `v1.1.5`: historical public pre-release asset, `versionName=1.1.5`, `versionCode=37`; its original asset name is retained as historical data and is not a naming template.
 - `versionCode=38`: observed in a local historical build and treated as the high-water mark even though that build is not a new user delivery.
-- `v1.1.51`: current reserved target, `versionCode=39`; no corresponding APK or tag/Release existed during the policy audit.
-- `v1.1.52` starts at code 40 only after `v1.1.51` is built, verified and marked delivered with its SHA-256 in the ledger. Continue `v1.1.53`, `v1.1.54`, and onward the same way. The later `v1.1.6` allocation must use a `versionCode` above every prior observed or delivered code.
+- `v1.1.51`: `versionCode=39`, published as the formal GitHub Release; APK SHA-256 `222801dbc5e96b668c22a078da38d2b4ed184724c0b088c35d7d04c32752754a` matches the verified GitHub asset record. The hand-authored Release body conflicts with the formal channel label and is preserved pending manual correction.
+- `v1.1.52`: `versionCode=40`, delivered as a local candidate APK recorded in the ledger; no public tag or Release exists. It remains a local candidate and makes no vehicle-fix claims.
+- Continue `v1.1.53`, `v1.1.54`, and onward by immutable ledger allocations. The later `v1.1.6` allocation must use a `versionCode` above every prior observed or delivered code.
 
-The ledger's `channel=test` for a candidate number describes its development stage only. It never means Debug build, Debug signer, or a separate Test/Upgrade-Test APK artifact. Every user-installable package is the Release variant signed by the fixed Release identity.
+The ledger's `channel` records the allocation/development track; it is not the GitHub Release `prerelease` flag. For example, `v1.1.51` was allocated on the test track but GitHub currently marks its published Release as formal (`prerelease=false`). The GitHub Release API is the source of truth for the published channel, while the ledger preserves the immutable allocation history. Neither label means Debug build, Debug signer, or a separate Test/Upgrade-Test APK artifact. Every user-installable package is the Release variant signed by the fixed Release identity.
 
 ## Build and allocate
 

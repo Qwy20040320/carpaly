@@ -44,9 +44,20 @@ class AndroidVersioningTests(unittest.TestCase):
     def test_repository_reservation_matches_monotonic_project_version(self):
         root = Path(__file__).resolve().parents[1]
         version = check_project(root)
-        self.assertEqual("1.1.51", version.version_name)
-        self.assertEqual(39, version.version_code)
         ledger = json.loads((root / "config/android-version-ledger.json").read_text(encoding="utf-8"))
+        current = ledger["current"]
+        self.assertEqual(current["versionName"], version.version_name)
+        self.assertEqual(current["versionCode"], version.version_code)
+        self.assertEqual("com.shihab.diplay.hudtest", version.application_id)
+        allocation = next(
+            item
+            for item in ledger["allocations"]
+            if item["versionName"] == version.version_name
+            and item["versionCode"] == version.version_code
+            and item["channel"] == current["channel"]
+        )
+        self.assertEqual("delivered", allocation["status"])
+        self.assertRegex(allocation["artifactSha256"], r"^[a-f0-9]{64}$")
         history = {
             item["tag"]: (item["versionName"], item["versionCode"])
             for item in ledger["verifiedHistoricalDeliveries"]

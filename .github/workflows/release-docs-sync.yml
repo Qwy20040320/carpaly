@@ -1,0 +1,73 @@
+name: Release documentation sync
+on:
+  release:
+    types: [published, edited, deleted]
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+  workflow_run:
+    workflows: [Android checks]
+    types: [completed]
+permissions:
+  contents: read
+jobs:
+  sync:
+    if: >-
+      github.repository == 'Qwy20040320/carpaly' &&
+      (github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.event == 'workflow_dispatch' &&
+      startsWith(github.event.workflow_run.head_branch, 'v1.') &&
+      github.event.workflow_run.conclusion == 'success'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+      - name: Reconcile marked release documentation and Release Notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CARPALY_REPO_ADMIN_TOKEN: ${{ secrets.CARPALY_REPO_ADMIN_TOKEN }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+          DOCS_BRANCH: automation/release-docs-sync
+          PYTHONDONTWRITEBYTECODE: '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$BASE_BRANCH"
+          if git ls-remote --exit-code --heads origin "$DOCS_BRANCH" >/dev/null 2>&1; then
+            git fetch origin "$DOCS_BRANCH"
+            git checkout -B "$DOCS_BRANCH" "origin/$DOCS_BRANCH"
+            git merge --no-edit "origin/$BASE_BRANCH"
+          else
+            git checkout -B "$DOCS_BRANCH" "origin/$BASE_BRANCH"
+          fi
+
+          python3 scripts/validate_release_metadata.py
+          python3 scripts/sync_release_docs.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --write --sync-release-notes --sync-about
+
+          git add -- README.md CHANGELOG.md
+          if git diff --cached --quiet; then
+            echo "RELEASE_DOC_SYNC_STATUS=PASS (no file changes)"
+            exit 0
+          fi
+          changed_files="$(git diff --cached --name-only)"
+          while IFS= read -r path; do
+            case "$path" in
+              README.md|CHANGELOG.md) ;;
+              *) echo "Unexpected generated file; refusing to stage: $path" >&2; exit 1 ;;
+            esac
+          done <<< "$changed_files"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "docs: sync published release metadata"
+          git push --set-upstream origin "$DOCS_BRANCH"
+          python3 scripts/sync_release_docs.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --open-pr --docs-branch "$DOCS_BRANCH" --base-branch "$BASE_BRANCH"

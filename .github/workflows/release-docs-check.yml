@@ -1,0 +1,70 @@
+name: Release documentation checks
+on:
+  pull_request:
+    paths:
+      - README.md
+      - CHANGELOG.md
+      - config/android-version-ledger.json
+      - config/public-markdown-allowlist.json
+      - config/release-documentation.json
+      - docs/RELEASE_AUTOMATION.md
+      - scripts/sync_release_docs.py
+      - scripts/validate_release_metadata.py
+      - scripts/test_release_docs_sync.py
+      - scripts/release_signing_preflight.py
+      - scripts/test_release_signing_preflight.py
+      - .github/workflows/release-docs-*.yml
+      - .github/workflows/android.yml
+      - .github/scripts/publish-authenticated-apk-release.sh
+  push:
+    branches: [main, 'feature/**']
+    paths:
+      - README.md
+      - CHANGELOG.md
+      - config/android-version-ledger.json
+      - config/public-markdown-allowlist.json
+      - config/release-documentation.json
+      - docs/RELEASE_AUTOMATION.md
+      - scripts/sync_release_docs.py
+      - scripts/validate_release_metadata.py
+      - scripts/test_release_docs_sync.py
+      - scripts/release_signing_preflight.py
+      - scripts/test_release_signing_preflight.py
+      - .github/workflows/release-docs-*.yml
+      - .github/workflows/android.yml
+      - .github/scripts/publish-authenticated-apk-release.sh
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout v7
+        with:
+          persist-credentials: false
+      - name: Parse workflow YAML syntax
+        run: >-
+          ruby -e 'require "yaml"; ARGV.each { |path| YAML.parse_file(path) }'
+          .github/workflows/android.yml
+          .github/workflows/release-docs-check.yml
+          .github/workflows/release-docs-sync.yml
+      - name: Validate release metadata and managed markers
+        run: python3 scripts/validate_release_metadata.py
+      - name: Run offline release documentation and signing preflight tests
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: >-
+          python3 -m unittest
+          scripts.test_release_docs_sync
+          scripts.test_release_signing_preflight
+          scripts.test_release_pipeline
+      - name: Compile synchronization and preflight scripts
+        run: >-
+          python3 -m py_compile
+          scripts/sync_release_docs.py
+          scripts/validate_release_metadata.py
+          scripts/release_signing_preflight.py
+      - name: Check immutable action pins
+        run: python3 scripts/check_workflow_action_pins.py

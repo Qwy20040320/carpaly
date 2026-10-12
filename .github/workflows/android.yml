@@ -10,10 +10,18 @@ on:
         required: true
         type: boolean
         default: false
+      verify_release_signer_only:
+        description: Verify the protected Release keystore and certificate without building or publishing
+        required: true
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
   check:
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      inputs.verify_release_signer_only != true
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -109,10 +117,49 @@ jobs:
               exit 1
             fi
           done
+  release_signer_preflight:
+    name: Verify protected Release signer only
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.verify_release_signer_only == true &&
+      inputs.publish_authenticated_release == false &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: mfi-public-release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # actions/setup-java v6
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Verify protected Release signer without publishing
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}
+        run: >-
+          python3 scripts/release_signing_preflight.py
+          --keystore-path "$RUNNER_TEMP/carpaly-signer-preflight/carpaly-release.p12"
+      - name: Remove temporary signer material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/carpaly-signer-preflight"
+
   authenticated_release:
     name: Manually build and publish authenticated Release APK
     needs: check
-    if: github.event_name == 'workflow_dispatch' && inputs.publish_authenticated_release == true && startsWith(github.ref, 'refs/tags/v1.')
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.publish_authenticated_release == true &&
+      inputs.verify_release_signer_only == false &&
+      startsWith(github.ref, 'refs/tags/v1.')
     runs-on: ubuntu-latest
     # This environment scopes the existing release secrets/tag policy; it does not require an approval reviewer.
     environment: mfi-public-release
@@ -146,49 +193,33 @@ jobs:
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # gradle/actions setup-gradle v6
         with:
           cache-disabled: true
-      - name: Provision protected MFi inputs and formal Release signer
+      - name: Provision protected MFi inputs
         env:
           MFI_IDENTITY_PK8_BASE64: ${{ secrets.MFI_IDENTITY_PK8_BASE64 }}
           MFI_CERTIFICATE_P7B_BASE64: ${{ secrets.MFI_CERTIFICATE_P7B_BASE64 }}
-          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
-          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-          RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}
         shell: bash
         run: |
           set -euo pipefail
           umask 077
           : "${MFI_IDENTITY_PK8_BASE64:?MFI_IDENTITY_PK8_BASE64 is not configured}"
           : "${MFI_CERTIFICATE_P7B_BASE64:?MFI_CERTIFICATE_P7B_BASE64 is not configured}"
-          : "${RELEASE_KEYSTORE_BASE64:?RELEASE_KEYSTORE_BASE64 is not configured}"
-          : "${RELEASE_STORE_PASSWORD:?RELEASE_STORE_PASSWORD is not configured}"
-          : "${RELEASE_KEY_ALIAS:?RELEASE_KEY_ALIAS is not configured}"
-          : "${RELEASE_KEY_PASSWORD:?RELEASE_KEY_PASSWORD is not configured}"
-          [[ "$RELEASE_SIGNING_CERT_SHA256" =~ ^[a-fA-F0-9]{64}$ ]] || {
-            echo "RELEASE_SIGNING_CERT_SHA256 must be a 64-digit SHA-256 fingerprint." >&2
-            exit 1
-          }
           auth_dir="$RUNNER_TEMP/carpaly-auth-assets"
-          signing_dir="$RUNNER_TEMP/carpaly-signing"
-          mkdir -p "$auth_dir/offline-mfi" "$signing_dir"
+          mkdir -p "$auth_dir/offline-mfi"
           printf '%s' "$MFI_IDENTITY_PK8_BASE64" | base64 --decode > "$auth_dir/offline-mfi/identity.pk8"
           printf '%s' "$MFI_CERTIFICATE_P7B_BASE64" | base64 --decode > "$auth_dir/offline-mfi/certificate.p7b"
-          printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$signing_dir/carpaly-release.p12"
-          chmod 600 "$auth_dir/offline-mfi/identity.pk8" "$auth_dir/offline-mfi/certificate.p7b" "$signing_dir/carpaly-release.p12"
+          chmod 600 "$auth_dir/offline-mfi/identity.pk8" "$auth_dir/offline-mfi/certificate.p7b"
           test -s "$auth_dir/offline-mfi/identity.pk8"
           test -s "$auth_dir/offline-mfi/certificate.p7b"
-          test -s "$signing_dir/carpaly-release.p12"
-          keytool -list -v -alias "$RELEASE_KEY_ALIAS" -keystore "$signing_dir/carpaly-release.p12" \
-            -storetype PKCS12 -storepass:env RELEASE_STORE_PASSWORD > "$RUNNER_TEMP/release-keystore-inspection.txt"
-          signer_sha="$(awk -F': ' '/^[[:space:]]*SHA256: / { gsub(":", "", $2); print tolower($2); exit }' "$RUNNER_TEMP/release-keystore-inspection.txt")"
-          expected_signer_sha="${RELEASE_SIGNING_CERT_SHA256,,}"
-          if [[ ! "$signer_sha" =~ ^[a-f0-9]{64}$ || "$signer_sha" != "$expected_signer_sha" ]]; then
-            actual_signer_sha="${signer_sha:-unavailable}"
-            printf 'Release keystore signer mismatch (actual SHA-256=%s; expected SHA-256=%s).\n' \
-              "$actual_signer_sha" "$expected_signer_sha" >&2
-            exit 1
-          fi
+      - name: Provision and verify formal Release signer
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}
+        run: >-
+          python3 scripts/release_signing_preflight.py
+          --keystore-path "$RUNNER_TEMP/carpaly-signing/carpaly-release.p12"
       - name: Build authenticated Release APK
         env:
           DIPLAY_AUTH_ASSETS_DIR: ${{ runner.temp }}/carpaly-auth-assets
@@ -295,6 +326,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_COMMIT: ${{ github.sha }}
+          RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}
           APK_PATH: ${{ steps.apk.outputs.apk_path }}
           APK_NAME: ${{ steps.apk.outputs.apk_name }}
           APK_SHA256: ${{ steps.apk.outputs.sha256 }}
@@ -315,5 +348,4 @@ jobs:
           set -euo pipefail
           rm -rf -- "$RUNNER_TEMP/carpaly-auth-assets" "$RUNNER_TEMP/carpaly-release" \
             "$RUNNER_TEMP/carpaly-release-remote" "$RUNNER_TEMP/carpaly-release-published" \
-            "$RUNNER_TEMP/carpaly-signing" "$RUNNER_TEMP/carpaly-python-cache" \
-            "$RUNNER_TEMP/release-keystore-inspection.txt"
+            "$RUNNER_TEMP/carpaly-signing" "$RUNNER_TEMP/carpaly-python-cache"

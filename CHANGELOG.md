@@ -1,11 +1,24 @@
-# CarPaly version status — 2026-10-11
+<!-- CARPALY:CHANGELOG:START -->
+# CarPaly release history (automatically synchronized)
 
-- `v1.1.4` is the published GitHub pre-release (package `com.shihab.diplay.hudtest`, versionCode 36).
-- `v1.1.5` is also a historical public pre-release (legacy code-37 APK asset); retain its existing title, tag and bytes unchanged.
-- Code 38 has been observed in a local historical build. The `v1.1.51` / versionCode 39 fixed-signer Release APK is built and verified locally; no public tag or GitHub Release exists yet.
-- Every future user APK must be the Release build signed by the fixed v1.1.4 identity and named `CarPaly-XingyueL-v{versionName}.apk`. CI Debug compilation is internal only; Debug APKs are not user-delivery artifacts.
-- Allocate `v1.1.52` / code 40 only after the verified v1.1.51 Release APK is delivered and its SHA-256 recorded; `v1.1.6` must use a code above the complete previous high-water mark.
-- These status notes do not claim that unverified Geely audio, HUD, instrument cluster, steering controls, or other vehicle functions have passed.
+Latest formal Release: [v1.1.51](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.51) (2026-10-11). APK `CarPaly-XingyueL-v1.1.51.apk` matched the GitHub digest, application id, version, and pinned signer.
+Release state wording conflict: GitHub marks this as formal while the hand-written notes still say pre-release; original notes are preserved.
+
+## Published Releases
+
+| Tag | Channel | Published | APK assets | Source commit |
+| --- | --- | --- | --- | --- |
+| [v1.1.51](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.51) | Formal | 2026-10-11 | `CarPaly-XingyueL-v1.1.51.apk` | `ef8bec6e0d20060ceb436c36eb2d495f63c831bd` |
+| [v1.1.5](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.5) | Pre-release | 2026-10-11 | `CarPaly-XingyueL1.1.5-Upgrade-Test-build20261011.apk` | `ef8bec6e0d20060ceb436c36eb2d495f63c831bd` |
+| [v1.1.4](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.4) | Pre-release | 2026-10-11 | `CarPaly-XingyueL1.1.4.apk` | `ef8bec6e0d20060ceb436c36eb2d495f63c831bd` |
+
+## Local Candidate (Not Published)
+
+`v1.1.52` / versionCode `40` — local-only metadata; no GitHub tag, Release, or download link.
+本地候选版本；尚无 GitHub 标签或公开 Release。当前资料没有证明本候选修复了任何实车 CarPlay、音频或车机显示故障。
+
+Vehicle validation is separate from software release status. See the root README; user feedback is labeled and unverified features remain NOT_TESTED.
+<!-- CARPALY:CHANGELOG:END -->
 
 # DiPlay 0.2.15 — 2026-10-08
 

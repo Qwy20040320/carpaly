@@ -1,6 +1,6 @@
 # CarPaly（中文项目状态）
 
-> 当前公开历史包括 `v1.1.4`（code 36）和旧格式 `v1.1.5` 预发布附件（code 37）；code 38 也已在本地历史构建中观察。`v1.1.51 / code 39` 固定签名 Release APK 已在本地构建并核验，但尚无公开标签或 GitHub Release。后续所有用户 APK 必须为固定签名的 Release 构建，文件名 `CarPaly-XingyueL-v{versionName}.apk`；不提供 Debug/Test/Upgrade-Test APK。完成交付登记后再分配 v1.1.52/code 40；后续计划为 `v1.1.6`。吉利星越 L / KX11 仍属候选适配，所有车型的实车状态均为 `NOT_TESTED`；详见[主项目说明](README.md)。
+> GitHub 当前版本记录（2026-10-12）：`v1.1.4`（code 36）和旧格式 `v1.1.5`（code 37）为历史预发布；code 38 仅在本地历史构建中观察。`v1.1.51 / code 39` 已是 GitHub 正式 Release，APK 资产 SHA-256 为 `222801dbc5e96b668c22a078da38d2b4ed184724c0b088c35d7d04c32752754a`；GitHub 将其标为正式版，但手写说明仍称预发布测试版，说明冲突已记录且未被自动改写。`v1.1.52 / code 40` 是本地已登记的候选构建，尚无公开标签或 Release。后续规划为 `v1.1.53`、`v1.1.54`……至 `v1.1.6`。所有用户 APK 必须采用固定 Release 签名和 `CarPaly-XingyueL-v{versionName}.apk` 命名，不交付 Debug/Test/Upgrade-Test 包。吉利星越 L / KX11 的实车状态仍为 `NOT_TESTED`；详见[主项目说明](README.md)。
 
 > 本文件后续内容保留自 DiPlay 上游 v0.2.15 中文说明，用作源码历史和上游功能参考；其中的 BYD 车型说明、安装包链接、功能范围及实车记录不代表 CarPaly 当前版本。
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-required=(GH_TOKEN GH_REPO RELEASE_TAG APK_PATH APK_NAME APK_SHA256 APK_SIZE APK_VERSION_CODE \
+required=(GH_TOKEN GH_REPO RELEASE_TAG RELEASE_COMMIT RELEASE_SIGNING_CERT_SHA256 APK_PATH APK_NAME APK_SHA256 APK_SIZE APK_VERSION_CODE \
   SOURCE_ZIP_PATH SOURCE_ZIP_NAME SOURCE_ZIP_SHA256 SOURCE_ZIP_SIZE \
   SHA256SUMS_PATH SHA256SUMS_SHA256 SHA256SUMS_SIZE RUNNER_TEMP)
 for variable in "${required[@]}"; do
@@ -43,6 +43,14 @@ for digest in "$APK_SHA256" "$SOURCE_ZIP_SHA256" "$SHA256SUMS_SHA256"; do
 done
 [[ "$APK_VERSION_CODE" =~ ^[1-9][0-9]*$ ]] || {
   echo "APK_VERSION_CODE must be a positive integer." >&2
+  exit 1
+}
+[[ "$RELEASE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
+  echo "RELEASE_COMMIT must be the full lowercase source commit SHA." >&2
+  exit 1
+}
+[[ "$RELEASE_SIGNING_CERT_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
+  echo "RELEASE_SIGNING_CERT_SHA256 must be a lowercase public certificate digest." >&2
   exit 1
 }
 [[ -s "$APK_PATH" && -s "$SOURCE_ZIP_PATH" && -s "$SHA256SUMS_PATH" ]] || {
@@ -126,22 +134,36 @@ release_notes="## 中文
 - Source ZIP SHA-256: $SOURCE_ZIP_SHA256
 - Checksum manifest: $canonical_sums (lists APK and source ZIP digests)
 - SHA256SUMS.txt SHA-256: $SHA256SUMS_SHA256
-- Feedback: use GitHub Issues with vehicle/firmware, iOS version, connection mode, reproduction steps, and a manually exported redacted report."
+- Feedback: use GitHub Issues with vehicle/firmware, iOS version, connection mode, reproduction steps, and a manually exported redacted report.
+
+<!-- CARPALY:RELEASE_NOTES:START -->
+## Machine-managed publication facts
+
+- GitHub channel: pre-release.
+- Tag source commit: $RELEASE_COMMIT.
+- APK verification record: PASS (version $version, versionCode $APK_VERSION_CODE, SHA-256 $APK_SHA256).
+- Release signer certificate SHA-256: $RELEASE_SIGNING_CERT_SHA256.
+- Vehicle features not listed as independently verified remain NOT_TESTED.
+<!-- CARPALY:RELEASE_NOTES:END -->"
 
 release_json=""
+release_index="$(api "repos/$GH_REPO/releases?per_page=100")"
+jq -e 'type == "array"' <<<"$release_index" >/dev/null || {
+  echo "GitHub Releases API returned an unexpected response; refusing to create a Release." >&2
+  exit 1
+}
+release_json="$(jq -c --arg tag "$RELEASE_TAG" '[.[] | select(.tag_name == $tag)] | first // empty' <<<"$release_index")"
 release_exists=true
-if ! release_json="$(api "$release_endpoint" 2>/dev/null)"; then
+if [[ -z "$release_json" ]]; then
   release_exists=false
 fi
-
-release_index="$(api "repos/$GH_REPO/releases?per_page=100")"
 highest_version_code=0
 existing_tag_version_code=""
 while IFS= read -r encoded_release; do
   prior_release="$(base64 --decode <<<"$encoded_release")"
   prior_tag="$(jq -r '.tag_name // ""' <<<"$prior_release")"
   prior_body="$(jq -r '.body // ""' <<<"$prior_release")"
-  prior_code="$(sed -nE 's/^Android versionCode: ([0-9]+)$/\1/p' <<<"$prior_body" | head -n 1)"
+  prior_code="$(sed -nE 's/.*Android versionCode: ([0-9]+).*/\1/p' <<<"$prior_body" | head -n 1)"
   if [[ -z "$prior_code" ]]; then
     case "$prior_tag" in
       v0.1.0) prior_code=34 ;;
@@ -178,6 +200,7 @@ fi
 
 release_id="$(jq -er '.id | tostring' <<<"$release_json")"
 is_draft="$(jq -r '.draft' <<<"$release_json")"
+original_prerelease="$(jq -r '.prerelease' <<<"$release_json")"
 
 assets_endpoint="repos/$GH_REPO/releases/$release_id/assets?per_page=100"
 assets="$(api "$assets_endpoint")"
@@ -268,15 +291,22 @@ cmp -s "$SHA256SUMS_PATH" "$download_dir/$canonical_sums"
 [[ "$(sha256sum "$download_dir/$canonical_sums" | awk '{print $1}')" == "$SHA256SUMS_SHA256" ]]
 (cd "$download_dir" && sha256sum --check --status "$canonical_sums")
 
-api --method PATCH "repos/$GH_REPO/releases/$release_id" \
-  -f "name=$release_title" \
-  -f "body=$release_notes" \
-  -F draft=false \
-  -F prerelease=true >/dev/null
+if [[ "$is_draft" == true ]]; then
+  # Preserve an existing draft's title and hand-authored notes. Only change its
+  # publication flags after every asset has been downloaded and verified.
+  api --method PATCH "repos/$GH_REPO/releases/$release_id" \
+    -F draft=false \
+    -F prerelease=true >/dev/null
+  expected_prerelease=true
+else
+  # A published Release is immutable from this workflow's perspective. In
+  # particular, never overwrite its title, notes, or channel on a rerun.
+  expected_prerelease="$original_prerelease"
+fi
 
 final_release="$(api "$release_endpoint")"
 [[ "$(jq -r '.draft' <<<"$final_release")" == false ]]
-[[ "$(jq -r '.prerelease' <<<"$final_release")" == true ]]
+[[ "$(jq -r '.prerelease' <<<"$final_release")" == "$expected_prerelease" ]]
 final_assets="$(api "$assets_endpoint")"
 [[ "$(jq 'length' <<<"$final_assets")" == 3 ]]
 verify_asset "$final_assets" "$canonical_apk" "$APK_SIZE" "$APK_SHA256"
