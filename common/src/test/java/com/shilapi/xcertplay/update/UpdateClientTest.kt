@@ -53,4 +53,39 @@ class UpdateClientTest {
         }
     }
 
+    @Test
+    fun fetchTextDoesNotFollowRedirects() {
+        var targetRequested = false
+        server.createContext("/releases") { exchange ->
+            exchange.responseHeaders.add("Location", "$root/redirect-target")
+            exchange.sendResponseHeaders(302, -1)
+            exchange.close()
+        }
+        server.createContext("/redirect-target") { exchange ->
+            targetRequested = true
+            val bytes = "unexpected".toByteArray()
+            exchange.sendResponseHeaders(200, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
+        try {
+            UpdateClient.fetchText("$root/releases", null, "CarPaly/test")
+            throw AssertionError("expected an IOException")
+        } catch (expected: java.io.IOException) {
+            assertTrue(expected.message!!.contains("302"))
+        }
+        assertEquals(false, targetRequested)
+    }
+
+    @Test
+    fun otaManifestUrlsArePinnedToStableAndBetaPagesEndpoints() {
+        assertEquals(
+            "https://qwy20040320.github.io/carpaly/updates/stable.json",
+            UpdateClient.manifestUrl(UpdateChannel.STABLE),
+        )
+        assertEquals(
+            "https://qwy20040320.github.io/carpaly/updates/beta.json",
+            UpdateClient.manifestUrl(UpdateChannel.BETA),
+        )
+    }
+
 }

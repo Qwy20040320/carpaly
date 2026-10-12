@@ -3,12 +3,15 @@ package com.shilapi.xcertplay.update
 import org.json.JSONArray
 
 internal enum class UpdateChannel {
-    PREVIEW,
+    BETA,
     STABLE;
 
     companion object {
         internal fun fromPreference(value: String?): UpdateChannel =
-            entries.firstOrNull { it.name.equals(value, ignoreCase = true) } ?: PREVIEW
+            when {
+                value.equals("PREVIEW", ignoreCase = true) -> BETA
+                else -> entries.firstOrNull { it.name.equals(value, ignoreCase = true) } ?: STABLE
+            }
     }
 }
 
@@ -25,6 +28,11 @@ internal data class UpdateRelease(
     val sizeBytes: Long,
     val isPrerelease: Boolean,
     val sha256: String,
+    val versionCode: Long = 0L,
+    val releaseDate: String = "",
+    val channel: UpdateChannel = if (isPrerelease) UpdateChannel.BETA else UpdateChannel.STABLE,
+    val minimumSupportedVersionCode: Long = 36L,
+    val signerCertSha256: String = "",
 )
 
 internal object UpdateCatalog {
@@ -32,10 +40,12 @@ internal object UpdateCatalog {
     private const val FIRST_AUTHENTICATED_VERSION = "1.1.4"
     private val sha256Digest = Regex("^sha256:([0-9a-fA-F]{64})$")
 
-    internal fun apkName(versionName: String): String = "CarPaly-XingyueL$versionName.apk"
+    internal fun apkName(versionName: String): String = "CarPaly-XingyueL-v$versionName.apk"
+
+    private fun legacyApkName(versionName: String): String = "CarPaly-XingyueL$versionName.apk"
 
     /** Returns the newest valid release allowed by [channel], skipping drafts and malformed assets. */
-    internal fun parse(json: String, channel: UpdateChannel = UpdateChannel.PREVIEW): UpdateRelease? {
+    internal fun parse(json: String, channel: UpdateChannel = UpdateChannel.STABLE): UpdateRelease? {
         val releases = JSONArray(json)
         var newestValid: UpdateRelease? = null
         for (index in 0 until releases.length()) {
@@ -49,7 +59,9 @@ internal object UpdateCatalog {
             val versionName = UpdateVersion.releaseVersion(tag) ?: continue
             // Historical v1.1.1-v1.1.3 assets predate the authenticated distribution pipeline.
             if (UpdateVersion.isNewer(FIRST_AUTHENTICATED_VERSION, versionName)) continue
-            val expectedName = apkName(versionName)
+            // The unsigned Releases API parser remains for legacy tests only. OTA uses the
+            // signed manifest verifier and the canonical CarPaly-XingyueL-v{version}.apk name.
+            val expectedName = legacyApkName(versionName)
             val expectedPage = "https://github.com/$REPOSITORY/releases/tag/$tag"
             if (release.optString("html_url") != expectedPage) continue
 
@@ -101,6 +113,7 @@ internal object UpdateCatalog {
                 sizeBytes = sizeBytes,
                 isPrerelease = isPrerelease,
                 sha256 = digest,
+                channel = if (isPrerelease) UpdateChannel.BETA else UpdateChannel.STABLE,
             )
             val current = newestValid
             if (current == null || UpdateVersion.isNewer(candidate.versionName, current.versionName) ||

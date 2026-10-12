@@ -506,6 +506,8 @@ class AdaptiveSettingsUiTest {
         val audio = visibleIn(R.string.audio)
         val vehicle = visibleIn(R.string.settings_vehicle)
         val advanced = visibleIn(R.string.settings_advanced)
+        val appUpdates = visibleIn(R.string.settings_app_updates)
+        val about = visibleIn(R.string.about)
 
         assertTrue(audio.any { it.startsWith(text(R.string.music_buffer)) })
         assertTrue(audio.any { it.startsWith(text(R.string.contrib_audio_home_call_channel_label)) })
@@ -522,6 +524,9 @@ class AdaptiveSettingsUiTest {
         assertFalse(audio.any { it.startsWith(text(R.string.settings_app_appearance)) })
         assertFalse(vehicle.any { it.startsWith(text(R.string.settings_app_appearance)) })
         assertFalse(advanced.any { it.startsWith(text(R.string.settings_app_appearance)) })
+        assertTrue(text(R.string.settings_auto_update_check) in appUpdates)
+        assertTrue(text(R.string.update_check) in appUpdates)
+        assertTrue(text(R.string.update_check) in about)
         listOf(R.string.main_buffered_audio, R.string.efficient_video, R.string.smooth_video, R.string.call_echo_cancellation, R.string.call_voice_filter, R.string.right_hand_drive, R.string.car_button_in_carplay,
             R.string.side_panel, R.string.split_screen_areas, R.string.carplay_rotation).forEach {
             assertFalse(text(it), text(it) in display)
@@ -588,7 +593,7 @@ class AdaptiveSettingsUiTest {
                 destination.contentDescription?.endsWith(" settings") == true &&
                 descendants(destination).filterIsInstance<ImageView>().count() == 1
         }.toList()
-        assertEquals(10, destinations.size)
+        assertEquals(11, destinations.size)
         destinations.forEach { destination ->
             assertEquals(1, descendants(destination).filterIsInstance<ImageView>().count())
         }

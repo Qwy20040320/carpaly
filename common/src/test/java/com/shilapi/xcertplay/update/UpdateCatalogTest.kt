@@ -49,8 +49,8 @@ class UpdateCatalogTest {
     """.trimIndent()
 
     @Test
-    fun previewChannelSkipsDraftsAndReturnsTheNewestVersionedCarPalyApk() {
-        val release = UpdateCatalog.parse(releaseJson)
+    fun betaChannelSkipsDraftsAndReturnsTheNewestLegacyVersionedCarPalyApk() {
+        val release = UpdateCatalog.parse(releaseJson, UpdateChannel.BETA)
         assertEquals("v1.1.5", release?.tagName)
         assertEquals("1.1.5", release?.versionName)
         assertEquals("CarPaly-XingyueL1.1.5.apk", release?.apkName)
@@ -80,7 +80,7 @@ class UpdateCatalogTest {
 
     @Test
     fun versionNameDrivesTheExpectedApkName() {
-        assertEquals("CarPaly-XingyueL1.1.10.apk", UpdateCatalog.apkName("1.1.10"))
+        assertEquals("CarPaly-XingyueL-v1.1.10.apk", UpdateCatalog.apkName("1.1.10"))
     }
 
     @Test
@@ -98,7 +98,7 @@ class UpdateCatalogTest {
             ]
         """.trimIndent()
 
-        assertEquals("v1.1.10", UpdateCatalog.parse(json)?.tagName)
+        assertEquals("v1.1.10", UpdateCatalog.parse(json, UpdateChannel.BETA)?.tagName)
     }
 
     @Test
@@ -112,7 +112,7 @@ class UpdateCatalogTest {
               ]}
             ]
         """.trimIndent()
-        assertEquals("v1.1.5", UpdateCatalog.parse(json)?.tagName)
+        assertEquals("v1.1.5", UpdateCatalog.parse(json, UpdateChannel.BETA)?.tagName)
     }
 
     @Test
@@ -193,6 +193,13 @@ class UpdateCatalogTest {
     @Test
     fun returnsNullForAnEmptyReleaseList() {
         assertNull(UpdateCatalog.parse("[]"))
+    }
+
+    @Test
+    fun stableIsTheDefaultAndPreviewPreferenceMigratesToBeta() {
+        assertEquals(UpdateChannel.STABLE, UpdateChannel.fromPreference(null))
+        assertEquals(UpdateChannel.BETA, UpdateChannel.fromPreference("PREVIEW"))
+        assertEquals(UpdateChannel.BETA, UpdateChannel.fromPreference("beta"))
     }
 
     @Test

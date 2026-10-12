@@ -9,8 +9,9 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicBoolean
 
-/** Downloads only the versioned CarPaly asset selected by [UpdateCatalog], then verifies GitHub's digest. */
+/** Downloads only the versioned CarPaly asset selected by the signed manifest, then verifies its digest. */
 internal object UpdateApkDownloader {
     internal const val MAX_APK_BYTES = 50L * 1024L * 1024L
     private const val MAX_REDIRECTS = 5
@@ -34,6 +35,8 @@ internal object UpdateApkDownloader {
         release: UpdateRelease,
         destinationDirectory: File,
         connectionFactory: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
+        cancellation: UpdateDownloadCancellation = UpdateDownloadCancellation(),
+        onProgress: (Long, Long) -> Unit = { _, _ -> },
     ): File {
         require(release.apkName == UpdateCatalog.apkName(release.versionName)) { "Unexpected APK filename" }
         require(release.tagName == "v${release.versionName}") { "Release tag and APK version differ" }
@@ -54,12 +57,18 @@ internal object UpdateApkDownloader {
         require(release.checksumUrl == "https://github.com$expectedPath.sha256") {
             "Checksum URL is not the expected GitHub release sidecar"
         }
-        fetchAndVerifyChecksumSidecar(release, connectionFactory)
+        cancellation.check()
+        fetchAndVerifyChecksumSidecar(release, connectionFactory, cancellation)
 
         if (!destinationDirectory.exists() && !destinationDirectory.mkdirs()) {
             throw IOException("Could not create the update cache directory")
         }
         val root = destinationDirectory.canonicalFile
+        if (root.usableSpace < release.sizeBytes + MINIMUM_FREE_SPACE_BYTES) {
+            throw IOException("Insufficient storage space for the verified update APK")
+        }
+        root.listFiles()?.filter { it.name.startsWith(".carpaly-update-") && it.name.endsWith(".part") }
+            ?.forEach { it.delete() }
         val target = File(root, release.apkName).canonicalFile
         if (target.parentFile != root) throw IOException("Invalid update cache path")
         if (matchesVerifiedRelease(target, release)) return target
@@ -68,8 +77,9 @@ internal object UpdateApkDownloader {
         val temporary = File.createTempFile(".carpaly-update-", ".part", root)
         var connection: HttpURLConnection? = null
         try {
-            connection = openFollowingTrustedRedirects(initialUrl, connectionFactory)
+            connection = openFollowingTrustedRedirects(initialUrl, connectionFactory, cancellation)
             val status = connection.responseCode
+            cancellation.check()
             if (status != HttpURLConnection.HTTP_OK) throw IOException("APK download failed: HTTP $status")
             val encoding = connection.getHeaderField("Content-Encoding")
             if (!encoding.isNullOrBlank() && !encoding.equals("identity", ignoreCase = true)) {
@@ -82,10 +92,12 @@ internal object UpdateApkDownloader {
 
             val digest = MessageDigest.getInstance("SHA-256")
             var downloaded = 0L
+            var lastProgressReported = 0L
             BufferedInputStream(connection.inputStream).use { input ->
                 BufferedOutputStream(FileOutputStream(temporary)).use { output ->
                     val buffer = ByteArray(32 * 1024)
                     while (true) {
+                        cancellation.check()
                         val count = input.read(buffer)
                         if (count < 0) break
                         downloaded += count
@@ -94,11 +106,17 @@ internal object UpdateApkDownloader {
                         }
                         digest.update(buffer, 0, count)
                         output.write(buffer, 0, count)
+                        if (downloaded - lastProgressReported >= PROGRESS_INTERVAL_BYTES ||
+                            downloaded == release.sizeBytes) {
+                            onProgress(downloaded, release.sizeBytes)
+                            lastProgressReported = downloaded
+                        }
                     }
                     output.flush()
                 }
             }
             if (downloaded != release.sizeBytes) throw IOException("APK response is incomplete")
+            cancellation.check()
             val actualSha256 = digest.digest().toHex()
             if (!actualSha256.equals(release.sha256, ignoreCase = true)) {
                 throw IOException("APK SHA-256 does not match GitHub release metadata")
@@ -107,6 +125,7 @@ internal object UpdateApkDownloader {
             return target
         } finally {
             connection?.disconnect()
+            connection?.let(cancellation::clear)
             if (temporary.exists()) temporary.delete()
         }
     }
@@ -114,10 +133,12 @@ internal object UpdateApkDownloader {
     private fun openFollowingTrustedRedirects(
         initialUrl: URL,
         connectionFactory: (URL) -> HttpURLConnection,
+        cancellation: UpdateDownloadCancellation,
     ): HttpURLConnection {
         var currentUrl = initialUrl
         for (redirectCount in 0..MAX_REDIRECTS) {
             val connection = connectionFactory(currentUrl)
+            cancellation.track(connection)
             connection.instanceFollowRedirects = false
             connection.requestMethod = "GET"
             connection.connectTimeout = CONNECT_TIMEOUT_MILLIS
@@ -131,6 +152,7 @@ internal object UpdateApkDownloader {
 
             val location = connection.getHeaderField("Location")
             connection.disconnect()
+            cancellation.clear(connection)
             if (redirectCount == MAX_REDIRECTS || location.isNullOrBlank()) {
                 throw IOException("APK download redirect limit exceeded")
             }
@@ -144,11 +166,13 @@ internal object UpdateApkDownloader {
     private fun fetchAndVerifyChecksumSidecar(
         release: UpdateRelease,
         connectionFactory: (URL) -> HttpURLConnection,
+        cancellation: UpdateDownloadCancellation,
     ) {
         var connection: HttpURLConnection? = null
         try {
-            connection = openFollowingTrustedRedirects(URL(release.checksumUrl), connectionFactory)
+            connection = openFollowingTrustedRedirects(URL(release.checksumUrl), connectionFactory, cancellation)
             val status = connection.responseCode
+            cancellation.check()
             if (status != HttpURLConnection.HTTP_OK) throw IOException("Checksum download failed: HTTP $status")
             val encoding = connection.getHeaderField("Content-Encoding")
             if (!encoding.isNullOrBlank() && !encoding.equals("identity", ignoreCase = true)) {
@@ -164,6 +188,7 @@ internal object UpdateApkDownloader {
                 val buffer = ByteArray(256)
                 var total = 0
                 while (true) {
+                    cancellation.check()
                     val count = input.read(buffer)
                     if (count < 0) break
                     total += count
@@ -185,13 +210,14 @@ internal object UpdateApkDownloader {
             }
         } finally {
             connection?.disconnect()
+            connection?.let(cancellation::clear)
         }
     }
 
     private fun isTrustedHttpsUrl(url: URL): Boolean {
         val host = url.host.lowercase()
         val trustedHost = host == "github.com" || host == "release-assets.githubusercontent.com" ||
-            host.endsWith(".githubusercontent.com")
+            host == "objects.githubusercontent.com"
         return url.protocol.equals("https", ignoreCase = true) && trustedHost && url.userInfo == null &&
             (url.port == -1 || url.port == 443)
     }
@@ -210,4 +236,38 @@ internal object UpdateApkDownloader {
     }
 
     private fun ByteArray.toHex(): String = joinToString("") { byte -> "%02x".format(byte) }
+
+    private const val MINIMUM_FREE_SPACE_BYTES = 5L * 1024L * 1024L
+    private const val PROGRESS_INTERVAL_BYTES = 256L * 1024L
+}
+
+internal class UpdateDownloadCancelledException : IOException("Update download was cancelled")
+
+/** Disconnects an in-flight request and removes any partial file before returning control to the UI. */
+internal class UpdateDownloadCancellation {
+    private val cancelled = AtomicBoolean(false)
+    @Volatile private var activeConnection: HttpURLConnection? = null
+
+    internal fun cancel() {
+        cancelled.set(true)
+        activeConnection?.disconnect()
+    }
+
+    internal fun check() {
+        if (cancelled.get() || Thread.currentThread().isInterrupted) throw UpdateDownloadCancelledException()
+    }
+
+    internal fun isCancelled(): Boolean = cancelled.get()
+
+    internal fun track(connection: HttpURLConnection) {
+        if (cancelled.get()) {
+            connection.disconnect()
+            throw UpdateDownloadCancelledException()
+        }
+        activeConnection = connection
+    }
+
+    internal fun clear(connection: HttpURLConnection) {
+        if (activeConnection === connection) activeConnection = null
+    }
 }

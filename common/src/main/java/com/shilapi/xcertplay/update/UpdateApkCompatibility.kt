@@ -13,6 +13,7 @@ internal data class UpdateApkIdentity(
     val versionCode: Long,
     val signerSha256: Set<String>,
     val versionName: String = "",
+    val debuggable: Boolean = false,
 )
 
 internal class UpdateApkIncompatibilityException(message: String) : java.io.IOException(message)
@@ -29,6 +30,7 @@ internal object UpdateApkCompatibility {
     /** Null means install-compatible; exact signer equality is intentionally conservative. */
     internal fun incompatibility(installed: UpdateApkIdentity, candidate: UpdateApkIdentity): String? = when {
         candidate.packageName != installed.packageName -> "APK package name does not match this installation"
+        candidate.debuggable -> "Debug APKs are not eligible for OTA installation"
         candidate.signerSha256.isEmpty() || installed.signerSha256.isEmpty() -> "APK signing certificate could not be verified"
         candidate.signerSha256 != installed.signerSha256 -> "APK signing certificate differs from this installation"
         candidate.versionCode <= installed.versionCode -> "APK version is not newer than this installation"
@@ -61,8 +63,12 @@ internal object UpdateApkCompatibility {
                     .joinToString("") { byte -> "%02x".format(byte) }
             }.toSet(),
             versionName = versionName.orEmpty(),
+            debuggable = applicationInfo?.flags?.and(android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0,
         )
     }
+
+    internal fun hasSigner(identity: UpdateApkIdentity, expectedSha256: String): Boolean =
+        identity.signerSha256 == setOf(expectedSha256.lowercase())
 
     /** Delivered APKs from v1.1.4 onward must retain the offline MFi credential assets. */
     internal fun hasAuthenticationAssets(apk: File): Boolean = runCatching {
