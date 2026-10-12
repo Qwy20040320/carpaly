@@ -494,11 +494,18 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("environment: mfi-public-release", release_job)
         self.assertIn("git merge-base --is-ancestor", release_job)
 
-    def test_release_intent_gate_is_main_only_and_has_no_secret_access(self):
+    def test_full_ci_runs_for_prs_while_release_intent_remains_main_only(self):
         workflow = (ROOT / ".github/workflows/android.yml").read_text(encoding="utf-8")
         gate = workflow.split("  release_intent:", 1)[1].split("  release_signer_preflight:", 1)[0]
-        self.assertIn("github.event_name == 'push'", gate)
-        self.assertIn("refs/heads/main", gate)
+        release_job = workflow.split("  authenticated_release:", 1)[1].split("  publication_follow_up:", 1)[0]
+        intent_source = (ROOT / "scripts/release_intent.py").read_text(encoding="utf-8")
+        self.assertIn("name: Run full CI and gate an explicit release intent", gate)
+        self.assertIn("github.event_name != 'workflow_dispatch'", gate)
+        self.assertIn("inputs.verify_release_signer_only != true", gate)
+        self.assertIn("./gradlew :shared:testDebugUnitTest", gate)
+        self.assertIn("event != \"push\" or branch != \"main\"", intent_source)
+        self.assertIn("github.event_name == 'push' && github.ref == 'refs/heads/main'", release_job)
+        self.assertIn("needs.release_intent.result == 'success'", release_job)
         self.assertNotIn("environment:", gate)
         self.assertNotIn("secrets.", gate)
         self.assertIn("persist-credentials: false", gate)

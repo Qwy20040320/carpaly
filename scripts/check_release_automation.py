@@ -20,8 +20,16 @@ def main() -> int:
         failures.append("Checked-in release intent must be a disabled schema-1 baseline")
     if "pull_request:" not in android or "github.event_name == 'push' && github.ref == 'refs/heads/main'" not in android:
         failures.append("Android CI and the main-only release-intent gate are not both configured")
-    if "needs: [check, release_intent]" not in android or "needs.check.result == 'success'" not in android:
-        failures.append("Authenticated publication is not gated on successful Android CI and intent validation")
+    if "name: Run full CI and gate an explicit release intent" not in android or "github.event_name != 'workflow_dispatch'" not in android:
+        failures.append("Full Android CI must run for PR/push events and skip only signer-only dispatches")
+    if "./gradlew :shared:testDebugUnitTest" not in android or "scripts/test_release_pipeline.py" not in android:
+        failures.append("Full Android and Bash publisher CI is not present in the always-on CI job")
+    if (
+        "needs: [check, release_intent]" not in android
+        or "needs.check.result == 'success'" not in android
+        or "needs.release_intent.result == 'success'" not in android
+    ):
+        failures.append("Authenticated publication is not gated on successful full CI and intent validation")
     if "needs.release_intent.outputs.should_publish == 'true'" not in android:
         failures.append("Main publication does not require an enabled release-intent output")
     if "environment: mfi-public-release" not in android:
@@ -86,7 +94,7 @@ def main() -> int:
             print(f"- {failure}")
         return 1
     print("RELEASE_AUTOMATION_STATUS=PASS")
-    print("RELEASE_GATE=main-push+successful-CI+same-commit-release-intent")
+    print("RELEASE_GATE=full-ci-on-pr-and-push; publication-requires-main+successful-ci+same-commit-intent")
     print("PR_SECRETS=NOT_EXPOSED")
     print("FOLLOW_UP=correlated-workflow_dispatch; waits for Pages and docs CI results")
     return 0
