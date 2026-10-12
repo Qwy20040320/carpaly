@@ -478,11 +478,14 @@ class GitHubApiAndMutationSafetyTests(unittest.TestCase):
 
 
 class WorkflowContractTests(unittest.TestCase):
-    def test_android_release_requires_explicit_workflow_dispatch(self):
+    def test_android_release_requires_manual_dispatch_or_reviewed_main_intent(self):
         workflow = (ROOT / ".github/workflows/android.yml").read_text(encoding="utf-8")
         self.assertIn("github.event_name == 'workflow_dispatch'", workflow)
         self.assertIn("inputs.publish_authenticated_release == true", workflow)
         self.assertIn("default: false", workflow)
+        self.assertIn("needs: [check, release_intent]", workflow)
+        self.assertIn("needs.check.result == 'success'", workflow)
+        self.assertIn("needs.release_intent.outputs.should_publish == 'true'", workflow)
         self.assertNotIn("tags: ['v1.*']", workflow)
 
     def test_release_job_uses_protected_environment_and_tag_on_main_check(self):
@@ -490,6 +493,40 @@ class WorkflowContractTests(unittest.TestCase):
         release_job = workflow.split("  authenticated_release:", 1)[1]
         self.assertIn("environment: mfi-public-release", release_job)
         self.assertIn("git merge-base --is-ancestor", release_job)
+
+    def test_release_intent_gate_is_main_only_and_has_no_secret_access(self):
+        workflow = (ROOT / ".github/workflows/android.yml").read_text(encoding="utf-8")
+        gate = workflow.split("  release_intent:", 1)[1].split("  release_signer_preflight:", 1)[0]
+        self.assertIn("github.event_name == 'push'", gate)
+        self.assertIn("refs/heads/main", gate)
+        self.assertNotIn("environment:", gate)
+        self.assertNotIn("secrets.", gate)
+        self.assertIn("persist-credentials: false", gate)
+
+    def test_post_release_workflows_are_dispatched_with_narrow_permissions(self):
+        workflow = (ROOT / ".github/workflows/android.yml").read_text(encoding="utf-8")
+        follow_up = workflow.split("  publication_follow_up:", 1)[1]
+        self.assertIn("actions: write", follow_up)
+        self.assertIn("contents: read", follow_up)
+        self.assertIn("scripts/dispatch_release_followups.py", follow_up)
+        self.assertIn("--timeout-seconds 2400", follow_up)
+        self.assertIn('gh api "repos/$GH_REPO/commits/main" --jq .sha', follow_up)
+        dispatcher = (ROOT / "scripts/dispatch_release_followups.py").read_text(encoding="utf-8")
+        self.assertIn("pages.yml", dispatcher)
+        self.assertIn("release-docs-sync.yml", dispatcher)
+        self.assertIn("display_title", dispatcher)
+        self.assertIn("head_sha", dispatcher)
+        self.assertNotIn("secrets.MFI_", follow_up)
+        self.assertNotIn("RELEASE_KEYSTORE_BASE64", follow_up)
+
+    def test_follow_up_workflows_accept_correlation_id(self):
+        for workflow_path, title in (
+            (".github/workflows/pages.yml", "CarPaly Pages deploy"),
+            (".github/workflows/release-docs-sync.yml", "CarPaly release docs sync"),
+        ):
+            workflow = (ROOT / workflow_path).read_text(encoding="utf-8")
+            self.assertIn("dispatch_id:", workflow)
+            self.assertIn(title, workflow)
 
     def test_signer_preflight_is_manual_main_only_and_read_only(self):
         workflow = (ROOT / ".github/workflows/android.yml").read_text(encoding="utf-8")
@@ -527,8 +564,8 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("published, edited, deleted", workflow)
         self.assertIn("schedule:", workflow)
         self.assertIn("workflow_dispatch:", workflow)
-        self.assertIn("workflow_run:", workflow)
-        self.assertIn("github.event.workflow_run.event == 'workflow_dispatch'", workflow)
+        self.assertNotIn("workflow_run:", workflow)
+        self.assertIn("dispatch_id:", workflow)
 
     def test_docs_sync_does_not_trigger_on_its_own_push_or_pr(self):
         workflow = (ROOT / ".github/workflows/release-docs-sync.yml").read_text(encoding="utf-8")
@@ -571,6 +608,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("contents: read", workflow)
         self.assertIn("scripts.test_release_docs_sync", workflow)
         self.assertIn("scripts.test_release_signing_preflight", workflow)
+        self.assertIn("scripts.test_release_intent", workflow)
         self.assertNotIn("contents: write", workflow)
         self.assertNotIn("secrets.RELEASE_", workflow)
         self.assertNotIn("secrets.MFI_", workflow)

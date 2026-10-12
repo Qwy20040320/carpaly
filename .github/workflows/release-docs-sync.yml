@@ -1,23 +1,22 @@
 name: Release documentation sync
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch' && inputs.dispatch_id != '' && format('CarPaly release docs sync ({0})', inputs.dispatch_id) || format('CarPaly release docs sync ({0})', github.sha) }}
 on:
   release:
     types: [published, edited, deleted]
   schedule:
     - cron: '17 4 * * *'
   workflow_dispatch:
-  workflow_run:
-    workflows: [Android checks]
-    types: [completed]
+    inputs:
+      dispatch_id:
+        description: Correlation ID for a release follow-up dispatch
+        required: false
+        type: string
 permissions:
   contents: read
 jobs:
   sync:
-    if: >-
-      github.repository == 'Qwy20040320/carpaly' &&
-      (github.event_name != 'workflow_run' ||
-      (github.event.workflow_run.event == 'workflow_dispatch' &&
-      startsWith(github.event.workflow_run.head_branch, 'v1.') &&
-      github.event.workflow_run.conclusion == 'success'))
+    if: github.repository == 'Qwy20040320/carpaly'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

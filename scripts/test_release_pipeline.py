@@ -83,11 +83,15 @@ if args[0] == "api":
 elif args[0] == "release" and len(args) > 1 and args[1] == "create":
     tag = args[2]
     notes = args[args.index("--notes") + 1]
+    prerelease = "--prerelease" in args
+    if "--target" in args:
+        state["tag_created"] = True
+        state["tag_commit"] = args[args.index("--target") + 1]
     state["release"] = {
         "id": 4242,
         "tag_name": tag,
         "draft": True,
-        "prerelease": True,
+        "prerelease": prerelease,
         "name": args[args.index("--title") + 1],
         "body": notes,
     }
@@ -128,6 +132,27 @@ else:
     fail("unhandled gh command: " + repr(args))
 '''
 
+FAKE_GIT = r'''#!/usr/bin/env python3
+import json
+import os
+import sys
+
+state = json.loads(open(os.environ["FAKE_GH_STATE"], encoding="utf-8").read())
+args = sys.argv[1:]
+if args and args[0] == "ls-remote":
+    if state.get("fail_tag_lookup"):
+        print("simulated remote ref lookup failure", file=sys.stderr)
+        raise SystemExit(128)
+    if state.get("tag_missing") and not state.get("tag_created"):
+        raise SystemExit(2)
+    tag = next((item.removeprefix("refs/tags/") for item in args if item.startswith("refs/tags/") and not item.endswith("^{}")), "")
+    commit = state.get("tag_commit", "a" * 40)
+    print(f"{commit}\trefs/tags/{tag}")
+    raise SystemExit(0)
+print("unexpected git invocation", file=sys.stderr)
+raise SystemExit(1)
+'''
+
 
 def load_archiver():
     spec = importlib.util.spec_from_file_location("package_source_archive", ARCHIVER_PATH)
@@ -143,7 +168,7 @@ def sha256(payload: bytes) -> str:
 
 
 class SourceArchiveTests(unittest.TestCase):
-    def test_authenticated_release_requires_explicit_manual_dispatch(self):
+    def test_authenticated_release_requires_manual_or_reviewed_main_intent(self):
         workflow = (ROOT / ".github/workflows/android.yml").read_text(encoding="utf-8")
         self.assertIn(":mobile:lintRelease", workflow)
         self.assertIn(":mobile:verifyStandaloneAuthentication", workflow)
@@ -154,6 +179,10 @@ class SourceArchiveTests(unittest.TestCase):
         self.assertIn("default: false", workflow)
         self.assertIn("github.event_name == 'workflow_dispatch'", workflow)
         self.assertIn("inputs.publish_authenticated_release == true", workflow)
+        self.assertIn("release_intent:", workflow)
+        self.assertIn("needs.check.result == 'success'", workflow)
+        self.assertIn("needs.release_intent.outputs.should_publish == 'true'", workflow)
+        self.assertIn("config/release-intent.json", (ROOT / "scripts/release_intent.py").read_text(encoding="utf-8"))
         self.assertNotIn("tags: ['v1.*']", workflow)
         self.assertNotIn("debug-apks-and-sha256", workflow)
         self.assertNotIn("mobile/build/outputs/apk/debug/*.apk", workflow)
@@ -292,6 +321,9 @@ class PublisherTests(unittest.TestCase):
             "downloads": 0,
             "corrupt_download": corrupt_download,
             "fail_upload_name": fail_upload_name,
+            "tag_missing": False,
+            "tag_created": False,
+            "tag_commit": "a" * 40,
         }
         state_path.write_text(json.dumps(state), encoding="utf-8")
         remote = root / "remote"
@@ -300,6 +332,9 @@ class PublisherTests(unittest.TestCase):
         gh = fake_bin / "gh"
         gh.write_text(FAKE_GH, encoding="utf-8", newline="\n")
         gh.chmod(0o755)
+        fake_git = fake_bin / "git"
+        fake_git.write_text(FAKE_GIT, encoding="utf-8", newline="\n")
+        fake_git.chmod(0o755)
         env = os.environ.copy()
         env.update({
             "PATH": str(fake_bin) + os.pathsep + env.get("PATH", ""),
@@ -314,6 +349,8 @@ class PublisherTests(unittest.TestCase):
             "APK_SIZE": str(apk.stat().st_size),
             "APK_VERSION_CODE": "39",
             "RELEASE_COMMIT": "a" * 40,
+            "AUTO_CREATE_TAG": "false",
+            "RELEASE_PRERELEASE": "true",
             "RELEASE_SIGNING_CERT_SHA256": "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90",
             "SOURCE_ZIP_PATH": str(source),
             "SOURCE_ZIP_NAME": self.source_name,
@@ -451,6 +488,7 @@ class PublisherTests(unittest.TestCase):
         state = self.read_state(state_path)
         state["assets"] = assets
         state_path.write_text(json.dumps(state), encoding="utf-8")
+        env["RELEASE_PRERELEASE"] = "false"
         with folder:
             result = self.run_publisher(env)
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -459,6 +497,54 @@ class PublisherTests(unittest.TestCase):
             self.assertEqual(state["release"]["name"], "Formal title")
             self.assertEqual(state["release"]["body"], original_body)
             self.assertFalse(state["release"]["prerelease"])
+
+    def test_auto_release_creates_tag_only_with_verified_draft_assets_ready(self):
+        folder, env, state_path, *_ = self.prepare()
+        state = self.read_state(state_path)
+        state["tag_missing"] = True
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+        env["AUTO_CREATE_TAG"] = "true"
+        with folder:
+            result = self.run_publisher(env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            state = self.read_state(state_path)
+            self.assertTrue(state["tag_created"])
+            self.assertEqual(state["tag_commit"], "a" * 40)
+            self.assertFalse(state["release"]["draft"])
+            self.assertTrue(state["release"]["prerelease"])
+
+    def test_manual_release_refuses_to_create_a_missing_tag(self):
+        folder, env, state_path, *_ = self.prepare()
+        state = self.read_state(state_path)
+        state["tag_missing"] = True
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+        with folder:
+            result = self.run_publisher(env)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("manual tag-based publication requires", result.stderr)
+            self.assertEqual(self.read_state(state_path)["creates"], 0)
+
+    def test_auto_release_can_create_a_stable_release_with_stable_notes(self):
+        folder, env, state_path, *_ = self.prepare()
+        env["RELEASE_PRERELEASE"] = "false"
+        with folder:
+            result = self.run_publisher(env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            state = self.read_state(state_path)
+            self.assertFalse(state["release"]["prerelease"])
+            self.assertIn("GitHub channel: stable", state["release"]["body"])
+            self.assertNotIn("Public Preview", state["release"]["name"])
+
+    def test_existing_tag_for_another_commit_blocks_before_release_api_mutation(self):
+        folder, env, state_path, *_ = self.prepare()
+        state = self.read_state(state_path)
+        state["tag_commit"] = "b" * 40
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+        with folder:
+            result = self.run_publisher(env)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("different source commit", result.stderr)
+            self.assertEqual(self.read_state(state_path)["creates"], 0)
 
 
 if __name__ == "__main__":

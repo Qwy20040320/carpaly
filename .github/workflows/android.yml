@@ -44,11 +44,94 @@ jobs:
         run: |
           bash -n .github/scripts/publish-authenticated-apk-release.sh
           python3 -m py_compile scripts/package_source_archive.py
+          python3 -m py_compile scripts/release_intent.py scripts/release_review_gate.py scripts/dispatch_release_followups.py scripts/check_release_automation.py
+          python3 -m pip install --disable-pip-version-check -r requirements-ota.txt
           python3 scripts/check_workflow_action_pins.py
+          python3 scripts/check_pages_workflow.py
+          python3 scripts/check_release_automation.py
+          python3 scripts/validate_release_metadata.py
           python3 scripts/test_release_pipeline.py
-          python3 -m unittest scripts/test_android_versioning.py
+          python3 -m unittest \
+            scripts.test_android_versioning \
+            scripts.test_release_docs_sync \
+            scripts.test_release_signing_preflight \
+            scripts.test_release_intent \
+            scripts.test_release_review_gate \
+            scripts.test_release_followups \
+            scripts.test_ota_manifest \
+            scripts.test_build_site \
+            scripts.test_ota_public_key
           python3 scripts/android_versioning.py check
           python3 scripts/check_project_docs.py
+          python3 scripts/release_intent.py \
+            --commit "$GITHUB_SHA" --event pull_request --branch feature \
+            --conclusion success --main-sha "$GITHUB_SHA"
+          ruby -e 'require "yaml"; Dir.glob(".github/workflows/*.yml").each { |path| YAML.parse_file(path) }'
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          "$(go env GOPATH)/bin/actionlint" .github/workflows/*.yml
+  release_intent:
+    name: Gate an explicit release intent on main
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      should_publish: ${{ steps.gate.outputs.should_publish }}
+      release_tag: ${{ steps.gate.outputs.release_tag }}
+      version_name: ${{ steps.gate.outputs.version_name }}
+      version_code: ${{ steps.gate.outputs.version_code }}
+      prerelease: ${{ steps.gate.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Compare the release intent to the current main commit
+        id: gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin main --no-tags
+          main_sha="$(git rev-parse refs/remotes/origin/main)"
+          python3 scripts/release_intent.py \
+            --commit "$GITHUB_SHA" \
+            --event "$GITHUB_EVENT_NAME" \
+            --branch "$GITHUB_REF_NAME" \
+            --conclusion success \
+            --main-sha "$main_sha" \
+            --github-output "$GITHUB_OUTPUT"
+      - name: Require an approved merged PR for an enabled release intent
+        if: steps.gate.outputs.should_publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          review_dir="$(mktemp -d "$RUNNER_TEMP/carpaly-release-review.XXXXXX")"
+          trap 'rm -rf -- "$review_dir"' EXIT
+          associated="$review_dir/associated-pull-requests.json"
+          details="$review_dir/pull-request-details.json"
+          gh api "repos/$GH_REPO/commits/$GITHUB_SHA/pulls" > "$associated"
+          matches="$(jq -c --arg sha "$GITHUB_SHA" \
+            '[.[] | select(.state == "closed" and .merged_at != null and .merge_commit_sha == $sha and .base.ref == "main")]' \
+            "$associated")"
+          [[ "$(jq 'length' <<<"$matches")" == 1 ]] || {
+            echo "Release intent must be associated with exactly one merged PR to main." >&2
+            exit 1
+          }
+          pr_number="$(jq -r '.[0].number' <<<"$matches")"
+          gh pr view "$pr_number" --repo "$GH_REPO" \
+            --json number,reviewDecision,mergedAt,baseRefName,isDraft > "$details"
+          python3 scripts/release_review_gate.py \
+            --commit "$GITHUB_SHA" \
+            --pull-requests-file "$associated" \
+            --pull-request-file "$details"
       - name: Validate clean source archive packaging
         shell: bash
         run: |
@@ -153,16 +236,26 @@ jobs:
         run: rm -rf -- "$RUNNER_TEMP/carpaly-signer-preflight"
 
   authenticated_release:
-    name: Manually build and publish authenticated Release APK
-    needs: check
+    name: Build and publish an explicitly authorized authenticated Release APK
+    needs: [check, release_intent]
     if: >-
-      github.event_name == 'workflow_dispatch' &&
+      always() &&
+      needs.check.result == 'success' &&
+      github.repository == 'Qwy20040320/carpaly' &&
+      ((github.event_name == 'workflow_dispatch' &&
       inputs.publish_authenticated_release == true &&
       inputs.verify_release_signer_only == false &&
-      startsWith(github.ref, 'refs/tags/v1.')
+      startsWith(github.ref, 'refs/tags/v1.')) ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      needs.release_intent.result == 'success' &&
+      needs.release_intent.outputs.should_publish == 'true'))
     runs-on: ubuntu-latest
-    # This environment scopes the existing release secrets/tag policy; it does not require an approval reviewer.
+    # Automatic main publishing requires main to be added to this Environment's allowed refs;
+    # keep the existing v1.*.* tag rule for manual recovery and signer-only checks.
     environment: mfi-public-release
+    concurrency:
+      group: carpaly-authenticated-release
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
@@ -172,12 +265,23 @@ jobs:
           persist-credentials: false
       # A tag push alone never publishes. This job runs only after an explicit manual dispatch input.
       - name: Confirm release tag is contained in main
+        env:
+          RELEASE_TAG: ${{ needs.release_intent.outputs.release_tag || github.ref_name }}
+          AUTO_CREATE_TAG: ${{ needs.release_intent.outputs.should_publish || 'false' }}
         shell: bash
         run: |
           set -euo pipefail
           git fetch origin main --no-tags
-          release_commit="$(git rev-parse "${GITHUB_REF_NAME}^{commit}")"
           main_commit="$(git rev-parse origin/main)"
+          if [[ "$AUTO_CREATE_TAG" == true ]]; then
+            [[ "$GITHUB_REF" == "refs/heads/main" && "$main_commit" == "$GITHUB_SHA" ]] || {
+              echo "Automatic release source is no longer the current main commit." >&2
+              exit 1
+            }
+            release_commit="$GITHUB_SHA"
+          else
+            release_commit="$(git rev-parse "${RELEASE_TAG}^{commit}")"
+          fi
           git merge-base --is-ancestor "$release_commit" "$main_commit" || {
             echo "Release tag does not point to a commit contained in main." >&2
             exit 1
@@ -233,6 +337,7 @@ jobs:
         env:
           DIPLAY_AUTH_ASSETS_DIR: ${{ runner.temp }}/carpaly-auth-assets
           RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}
+          RELEASE_VERSION_NAME: ${{ needs.release_intent.outputs.version_name }}
         shell: bash
         run: |
           set -euo pipefail
@@ -249,7 +354,7 @@ jobs:
           }
           badging="$("$build_tools/aapt" dump badging "$apk")"
           grep -Fq "package: name='com.shihab.diplay.hudtest'" <<<"$badging"
-          expected_version="${GITHUB_REF_NAME#v}"
+          expected_version="${RELEASE_VERSION_NAME:-${GITHUB_REF_NAME#v}}"
           grep -Fq "versionName='$expected_version'" <<<"$badging"
           version_code="$(sed -nE "s/.*versionCode='([0-9]+)'.*/\1/p" <<<"$badging" | head -n 1)"
           [[ "$version_code" =~ ^[1-9][0-9]*$ ]]
@@ -289,7 +394,8 @@ jobs:
       - name: Package commit-pinned source and release checksums
         id: package
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.release_intent.outputs.release_tag || github.ref_name }}
+          RELEASE_SOURCE_REF: ${{ github.sha }}
           APK_PATH: ${{ steps.apk.outputs.apk_path }}
           APK_NAME: ${{ steps.apk.outputs.apk_name }}
           APK_SHA256: ${{ steps.apk.outputs.sha256 }}
@@ -300,7 +406,7 @@ jobs:
           release_dir="$RUNNER_TEMP/carpaly-release"
           source_name="${APK_NAME%.apk}-source.zip"
           source_path="$release_dir/$source_name"
-          python3 scripts/package_source_archive.py --ref "$RELEASE_TAG" --output "$source_path"
+          python3 scripts/package_source_archive.py --ref "$RELEASE_SOURCE_REF" --output "$source_path"
           source_sha="$(sha256sum "$source_path" | awk '{ print $1 }')"
           source_size="$(stat -c '%s' "$source_path")"
           sums_path="$release_dir/SHA256SUMS.txt"
@@ -325,8 +431,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.release_intent.outputs.release_tag || github.ref_name }}
           RELEASE_COMMIT: ${{ github.sha }}
+          AUTO_CREATE_TAG: ${{ needs.release_intent.outputs.should_publish || 'false' }}
+          RELEASE_PRERELEASE: ${{ needs.release_intent.outputs.prerelease || 'true' }}
           RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}
           APK_PATH: ${{ steps.apk.outputs.apk_path }}
           APK_NAME: ${{ steps.apk.outputs.apk_name }}
@@ -349,3 +457,30 @@ jobs:
           rm -rf -- "$RUNNER_TEMP/carpaly-auth-assets" "$RUNNER_TEMP/carpaly-release" \
             "$RUNNER_TEMP/carpaly-release-remote" "$RUNNER_TEMP/carpaly-release-published" \
             "$RUNNER_TEMP/carpaly-signing" "$RUNNER_TEMP/carpaly-python-cache"
+
+  publication_follow_up:
+    name: Dispatch public site and release-document synchronization
+    needs: authenticated_release
+    if: needs.authenticated_release.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch and verify Pages and release-document workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_RUN_ID: ${{ github.run_id }}
+          RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          follow_up_sha="$(gh api "repos/$GH_REPO/commits/main" --jq .sha)"
+          python3 scripts/dispatch_release_followups.py \
+            --repository "$GH_REPO" \
+            --dispatch-id "${RELEASE_RUN_ID}-${RELEASE_RUN_ATTEMPT}" \
+            --commit "$follow_up_sha" \
+            --timeout-seconds 2400 \
+            --poll-seconds 15
