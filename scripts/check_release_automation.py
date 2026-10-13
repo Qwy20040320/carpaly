@@ -83,6 +83,8 @@ def main() -> int:
     docs_sync = (ROOT / ".github/workflows/release-docs-sync.yml").read_text(encoding="utf-8")
     if "workflow_run:" in docs_sync:
         failures.append("Release docs workflow has a duplicate workflow_run path alongside explicit dispatch")
+    if "concurrency:\n  group: carpaly-release-docs-sync\n  cancel-in-progress: false" not in docs_sync:
+        failures.append("Release docs reconciliation must serialize shared-branch writes without cancelling a running sync")
     if "AUTO_CREATE_TAG" not in publisher or '--target "$RELEASE_COMMIT"' not in publisher:
         failures.append("Automatic tag creation is not bound to the already verified source commit")
     if "RELEASE_PRERELEASE" not in publisher or "preserving it without mutation" not in publisher:

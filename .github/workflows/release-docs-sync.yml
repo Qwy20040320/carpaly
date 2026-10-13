@@ -14,6 +14,13 @@ on:
         type: string
 permissions:
   contents: read
+
+# Reconcile a shared branch from the complete live Release set. Serialize all event and
+# scheduled runs so concurrent commits/pushes cannot race the automation branch.
+concurrency:
+  group: carpaly-release-docs-sync
+  cancel-in-progress: false
+
 jobs:
   sync:
     if: github.repository == 'Qwy20040320/carpaly'
