@@ -34,6 +34,7 @@ GitHub 最新正式 Release：[v1.1.51](https://github.com/Qwy20040320/carpaly/r
 
 | 标签 | 类型 | 日期 | APK 附件 | 源码提交 |
 | --- | --- | --- | --- | --- |
+| [v1.1.52](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.52) | 预发布 | 2026-10-13 | [CarPaly-XingyueL-v1.1.52.apk](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.52/CarPaly-XingyueL-v1.1.52.apk) | `64703e7dced8` |
 | [v1.1.51](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.51) | 正式 | 2026-10-11 | [CarPaly-XingyueL-v1.1.51.apk](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.51/CarPaly-XingyueL-v1.1.51.apk) | `ef8bec6e0d20` |
 | [v1.1.5](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.5) | 预发布 | 2026-10-11 | [CarPaly-XingyueL1.1.5-Upgrade-Test-build20261011.apk](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.5/CarPaly-XingyueL1.1.5-Upgrade-Test-build20261011.apk) | `ef8bec6e0d20` |
 | [v1.1.4](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.4) | 预发布 | 2026-10-11 | [CarPaly-XingyueL1.1.4.apk](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.4/CarPaly-XingyueL1.1.4.apk) | `ef8bec6e0d20` |
@@ -42,7 +43,7 @@ GitHub 最新正式 Release：[v1.1.51](https://github.com/Qwy20040320/carpaly/r
 ### 当前候选版本
 
 <!-- CARPALY:CANDIDATE:START -->
-**本地候选：v1.1.52 / versionCode 40。** 尚无公开标签或 Release；不提供公开下载链接。本地候选版本；尚无 GitHub 标签或公开 Release。当前资料没有证明本候选修复了任何实车 CarPlay、音频或车机显示故障。后续版本号按台账递增（v1.1.53、v1.1.54……至 v1.1.6）；未发布版本不预先宣称功能已完成。
+**v1.1.52 已存在 GitHub Release。** 请先补齐 `config/release-documentation.json` 中的发布说明资料后再同步候选状态。
 <!-- CARPALY:CANDIDATE:END -->
 
 ### 近期实车反馈（用户报告，非维护者复测）
