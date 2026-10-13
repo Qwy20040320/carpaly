@@ -56,8 +56,11 @@ class AndroidVersioningTests(unittest.TestCase):
             and item["versionCode"] == version.version_code
             and item["channel"] == current["channel"]
         )
-        self.assertEqual("delivered", allocation["status"])
-        self.assertRegex(allocation["artifactSha256"], r"^[a-f0-9]{64}$")
+        if allocation["status"] == "reserved":
+            self.assertIsNone(allocation["artifactSha256"])
+        else:
+            self.assertEqual("delivered", allocation["status"])
+            self.assertRegex(allocation["artifactSha256"], r"^[a-f0-9]{64}$")
         history = {
             item["tag"]: (item["versionName"], item["versionCode"])
             for item in ledger["verifiedHistoricalDeliveries"]

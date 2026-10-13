@@ -386,6 +386,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private var sessionDock: CarPlayDock? = null
     private var hideTopBar = true
     private var hideBottomBar = true
+    private val runtimeTraceGate = CarPlayRuntimeTraceGate()
     private var safeAreaDrawOutside = true
     private var locationReportingEnabled = false
     private var locationPermissionAvailable = false
@@ -747,7 +748,16 @@ class CarPlayHostActivity : ComponentActivity() {
         } else {
             vpnReady = false
             awaitingVpnConsent = true
-            vpnConsent.launch(consent)
+            VpnConsentLaunchGuard.launch(
+                input = consent,
+                launch = { vpnConsent.launch(it) },
+                onUnavailable = {
+                    awaitingVpnConsent = false
+                    vpnReady = false
+                    appendLog("System VPN consent activity unavailable; wired startup remains blocked")
+                    setStatus(getString(R.string.vpn_consent_screen_unavailable))
+                },
+            )
         }
     }
 
@@ -1409,13 +1419,32 @@ class CarPlayHostActivity : ComponentActivity() {
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             fun androidx.core.graphics.Insets.asContentInsets() = CarPlayContentInsets(left, top, right, bottom)
+            val statusVisible = insets.isVisible(WindowInsetsCompat.Type.statusBars())
+            val statusInsets = insets.getInsets(WindowInsetsCompat.Type.statusBars()).asContentInsets()
+            val navigationVisible = insets.isVisible(WindowInsetsCompat.Type.navigationBars())
+            val navigationInsets = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).asContentInsets()
+            val cutoutInsets = insets.getInsets(WindowInsetsCompat.Type.displayCutout()).asContentInsets()
+            // Some Geely head units draw an OEM status strip outside Android's reported insets.
+            // When the app requested immersive mode but Android reports no visible status bar,
+            // reserve the platform's declared status-bar height as a conservative viewport fallback.
+            val geelyOverlayFallbackTop = if (
+                activeHeadUnitProfile == HeadUnitProfile.GEELY_XINGYUE_L && hideTopBar &&
+                !statusVisible && statusInsets.top == 0
+            ) systemDimension("status_bar_height") else 0
             val safe = CarPlaySystemBarInsets.resolve(
-                statusBarsVisible = insets.isVisible(WindowInsetsCompat.Type.statusBars()),
-                statusBars = insets.getInsets(WindowInsetsCompat.Type.statusBars()).asContentInsets(),
-                navigationBarsVisible = insets.isVisible(WindowInsetsCompat.Type.navigationBars()),
-                navigationBars = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).asContentInsets(),
-                displayCutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout()).asContentInsets(),
+                statusBarsVisible = statusVisible,
+                statusBars = statusInsets,
+                navigationBarsVisible = navigationVisible,
+                navigationBars = navigationInsets,
+                displayCutout = cutoutInsets,
+                hiddenStatusBarFallbackTop = geelyOverlayFallbackTop,
             )
+            val insetTrace = "statusVisible=$statusVisible status=${statusInsets.left},${statusInsets.top}," +
+                "${statusInsets.right},${statusInsets.bottom} navigationVisible=$navigationVisible " +
+                "navigation=${navigationInsets.left},${navigationInsets.top},${navigationInsets.right}," +
+                "${navigationInsets.bottom} cutout=${cutoutInsets.left},${cutoutInsets.top}," +
+                "${cutoutInsets.right},${cutoutInsets.bottom} geelyOverlayFallbackTop=$geelyOverlayFallbackTop"
+            if (runtimeTraceGate.shouldReportInsets(insetTrace)) appendLog("Window insets: $insetTrace")
             view.setPadding(safe.left, safe.top, safe.right, safe.bottom)
             insets
         }
@@ -4501,6 +4530,15 @@ class CarPlayHostActivity : ComponentActivity() {
         val view = videoView ?: return
         if (viewWidth <= 0 || viewHeight <= 0) return
         val content = contentRect(viewWidth, viewHeight)
+        val screenPosition = IntArray(2)
+        view.getLocationOnScreen(screenPosition)
+        val canvas = sessionDisplay
+        val geometryTrace = "viewport=${viewWidth}x$viewHeight screen=${screenPosition[0]},${screenPosition[1]} " +
+            "content=${content.left},${content.top},${content.width},${content.height} " +
+            "canvas=${canvas?.width ?: 0}x${canvas?.height ?: 0} coordinateBasis=shared-video-touch"
+        if (runtimeTraceGate.shouldReportGeometry(geometryTrace)) {
+            appendLog("Video/touch geometry: $geometryTrace")
+        }
         val fallback = fallbackVideoView
         if (fallback != null) {
             val bounds = CarPlaySurfaceBounds.from(content)

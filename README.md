@@ -42,7 +42,7 @@ GitHub 最新正式 Release：[v1.1.51](https://github.com/Qwy20040320/carpaly/r
 ### 当前候选版本
 
 <!-- CARPALY:CANDIDATE:START -->
-**本地候选：v1.1.52 / versionCode 40。** 尚无公开标签或 Release；不提供公开下载链接。本地候选版本；尚无 GitHub 标签或公开 Release。当前资料没有证明本候选修复了任何实车 CarPlay、音频或车机显示故障。后续版本号按台账递增（v1.1.53、v1.1.54……至 v1.1.6）；未发布版本不预先宣称功能已完成。
+**本地开发候选：v1.1.53 / versionCode 41。** 版本号已预留，但原 Release 签名凭据当前不可用，尚未生成可交付 APK；没有公开标签或 Release，也不提供下载链接。音乐自动暂停、导航无声、顶部状态栏遮挡以及 HUD、仪表和其他车辆功能均未由本候选实车验证。后续版本按不可变版本台账递增至 `v1.1.6`；未发布版本不预先承诺功能或下载。
 <!-- CARPALY:CANDIDATE:END -->
 
 ### 近期实车反馈（用户报告，非维护者复测）
@@ -74,20 +74,6 @@ GitHub 最新正式 Release：[v1.1.51](https://github.com/Qwy20040320/carpaly/r
 ## 与 DiPlay 的关系
 
 CarPaly 是 [shihabal3amri/DiPlay](https://github.com/shihabal3amri/DiPlay) 的社区派生项目，保留原项目要求的 GPL-3.0 许可与版权声明，并在此基础上开发 KX11 候选适配、诊断和日志功能。原项目远程仍作为开发参考；详见下方许可证与致谢。
-
-## CarPaly 独立版本体系
-
-CarPaly 使用自己的版本序列：`1.1.1 → 1.1.2 → 1.1.3 → 1.1.4 → …`。每次发布递增末尾数字，例如 `1.1.9` 之后是 `1.1.10`；DiPlay 上游版本只用于源码跟踪和移植，不会改变 CarPaly 的应用版本。
-
-| 历史标签（仅作版本映射） | CarPaly 展示映射 | 实际 APK 元数据 | 当前状态 |
-| --- | --- | --- | --- |
-| `v0.1.0`（已清理） | `v1.1.1`（仅映射） | `versionName=0.2.15-hud-test`，`versionCode=34`，`com.shihab.diplay.hudtest`，Android Debug 签名 | Release 与 Git 标签已从 GitHub 删除；APK 仅保存在本地忽略备份目录，不提供公开下载 |
-| `v0.1.1`（已清理） | `v1.1.2`（仅映射） | Release 标记为 Debug/HUD-test；未重新审计 APK 内部版本 | Release 与 Git 标签已从 GitHub 删除；APK 仅保存在本地忽略备份目录，不提供公开下载 |
-| `v0.2.16`（已清理） | `v1.1.3`（仅映射） | `versionName=0.2.16-hud-test`，`versionCode=35`，`com.shihab.diplay.hudtest`，Android Debug 签名 | Release 与 Git 标签已从 GitHub 删除；APK 仅保存在本地忽略备份目录，不提供公开下载 |
-
-上表中的新编号只是历史映射，不代表旧 APK 的内部版本，也未改写其提交或二进制；例如不能把 `v0.2.16` 的旧 APK 说成内部版本 `1.1.3`。上述三个 GitHub Release、公开附件和 Git 标签现已清理；原提交仍可从项目分支历史追溯，旧 APK 只保存在本地受忽略的备份目录，旧下载链接不再可用。
-
-GitHub 发布标签、日期、正式/预发布状态、实际附件及可验证的资产摘要，以本页“当前发布状态”同步区和 GitHub Releases API 为准。Android `versionCode` 的不可变分配由 `config/android-version-ledger.json` 管理；本地候选不等于 GitHub 发布。所有用户 APK 必须使用固定 Release 签名、包名 `com.shihab.diplay.hudtest` 与 `CarPaly-XingyueL-v{versionName}.apk` 命名规则。不得交付 Debug APK 或覆盖已交付历史文件。DiPlay 上游版本只用于源码跟踪和移植，不改变 CarPaly 自身版本序列。
 
 ## 车型兼容性
 
@@ -315,7 +301,6 @@ The tested APK version is not recorded for this report; do not infer full-model 
 
 - The read-only diagnostic center, opt-in bounded logs, filtering, redaction, and user-triggered ZIP export are implemented and covered by software tests.
 - Reverse-camera/360 takeover and Geely-specific HUD integration are not implemented.
-- Historical tags `v0.1.0`, `v0.1.1`, and `v0.2.16` are retained only as version-history mappings in this README; their GitHub Releases, public APK assets, and tags have been removed. Their commits remain reachable from project branches, while APK backups remain local and are not download links.
 <!-- CARPALY:ENGLISH_RELEASES:START -->
 Latest formal Release: [v1.1.51](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.51) (2026-10-11); [download APK](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.51/CarPaly-XingyueL-v1.1.51.apk) — package/version metadata, pinned signer, and uploaded asset digest verified.
 

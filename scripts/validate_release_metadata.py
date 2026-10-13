@@ -81,15 +81,20 @@ def validate_metadata(root: Path = ROOT) -> list[str]:
             for item in ledger.get("allocations", [])
             if item.get("versionName") == candidate.get("versionName")
             and item.get("versionCode") == current.get("versionCode")
+            and item.get("channel") == current.get("channel")
         ),
         None,
     )
     if allocation is None:
         errors.append("candidate version must have an immutable versionCode allocation")
-    elif allocation.get("status") != "delivered" or not SHA256.fullmatch(
-        str(allocation.get("artifactSha256", "")).lower()
-    ):
-        errors.append("local candidate must have an existing verified artifact record and SHA-256")
+    elif allocation.get("status") == "reserved":
+        if allocation.get("artifactSha256") is not None:
+            errors.append("reserved candidate must not claim an artifact SHA-256")
+    elif allocation.get("status") == "delivered":
+        if not SHA256.fullmatch(str(allocation.get("artifactSha256", "")).lower()):
+            errors.append("delivered candidate must have a verified artifact SHA-256")
+    else:
+        errors.append("candidate allocation must be reserved or have a verified delivered artifact")
     if current.get("channel") != "test":
         errors.append("this metadata candidate must not be marked as a stable release")
     if candidate.get("vehicleStatus") != "NOT_TESTED":

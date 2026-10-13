@@ -37,4 +37,7 @@
     <string name="settings_choose_iphone_title">اختر iPhone</string>
     <string name="settings_choose_iphone_description">يحتاج CarPlay اللاسلكي إلى iPhone مقترن قبل الاتصال.</string>
     <string name="settings_choose_iphone_action">اختيار iPhone</string>
+    <string name="settings_geely_capability_diagnostics">فحوصات قدرات GEELY</string>
+    <string name="settings_geely_capability_diagnostics_summary">ملاحظات للقدرات والأذونات للقراءة فقط. لا يتم استدعاء واجهات OEM ولا تُعد ميزات السيارة متحققة.</string>
+    <string name="settings_geely_refresh_capabilities">تحديث حالة القدرات</string>
 </resources>

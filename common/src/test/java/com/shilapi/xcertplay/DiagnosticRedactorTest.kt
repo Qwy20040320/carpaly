@@ -85,15 +85,20 @@ class DiagnosticRedactorTest {
         assertFalse(line.contains("C0:A6")); assertFalse(line.contains("192.168")); assertFalse(line.contains("012345")); assertFalse(line.contains("fe80"))
     }
     @Test fun vehicleAndPersonalIdentifiersAreRemovedFromExportableLines() {
-        assertNull(DiagnosticRedactor.redact("vehicle VIN=1HGCM82633A004352 read failed"))
+        // Synthetic scanner fixture only; it deliberately fails the VIN check digit.
+        val syntheticVin = "V1NTESTN0TREAL001"
+        assertEquals(17, syntheticVin.length)
+        assertNull(DiagnosticRedactor.redact("vehicle VIN=$syntheticVin read failed"))
         assertNull(DiagnosticRedactor.redact("phone_number=+1-202-555-0147"))
-        val safe = DiagnosticRedactor.redact("trace id 490154203237518 email=not-exported@example.org")
-        assertNull("sensitive field assignment must drop the entire line", safe)
-        val unlabelled = DiagnosticRedactor.redact("observed vehicle 1HGCM82633A004352 contact 202-555-0147")!!
-        assertFalse(unlabelled.contains("1HGCM82633A004352"))
+        assertNull(DiagnosticRedactor.redact("email=not-exported@example.org"))
+        val safe = DiagnosticRedactor.redact("trace id 490154203237518 contact not-exported@example.org")
+        assertNotNull(safe)
+        assertFalse(safe!!.contains("490154203237518"))
+        assertFalse(safe.contains("not-exported@example.org"))
+        val unlabelled = DiagnosticRedactor.redact("observed vehicle $syntheticVin contact 202-555-0147")!!
+        assertFalse(unlabelled.contains(syntheticVin))
         assertFalse(unlabelled.contains("202-555-0147"))
-    }
-    @Test fun logRotationIsBoundedAndRedactionHappensBeforeDisk() {
+    }    @Test fun logRotationIsBoundedAndRedactionHappensBeforeDisk() {
         val folder = Files.createTempDirectory("diplay-log-test").toFile()
         try {
             val maxFileBytes = 8 * 1024L

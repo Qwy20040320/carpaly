@@ -30,6 +30,16 @@ function Invoke-AdbReadOnly {
     return $result
 }
 
+function Invoke-AdbOptionalReadOnly {
+    param([string[]]$Arguments)
+
+    $result = & $adbPath @adbDeviceArgs @Arguments 2>&1
+    if ($LASTEXITCODE -ne 0 -or (($result -join "`n") -match '(?i)can.t find service|unknown service|service .* not found')) {
+        return @('[not exposed by this Android build]')
+    }
+    return $result
+}
+
 function Protect-DiagnosticLine {
     param([string]$Line)
 
@@ -66,17 +76,48 @@ foreach ($line in $packageLines) {
 }
 
 $audioLines = Invoke-AdbReadOnly -Arguments @('shell', 'dumpsys', 'audio') |
-    Select-String -Pattern 'Audio Focus|Focus request|AudioPlaybackConfiguration|attributes:|usage=|stream:|AudioTrack|device=' |
-    Select-Object -First 100
-Write-Output '--- audio routing snapshot'
+    Select-String -Pattern '(?i)audio.?focus|focus request|AudioPlaybackConfiguration|attributes:|usage=|content.?type|stream(?:\s|:|=)|volume|device|route|port|strategy|mode|duck|communication|speaker' |
+    Select-Object -First 180
+Write-Output '--- audio service: focus, streams, volumes, active attributes and routes'
 foreach ($line in $audioLines) {
     Protect-DiagnosticLine -Line $line.Line
 }
 
-$logLines = Invoke-AdbReadOnly -Arguments @('logcat', '-d', '-t', '250', '-s', 'AndroidRuntime:E', 'AudioTrack:W', 'DiPlay:W')
+function Write-OptionalFilteredQuery {
+    param([string]$Title, [string[]]$Arguments, [string]$Pattern, [int]$Limit = 120)
+
+    Write-Output "--- $Title"
+    $result = Invoke-AdbOptionalReadOnly -Arguments $Arguments
+    $matches = @($result | Select-String -Pattern $Pattern | Select-Object -First $Limit)
+    if ($matches.Count -eq 0) {
+        Write-Output '[no matching audio diagnostics exposed]'
+        return
+    }
+    foreach ($line in $matches) {
+        Protect-DiagnosticLine -Line $line.Line
+    }
+}
+
+Write-OptionalFilteredQuery -Title 'AudioFlinger playback tracks and output devices' `
+    -Arguments @('shell', 'dumpsys', 'media.audio_flinger') `
+    -Pattern '(?i)track|playback|output|device|route|stream|usage|attributes|session|sample.rate|port|mixer|state' -Limit 160
+Write-OptionalFilteredQuery -Title 'AudioPolicy devices, routing strategies and volume decisions' `
+    -Arguments @('shell', 'dumpsys', 'media.audio_policy') `
+    -Pattern '(?i)device|output|input|route|stream|strategy|volume|focus|duck|policy|available|active|communication|speaker|bluetooth' -Limit 160
+
+Write-OptionalFilteredQuery -Title 'Media sessions (state only; metadata/titles are excluded)' `
+    -Arguments @('shell', 'dumpsys', 'media_session') `
+    -Pattern '(?i)active sessions|playbackstate|state=|active=|package=|owner=|audiofocus|volume' -Limit 80
+
+$logLines = Invoke-AdbReadOnly -Arguments @(
+    'logcat', '-d', '-t', '500', '-v', 'time', '-s',
+    'AndroidRuntime:E', 'AudioTrack:W', 'AudioFlinger:W', 'AudioPolicy:W',
+    'AudioService:W', 'MediaFocusControl:W', 'DiPlay:W', 'DiPlay-MediaKeys:I', 'DiPlay-AudioFocus:I'
+)
 Write-Output '--- recent app/audio errors'
 foreach ($line in $logLines) {
     Protect-DiagnosticLine -Line ([string]$line)
 }
 
-Write-Output 'Collection complete. No CAN/UDS, broadcast, preference write, permission change, or vehicle-control command was sent.'
+Write-Output 'Repeat while parked for baseline music, a navigation prompt, Siri, and a phone call; compare focus, stream, route and volume/ducking lines.'
+Write-Output 'Collection complete. No CAN/UDS, broadcast, preference write, permission change, audio setting change, or vehicle-control command was sent.'

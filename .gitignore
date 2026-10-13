@@ -87,3 +87,6 @@ release-signing.properties
 *.apk
 *.aab
 /artifacts/
+
+# Locally installed static-analysis tools and unpacked third-party utilities.
+/tools/

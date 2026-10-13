@@ -37,4 +37,7 @@
     <string name="settings_choose_iphone_title">Elige tu iPhone</string>
     <string name="settings_choose_iphone_description">CarPlay inalámbrico necesita un iPhone emparejado para conectarse.</string>
     <string name="settings_choose_iphone_action">Elegir iPhone</string>
+    <string name="settings_geely_capability_diagnostics">Comprobaciones de capacidades GEELY</string>
+    <string name="settings_geely_capability_diagnostics_summary">Observaciones de solo lectura sobre capacidades y permisos. No se llaman interfaces OEM ni se verifican funciones del vehículo.</string>
+    <string name="settings_geely_refresh_capabilities">Actualizar estado de capacidades</string>
 </resources>

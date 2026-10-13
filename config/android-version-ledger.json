@@ -26,8 +26,8 @@
     }
   ],
   "current": {
-    "versionName": "1.1.52",
-    "versionCode": 40,
+    "versionName": "1.1.53",
+    "versionCode": 41,
     "channel": "test"
   },
   "allocations": [
@@ -44,6 +44,13 @@
       "channel": "test",
       "status": "delivered",
       "artifactSha256": "f5bea98180dadad4fecab77031f7373dc423b59c420bc9b085372b524c7e8c64"
+    },
+    {
+      "versionName": "1.1.53",
+      "versionCode": 41,
+      "channel": "test",
+      "status": "reserved",
+      "artifactSha256": null
     }
   ]
 }

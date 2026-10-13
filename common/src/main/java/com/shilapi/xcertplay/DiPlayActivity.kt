@@ -1310,6 +1310,16 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private fun diagnosticsSettings(content: LinearLayout) {
         settingsPageTitle(content, getString(R.string.diagnostics), getString(R.string.settings_diagnostics_summary))
         renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.DIAGNOSTICS))
+        section(content, getString(R.string.settings_geely_capability_diagnostics), R.drawable.ic_dp_diagnostics) { card ->
+            card.addView(label(getString(R.string.settings_geely_capability_diagnostics_summary), 14, MUTED))
+            val snapshot = label(GeelyVehicleCapabilityRegistry.inspect(this).asDiagnosticText(), 13, MUTED)
+            snapshot.setTextIsSelectable(true)
+            snapshot.setPadding(0, dp(12), 0, dp(12))
+            card.addView(snapshot)
+            card.addView(button(getString(R.string.settings_geely_refresh_capabilities), false) {
+                snapshot.text = GeelyVehicleCapabilityRegistry.inspect(this).asDiagnosticText()
+            }, matchButton(12, 56))
+        }
     }
 
     internal data class SettingsSearchResult(val title: String, val category: SettingsCategory)
@@ -5027,6 +5037,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     appendLine("Session: ${if (CarPlayBackgroundSession.active) "active" else if (CarPlayBackgroundSession.hasSession()) "connecting" else "stopped"}")
                     appendLine(PhoneWakeDiagnostics.report(appContext))
                     appendLine("Head-unit board: ${Build.BOARD}; hardware: ${Build.HARDWARE}; build: ${Build.DISPLAY}")
+                    appendLine()
+                    appendLine("--- GEELY read-only capability gates (not runtime/OEM verification) ---")
+                    appendLine(GeelyVehicleCapabilityRegistry.inspect(appContext).asDiagnosticText())
                     appendLine()
                     appendLine("--- Current cluster display diagnostics (even when disabled) ---")
                     appendLine(ClusterMapPresentation.diagnosticReport(appContext))

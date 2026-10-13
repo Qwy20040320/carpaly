@@ -14,8 +14,8 @@ Release state wording conflict: GitHub marks this as formal while the hand-writt
 
 ## Local Candidate (Not Published)
 
-`v1.1.52` / versionCode `40` — local-only metadata; no GitHub tag, Release, or download link.
-本地候选版本；尚无 GitHub 标签或公开 Release。当前资料没有证明本候选修复了任何实车 CarPlay、音频或车机显示故障。
+`v1.1.53` / versionCode `41` — local development candidate with a reserved allocation; no deliverable APK, GitHub tag, Release, or download link.
+本地开发候选版本，版本号已预留；原 Release 签名凭据当前不可用，尚未生成可交付 APK，也没有公开标签或下载链接。当前没有证据证明本候选修复了任何实车故障。
 
 Vehicle validation is separate from software release status. See the root README; user feedback is labeled and unverified features remain NOT_TESTED.
 <!-- CARPALY:CHANGELOG:END -->

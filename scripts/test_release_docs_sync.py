@@ -310,12 +310,14 @@ class RenderingTests(unittest.TestCase):
         self.assertNotIn("releases/download", rendered)
 
     def test_candidate_tag_without_release_is_not_called_published(self):
-        rendered = sync.render_candidate(METADATA, LEDGER, set(), {"v1.1.52"})
+        tag = f"v{METADATA['candidate']['versionName']}"
+        rendered = sync.render_candidate(METADATA, LEDGER, set(), {tag})
         self.assertIn("Git 标签已存在", rendered)
         self.assertNotIn("已存在 GitHub Release", rendered)
 
     def test_public_candidate_tag_is_not_rendered_as_local(self):
-        rendered = sync.render_candidate(METADATA, LEDGER, {"v1.1.52"}, {"v1.1.52"})
+        tag = f"v{METADATA['candidate']['versionName']}"
+        rendered = sync.render_candidate(METADATA, LEDGER, {tag}, {tag})
         self.assertIn("已存在 GitHub Release", rendered)
 
     def test_vehicle_feedback_preserves_user_reported_status(self):
