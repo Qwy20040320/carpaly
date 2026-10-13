@@ -1,0 +1,8 @@
+{
+  "algorithm": "SHA256withECDSA-P256",
+  "keyId": "phase11-cross-language-test",
+  "manifestSignature": "MEUCIGkXflPmHN9rlWVgURXjLQgI7U1IUnsPpFcrmpWYXEC2AiEA1FZCv3J7Po1eJtBb9cZSDDqnNbuK+pY2Nyu9+c5mK+s=",
+  "publicKeyX509Base64": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEmjQINEH95gHvccNhXDjdj3v/2gaHJcLt7Tp6sEWsjHc8V/kE15jD4ge+3mbH+bmJThYcwOOGOahfcmE/A5yGvA==",
+  "schemaVersion": 1,
+  "signedPayload": "eyJhdmFpbGFibGUiOmZhbHNlLCJjaGFubmVsIjoic3RhYmxlIiwiZXhwaXJlc0F0IjoiMjAyNi0xMS0xMlQwMDowMDowMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTAtMTNUMDA6MDA6MDBaIiwibWFuaWZlc3RLZXlJZCI6InBoYXNlMTEtY3Jvc3MtbGFuZ3VhZ2UtdGVzdCIsIm1pbmltdW1TdXBwb3J0ZWRWZXJzaW9uQ29kZSI6MzYsInBhY2thZ2VOYW1lIjoiY29tLnNoaWhhYi5kaXBsYXkuaHVkdGVzdCIsInNjaGVtYVZlcnNpb24iOjF9"
+}

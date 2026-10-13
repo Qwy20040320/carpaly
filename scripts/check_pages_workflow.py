@@ -94,6 +94,11 @@ def main() -> int:
         failures.append("Production signer and Pages deploy jobs do not use separate Environments")
     if "scripts/ota_publisher_policy.py" not in ota or "scripts/validate_ota_release_target.py" not in ota:
         failures.append("Production OTA preflight does not require a reviewed trust root and a real verified Release")
+    if "python scripts/verify_ota_environment.py" not in ota or "GITHUB_TOKEN: ${{ github.token }}" not in ota:
+        failures.append("Production OTA preflight does not inspect the real Environment branch/reviewer rules")
+    preflight_job = ota.partition("  preflight:")[2].partition("  sign_and_stage:")[0]
+    if "actions: read" not in preflight_job:
+        failures.append("OTA Environment inspection lacks the minimum Actions read permission")
     if "--required-release-tag" not in ota or "build_ota_manifests.py" not in ota:
         failures.append("Production OTA publisher does not bind signing to an exact verified Release tag")
     if "--prior-site-state" not in ota or "--local-ota-feed-dir" not in ota \

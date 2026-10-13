@@ -5,11 +5,14 @@ import android.util.Base64
 import com.shilapi.xcertplay.host.R
 import org.json.JSONObject
 import java.io.IOException
+import java.math.BigInteger
 import java.net.URI
 import java.security.KeyFactory
 import java.security.MessageDigest
 import java.security.Signature
 import java.security.interfaces.ECKey
+import java.security.spec.ECFieldFp
+import java.security.spec.ECParameterSpec
 import java.security.spec.X509EncodedKeySpec
 import java.text.ParsePosition
 import java.text.SimpleDateFormat
@@ -74,7 +77,7 @@ internal object UpdateManifestVerifier {
                 val key = KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(encoded))
                 require(key.algorithm.equals("EC", ignoreCase = true))
                 val parameters = (key as? ECKey)?.params ?: error("Missing EC parameters")
-                require(parameters.curve.field.fieldSize == 256 && parameters.order.bitLength() == 256)
+                require(isP256Curve(parameters))
             }.onFailure { throw UpdateManifestException("OTA trust-store public key cannot be parsed") }
             trusted[keyId] = encoded
         }
@@ -126,6 +129,8 @@ internal object UpdateManifestVerifier {
         }
         val signatureValid = runCatching {
             val publicKey = KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(publicKeyBytes))
+            val parameters = (publicKey as? ECKey)?.params ?: error("Missing EC parameters")
+            require(isP256Curve(parameters))
             Signature.getInstance("SHA256withECDSA").run {
                 initVerify(publicKey)
                 update(payloadBytes)
@@ -253,6 +258,25 @@ internal object UpdateManifestVerifier {
         val names = json.keys()
         while (names.hasNext()) add(names.next())
     }
+
+    /** Require the named NIST P-256 domain parameters, not merely any 256-bit EC curve. */
+    internal fun isP256Curve(parameters: ECParameterSpec): Boolean = runCatching {
+        val actualField = parameters.curve.field as? ECFieldFp ?: return false
+        actualField.p == P256_P &&
+            parameters.curve.a == P256_A &&
+            parameters.curve.b == P256_B &&
+            parameters.generator.affineX == P256_GX &&
+            parameters.generator.affineY == P256_GY &&
+            parameters.order == P256_N &&
+            parameters.cofactor == 1
+    }.getOrDefault(false)
+
+    private val P256_P = BigInteger("FFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF", 16)
+    private val P256_A = BigInteger("FFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFC", 16)
+    private val P256_B = BigInteger("5AC635D8AA3A93E7B3EBBD55769886BC651D06B0CC53B0F63BCE3C3E27D2604B", 16)
+    private val P256_GX = BigInteger("6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296", 16)
+    private val P256_GY = BigInteger("4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5", 16)
+    private val P256_N = BigInteger("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551", 16)
 
     private fun ByteArray.toHex(): String = joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
 

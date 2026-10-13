@@ -16,6 +16,11 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.exceptions import InvalidSignature
 
 if __package__:
+    from .ota_key_material import parse_p256_pkcs8_private_key
+else:
+    from ota_key_material import parse_p256_pkcs8_private_key
+
+if __package__:
     from .sync_release_docs import _released_records, public_releases
 else:
     from sync_release_docs import _released_records, public_releases
@@ -50,12 +55,9 @@ def _parse_private_key(pem: str) -> ec.EllipticCurvePrivateKey:
     if not pem.strip():
         raise ManifestError("OTA manifest signing private key is not configured")
     try:
-        key = serialization.load_pem_private_key(pem.encode("utf-8"), password=None)
-    except (ValueError, TypeError) as exc:
-        raise ManifestError("OTA manifest signing key is not a readable unencrypted PEM key") from exc
-    if not isinstance(key, ec.EllipticCurvePrivateKey) or not isinstance(key.curve, ec.SECP256R1):
-        raise ManifestError("OTA manifest signing key must be ECDSA P-256")
-    return key
+        return parse_p256_pkcs8_private_key(pem.encode("utf-8"))
+    except (UnicodeEncodeError, ValueError) as exc:
+        raise ManifestError("OTA manifest signing key must be an unencrypted PKCS#8 ECDSA P-256 key") from exc
 
 
 def public_key_id_matches(private_key: ec.EllipticCurvePrivateKey, key_id: str,
@@ -112,7 +114,8 @@ def verify_envelope(envelope: Mapping[str, Any], trusted_keys: Mapping[str, Any]
     if not isinstance(records, list):
         raise ManifestError("App-pinned OTA trust store is malformed")
     matches = [item for item in records if isinstance(item, Mapping) and item.get("keyId") == key_id]
-    if len(matches) != 1 or matches[0].get("status") not in {"active", "retiring"}:
+    if len(matches) != 1 or matches[0].get("algorithm") != "SHA256withECDSA-P256" \
+            or matches[0].get("status") not in {"active", "retiring"}:
         raise ManifestError("OTA manifest signer is not trusted by this app")
     try:
         public_der = base64.b64decode(matches[0]["publicKeyX509Base64"], validate=True)

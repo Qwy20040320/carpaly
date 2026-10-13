@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import base64
+import json
 import unittest
 from datetime import datetime, timezone
+from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -111,6 +113,26 @@ class SignedManifestTests(unittest.TestCase):
         with self.assertRaises(ota_manifest.ManifestError):
             ota_manifest.verify_envelope(tampered, self.trust)
 
+    def test_jca_compatible_cross_language_vector_verifies_in_python(self):
+        fixture = json.loads((Path(__file__).resolve().parents[1] /
+                              "common/src/test/resources/ota_cross_language_vector.json")
+                             .read_text(encoding="utf-8"))
+        envelope = {
+            "schemaVersion": fixture["schemaVersion"],
+            "manifestKeyId": fixture["keyId"],
+            "signedPayload": fixture["signedPayload"],
+            "manifestSignature": fixture["manifestSignature"],
+        }
+        trust = {"schemaVersion": 1, "keys": [{
+            "keyId": fixture["keyId"],
+            "algorithm": fixture["algorithm"],
+            "status": "active",
+            "publicKeyX509Base64": fixture["publicKeyX509Base64"],
+        }]}
+        payload = ota_manifest.verify_envelope(envelope, trust)
+        self.assertEqual("phase11-cross-language-test", payload["manifestKeyId"])
+        self.assertEqual("stable", payload["channel"])
+
     def test_signing_key_must_match_an_active_app_pinned_key(self):
         other = ec.generate_private_key(ec.SECP256R1()).private_bytes(
             serialization.Encoding.PEM,
@@ -119,6 +141,25 @@ class SignedManifestTests(unittest.TestCase):
         ).decode("ascii")
         with self.assertRaisesRegex(ota_manifest.ManifestError, "does not match"):
             ota_manifest.sign_payload({"manifestKeyId": KEY_ID}, KEY_ID, other, self.trust)
+
+    def test_signing_requires_pkcs8_pem_not_sec1_ec_private_key(self):
+        sec1 = self.private_key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.TraditionalOpenSSL,
+            serialization.NoEncryption(),
+        ).decode("ascii")
+        with self.assertRaisesRegex(ota_manifest.ManifestError, "PKCS#8"):
+            ota_manifest.sign_payload(
+                {"manifestKeyId": KEY_ID}, KEY_ID, sec1, self.trust,
+            )
+
+    def test_verifier_rejects_pinned_record_with_wrong_algorithm_label(self):
+        envelope = ota_manifest.sign_payload(
+            {"manifestKeyId": KEY_ID}, KEY_ID, self.private_pem, self.trust,
+        )
+        mislabeled = {"keys": [{**self.trust["keys"][0], "algorithm": "ES256"}]}
+        with self.assertRaisesRegex(ota_manifest.ManifestError, "not trusted"):
+            ota_manifest.verify_envelope(envelope, mislabeled)
 
     def test_revoked_key_is_not_accepted_for_verification(self):
         payload = {"schemaVersion": 1, "manifestKeyId": KEY_ID}

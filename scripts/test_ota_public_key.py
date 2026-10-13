@@ -41,6 +41,26 @@ class OtaPublicKeyExportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "key id"):
             public_key_record(self.pem, "invalid key id")
 
+    def test_rejects_sec1_ec_private_key_even_though_crypto_provider_can_parse_it(self) -> None:
+        sec1 = self.key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.TraditionalOpenSSL,
+            serialization.NoEncryption(),
+        )
+        self.assertIn(b"BEGIN EC PRIVATE KEY", sec1)
+        with self.assertRaisesRegex(ValueError, "PKCS#8"):
+            public_key_record(sec1, "synthetic-test-key")
+
+    def test_rejects_encrypted_pkcs8(self) -> None:
+        encrypted = self.key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.BestAvailableEncryption(b"synthetic-test-password"),
+        )
+        self.assertIn(b"BEGIN ENCRYPTED PRIVATE KEY", encrypted)
+        with self.assertRaisesRegex(ValueError, "PKCS#8"):
+            public_key_record(encrypted, "synthetic-test-key")
+
 
 if __name__ == "__main__":
     unittest.main()

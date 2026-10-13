@@ -11,7 +11,11 @@ from pathlib import Path
 from typing import Any
 
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ec
+
+if __package__:
+    from .ota_key_material import parse_p256_pkcs8_private_key
+else:
+    from ota_key_material import parse_p256_pkcs8_private_key
 
 
 def public_key_record(private_key_pem: bytes, key_id: str) -> dict[str, Any]:
@@ -20,14 +24,7 @@ def public_key_record(private_key_pem: bytes, key_id: str) -> dict[str, Any]:
         for character in key_id
     ):
         raise ValueError("OTA key id must contain 1-64 ASCII letters, digits, dot, underscore, or hyphen")
-    try:
-        signer = serialization.load_pem_private_key(private_key_pem, password=None)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("OTA signing key must be a readable unencrypted PKCS#8 PEM") from exc
-    if not isinstance(signer, ec.EllipticCurvePrivateKey) or not isinstance(
-        signer.curve, ec.SECP256R1
-    ):
-        raise ValueError("OTA signing key must use ECDSA P-256")
+    signer = parse_p256_pkcs8_private_key(private_key_pem)
     public_der = signer.public_key().public_bytes(
         serialization.Encoding.DER,
         serialization.PublicFormat.SubjectPublicKeyInfo,

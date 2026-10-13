@@ -4,6 +4,7 @@ import android.util.Base64
 import com.shilapi.xcertplay.host.R
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Before
@@ -15,6 +16,12 @@ import org.robolectric.annotation.Config
 import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.Signature
+import java.security.AlgorithmParameters
+import java.security.spec.ECGenParameterSpec
+import java.security.spec.ECFieldFp
+import java.security.spec.ECParameterSpec
+import java.security.spec.EllipticCurve
+import java.util.Base64 as JcaBase64
 import java.util.Date
 
 @RunWith(RobolectricTestRunner::class)
@@ -26,7 +33,9 @@ class UpdateManifestVerifierTest {
 
     @Before
     fun setUp() {
-        keyPair = KeyPairGenerator.getInstance("EC").apply { initialize(256) }.generateKeyPair()
+        keyPair = KeyPairGenerator.getInstance("EC").apply {
+            initialize(ECGenParameterSpec("secp256r1"))
+        }.generateKeyPair()
         trustedKeys = mapOf(KEY_ID to keyPair.public.encoded)
         RuntimeEnvironment.getApplication().getSharedPreferences("carpaly_ota_replay_guard", 0)
             .edit().clear().commit()
@@ -87,6 +96,54 @@ class UpdateManifestVerifierTest {
             .bufferedReader().use { it.readText() })
         assertEquals(0, trustStore.getJSONArray("keys").length())
         assertThrows(UpdateManifestException::class.java) { UpdateManifestVerifier.loadPinnedKeys(context) }
+    }
+
+    @Test
+    fun onlyExactNistP256ParametersAreAccepted() {
+        val p256 = AlgorithmParameters.getInstance("EC").run {
+            init(ECGenParameterSpec("secp256r1"))
+            getParameterSpec(ECParameterSpec::class.java)
+        }
+        val field = p256.curve.field as ECFieldFp
+        val differentCurve = EllipticCurve(
+            field,
+            (p256.curve.a + java.math.BigInteger.ONE).mod(field.p),
+            p256.curve.b,
+            p256.curve.seed,
+        )
+        val sameSizeNonP256 = ECParameterSpec(
+            differentCurve, p256.generator, p256.order, p256.cofactor,
+        )
+        assertEquals(256, sameSizeNonP256.curve.field.fieldSize)
+        assertEquals(256, sameSizeNonP256.order.bitLength())
+        assertFalse(UpdateManifestVerifier.isP256Curve(sameSizeNonP256))
+    }
+
+    @Test
+    fun verifiesPythonEcdsaFixtureWithTheAndroidJcaVerifier() {
+        val fixture = JSONObject(
+            javaClass.getResourceAsStream("/ota_cross_language_vector.json")!!
+                .bufferedReader().use { it.readText() },
+        )
+        val trust = mapOf(
+            fixture.getString("keyId") to JcaBase64.getDecoder()
+                .decode(fixture.getString("publicKeyX509Base64")),
+        )
+        val envelope = JSONObject()
+            .put("schemaVersion", fixture.getInt("schemaVersion"))
+            .put("manifestKeyId", fixture.getString("keyId"))
+            .put("signedPayload", fixture.getString("signedPayload"))
+            .put("manifestSignature", fixture.getString("manifestSignature"))
+            .toString()
+
+        val verified = UpdateManifestVerifier.verifyEnvelope(
+            envelope, UpdateChannel.STABLE, 40L, trust,
+            Date.from(java.time.Instant.parse("2026-10-13T12:00:00Z")),
+        )
+        assertEquals("phase11-cross-language-test", verified.keyId)
+        assertEquals("stable", JSONObject(String(
+            JcaBase64.getDecoder().decode(fixture.getString("signedPayload")), Charsets.UTF_8,
+        )).getString("channel"))
     }
 
     @Test
