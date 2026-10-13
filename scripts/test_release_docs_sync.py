@@ -478,14 +478,15 @@ class GitHubApiAndMutationSafetyTests(unittest.TestCase):
 
 
 class WorkflowContractTests(unittest.TestCase):
-    def test_android_release_requires_manual_dispatch_or_reviewed_main_intent(self):
+    def test_android_release_requires_reviewed_main_intent_and_has_no_manual_or_tag_release_path(self):
         workflow = (ROOT / ".github/workflows/android.yml").read_text(encoding="utf-8")
-        self.assertIn("github.event_name == 'workflow_dispatch'", workflow)
-        self.assertIn("inputs.publish_authenticated_release == true", workflow)
+        self.assertNotIn("publish_authenticated_release", workflow)
         self.assertIn("default: false", workflow)
-        self.assertIn("needs: [check, release_intent]", workflow)
+        self.assertIn("needs: [check, release_intent, release_authorization]", workflow)
         self.assertIn("needs.check.result == 'success'", workflow)
         self.assertIn("needs.release_intent.outputs.should_publish == 'true'", workflow)
+        self.assertIn("needs.release_authorization.result == 'success'", workflow)
+        self.assertIn("github.event_name == 'push' && github.ref == 'refs/heads/main'", workflow)
         self.assertNotIn("tags: ['v1.*']", workflow)
 
     def test_release_job_uses_protected_environment_and_tag_on_main_check(self):
@@ -496,7 +497,8 @@ class WorkflowContractTests(unittest.TestCase):
 
     def test_full_ci_runs_for_prs_while_release_intent_remains_main_only(self):
         workflow = (ROOT / ".github/workflows/android.yml").read_text(encoding="utf-8")
-        gate = workflow.split("  release_intent:", 1)[1].split("  release_signer_preflight:", 1)[0]
+        gate = workflow.split("  release_intent:", 1)[1].split("  release_authorization:", 1)[0]
+        release_job = workflow.split("  authenticated_release:", 1)[1].split("  publication_follow_up:", 1)[0]
         release_job = workflow.split("  authenticated_release:", 1)[1].split("  publication_follow_up:", 1)[0]
         intent_source = (ROOT / "scripts/release_intent.py").read_text(encoding="utf-8")
         self.assertIn("name: Run full CI and gate an explicit release intent", gate)
@@ -509,6 +511,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("needs.release_intent.result == 'success'", release_job)
         self.assertNotIn("environment:", gate)
         self.assertNotIn("secrets.", gate)
+        self.assertNotIn("inputs.publish_authenticated_release", release_job)
         self.assertIn("persist-credentials: false", gate)
 
     def test_post_release_workflows_are_dispatched_with_narrow_permissions(self):
@@ -536,15 +539,26 @@ class WorkflowContractTests(unittest.TestCase):
             self.assertIn("dispatch_id:", workflow)
             self.assertIn(title, workflow)
 
+    def test_pages_tag_events_do_not_conflict_with_main_restricted_environment(self):
+        pages = (ROOT / ".github/workflows/pages.yml").read_text(encoding="utf-8")
+        android = (ROOT / ".github/workflows/android.yml").read_text(encoding="utf-8")
+        dispatcher = (ROOT / "scripts/dispatch_release_followups.py").read_text(encoding="utf-8")
+        self.assertIn("branches: [main]", pages)
+        self.assertIn("workflow_dispatch:", pages)
+        self.assertNotIn("\n  release:\n", pages)
+        self.assertIn("github.ref == 'refs/heads/main'", pages)
+        self.assertIn("scripts/dispatch_release_followups.py", android)
+        self.assertIn("pages.yml", dispatcher)
+
     def test_signer_preflight_is_manual_main_only_and_read_only(self):
         workflow = (ROOT / ".github/workflows/android.yml").read_text(encoding="utf-8")
-        check_job = workflow.split("jobs:", 1)[1].split("  release_signer_preflight:", 1)[0]
+        check_job = workflow.split("jobs:", 1)[1].split("  release_intent:", 1)[0]
         preflight_job = workflow.split("  release_signer_preflight:", 1)[1].split(
             "  authenticated_release:", 1
         )[0]
         self.assertIn("inputs.verify_release_signer_only != true", check_job)
         self.assertIn("inputs.verify_release_signer_only == true", preflight_job)
-        self.assertIn("inputs.publish_authenticated_release == false", preflight_job)
+        self.assertNotIn("publish_authenticated_release", preflight_job)
         self.assertIn("github.ref == 'refs/heads/main'", preflight_job)
         self.assertNotIn("needs: check", preflight_job)
         self.assertIn("environment: mfi-public-release", preflight_job)
@@ -559,11 +573,11 @@ class WorkflowContractTests(unittest.TestCase):
             "./gradlew",
         ):
             self.assertNotIn(forbidden, preflight_job)
-        self.assertIn("inputs.verify_release_signer_only == false", workflow)
+        self.assertIn("default: false", workflow)
 
     def test_pr_check_job_does_not_read_release_environment_secrets(self):
         workflow = (ROOT / ".github/workflows/android.yml").read_text(encoding="utf-8")
-        check_job = workflow.split("jobs:", 1)[1].split("  release_signer_preflight:", 1)[0]
+        check_job = workflow.split("jobs:", 1)[1].split("  release_intent:", 1)[0]
         self.assertNotIn("secrets.RELEASE_", check_job)
         self.assertNotIn("secrets.MFI_", check_job)
 

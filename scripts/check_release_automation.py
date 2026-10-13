@@ -14,6 +14,8 @@ def main() -> int:
     android = (ROOT / ".github/workflows/android.yml").read_text(encoding="utf-8")
     publisher = (ROOT / ".github/scripts/publish-authenticated-apk-release.sh").read_text(encoding="utf-8")
     intent = json.loads((ROOT / "config/release-intent.json").read_text(encoding="utf-8"))
+    review_policy = json.loads((ROOT / "config/release-review-policy.json").read_text(encoding="utf-8"))
+    review_gate_source = (ROOT / "scripts/release_review_gate.py").read_text(encoding="utf-8")
     failures: list[str] = []
 
     if intent.get("schemaVersion") != 1 or intent.get("enabled") is not False:
@@ -38,7 +40,7 @@ def main() -> int:
         failures.append("Authenticated Release job is not scoped to mfi-public-release")
     if "permissions:\n      contents: write" not in android:
         failures.append("Authenticated Release job lacks the minimum Release asset write permission")
-    gate = android.partition("  release_intent:")[2].partition("  release_signer_preflight:")[0]
+    gate = android.partition("  release_intent:")[2].partition("  release_authorization:")[0]
     if not gate or "secrets." in gate or "environment:" in gate:
         failures.append("The no-secret release-intent gate must not access an Environment or Secrets")
     check = android.partition("  check:")[2].partition("  release_intent:")[0]
@@ -58,10 +60,44 @@ def main() -> int:
     for marker in required_checks:
         if marker not in check:
             failures.append(f"Full main CI is missing release validation: {marker}")
-    if "pull-requests: read" not in gate or "reviewDecision" not in gate or "RELEASE_REVIEW_STATUS=PASS" not in (
-        ROOT / "scripts/release_review_gate.py"
-    ).read_text(encoding="utf-8"):
-        failures.append("Automatic publication does not require an approved merged PR for the exact release commit")
+    authorization = android.partition("  release_authorization:")[2].partition("  release_signer_preflight:")[0]
+    if not authorization or "needs: [check, release_intent]" not in authorization \
+            or "pull-requests: read" not in authorization:
+        failures.append("Automatic release authorization does not follow successful full CI with read-only PR access")
+    if "scripts/release_review_gate.py" not in authorization or "--ruleset-file" not in authorization \
+            or "--ruleset-suite-file" not in authorization or "--reviews-file" not in authorization \
+            or "--ci-conclusion success" not in authorization:
+        failures.append("Automatic release gate does not validate live protected-main, non-bypassed merge, and exact CI evidence")
+    if "gh api --paginate \"repos/$GH_REPO/rulesets?per_page=100\"" not in authorization \
+            or "main-ruleset.json" not in authorization:
+        failures.append("Automatic release gate does not fetch the active repository ruleset")
+    if "rulesets/rule-suites?ref=refs/heads/main" not in authorization \
+            or "rulesets/rule-suites/$suite_id" not in authorization \
+            or "RELEASE_POLICY_READ_TOKEN" not in authorization \
+            or "environment: release-policy-audit" not in authorization:
+        failures.append("Release gate cannot read exact GitHub rule-suite evidence from its protected Environment")
+    if "needs: [check, release_intent, release_authorization]" not in android \
+            or "needs.release_authorization.result == 'success'" not in android:
+        failures.append("Automatic main publishing is not blocked on the human merge authorization job")
+    publisher_job = android.partition("  authenticated_release:")[2].partition("  publication_follow_up:")[0]
+    if "github.event_name == 'push' && github.ref == 'refs/heads/main'" not in publisher_job \
+            or "inputs.publish_authenticated_release" in publisher_job or "refs/tags/v1." in publisher_job:
+        failures.append("Authenticated Release must be publishable only from a protected-main release-intent push")
+    if "publish_authenticated_release" in android:
+        failures.append("Manual/tag-based authenticated Release dispatch remains enabled")
+    if "RELEASE_REVIEW_STATUS=PASS" not in review_gate_source or "single_maintainer" not in review_gate_source \
+            or "multi_maintainer" not in review_gate_source or "_verify_applied_ruleset" not in review_gate_source \
+            or 'suite.get("result") != "pass"' not in review_gate_source:
+        failures.append("Review gate lacks explicit single/multi maintainer branches and non-bypassed exact-rule proof")
+    if review_policy.get("schemaVersion") != 1 or review_policy.get("mode") not in {
+        "single_maintainer", "multi_maintainer",
+    } or not review_policy.get("authorizedMergers"):
+        failures.append("Release review policy must explicitly select a mode and human merger allowlist")
+    if review_policy.get("mode") == "single_maintainer" and "merged_by" not in review_gate_source:
+        failures.append("Single-maintainer mode must require a real authorized human merger")
+    if "reviews" not in review_gate_source or "commit_id" not in review_gate_source \
+            or "login.casefold() == author.casefold()" not in review_gate_source:
+        failures.append("Multi-maintainer mode must require a current independent approval, not author self-approval")
     follow_up = android.partition("  publication_follow_up:")[2]
     if "actions: write" not in follow_up or "contents: read" not in follow_up:
         failures.append("Post-release workflow dispatch does not use the narrow Actions permission split")

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "repository": "Qwy20040320/carpaly",
+  "mainBranch": "main",
+  "mainRulesetName": "Protect main - CarPaly",
+  "mode": "single_maintainer",
+  "authorizedMergers": [
+    "Qwy20040320"
+  ],
+  "minimumIndependentApprovals": 1
+}

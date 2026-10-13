@@ -184,11 +184,48 @@ def read_release_snapshot(path: Path) -> tuple[list[dict[str, Any]], dict[str, A
     return releases, verifications
 
 
+def validate_required_release_tag(
+    tag: str, *, releases: list[dict[str, Any]], tags: list[dict[str, Any]],
+    ledger: dict[str, Any], verifications: dict[str, Any], policy: dict[str, Any],
+    main_verified_tags: set[str], verified_checksum_tags: set[str],
+) -> None:
+    """Require a requested, actually published Release with verified APK proof on current main."""
+    if not re.fullmatch(r"v\d+\.\d+\.\d+", tag):
+        raise ota_manifest.ManifestError("OTA publication requires a semantic version Release tag")
+    public_matches = [release for release in release_docs.public_releases(releases)
+                     if release.get("tag_name") == tag]
+    if len(public_matches) != 1:
+        raise ota_manifest.ManifestError("Requested OTA version is not one unique published GitHub Release")
+    proof = verifications.get(tag)
+    if not isinstance(proof, dict) or proof.get("status") != "PASS":
+        raise ota_manifest.ManifestError("Requested OTA Release lacks matching verified APK and checksum evidence")
+    if tag not in main_verified_tags:
+        raise ota_manifest.ManifestError("Requested OTA Release tag is not contained in current main")
+    if tag not in verified_checksum_tags:
+        raise ota_manifest.ManifestError("Requested OTA Release lacks matching verified APK and checksum evidence")
+    records = ota_manifest.verified_channel_records(
+        releases=releases,
+        tags=tags,
+        repository=REPOSITORY,
+        ledger=ledger,
+        verifications=verifications,
+        policy=policy,
+        main_verified_tags=main_verified_tags,
+        verified_checksum_tags=verified_checksum_tags,
+    )
+    if not any(isinstance(record, dict) and record.get("releaseTag") == tag for record in records.values()):
+        raise ota_manifest.ManifestError(
+            "Requested OTA Release does not match the immutable version ledger, package, signer, and feed policy"
+        )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=Path("site/updates"))
     parser.add_argument("--release-snapshot", type=Path,
                         help="use the exact public Release evidence snapshot created by build_site.py")
+    parser.add_argument("--required-release-tag",
+                        help="require this exact published, APK-verified Release to be merged into current main")
     parser.add_argument("--private-key-env", default="OTA_MANIFEST_SIGNING_PRIVATE_KEY_PEM")
     parser.add_argument("--key-id-env", default="OTA_MANIFEST_SIGNING_KEY_ID")
     args = parser.parse_args(argv)
@@ -220,6 +257,12 @@ def main(argv: list[str] | None = None) -> int:
                 )
         checksum_tags = verified_checksum_tags(releases, verifications)
         merged_tags = tags_merged_to_main(releases, tags, fetch_main_commit())
+        if args.required_release_tag:
+            validate_required_release_tag(
+                args.required_release_tag, releases=releases, tags=tags, ledger=ledger,
+                verifications=verifications, policy=policy, main_verified_tags=merged_tags,
+                verified_checksum_tags=checksum_tags,
+            )
         envelopes = ota_manifest.prepare_signed_channels(
             releases=releases,
             tags=tags,
@@ -234,6 +277,14 @@ def main(argv: list[str] | None = None) -> int:
             verified_checksum_tags=checksum_tags,
         )
         paths = ota_manifest.write_channels(args.output, envelopes)
+        for path in paths:
+            try:
+                envelope = json.loads(path.read_text(encoding="utf-8"))
+                payload = ota_manifest.verify_envelope(envelope, trust)
+            except (OSError, json.JSONDecodeError, ota_manifest.ManifestError) as exc:
+                raise ota_manifest.ManifestError("Written OTA manifest did not pass its app trust-store check") from exc
+            if payload.get("channel") != path.stem:
+                raise ota_manifest.ManifestError("Written OTA manifest channel does not match its output name")
     except ota_manifest.ManifestError as exc:
         print(f"OTA_MANIFEST_STATUS=BLOCKED: {exc}", file=sys.stderr)
         return 2

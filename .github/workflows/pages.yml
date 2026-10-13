@@ -1,4 +1,4 @@
-name: Publish CarPaly download site and signed OTA feeds
+name: Publish CarPaly download site
 run-name: >-
   ${{ github.event_name == 'workflow_dispatch' && inputs.dispatch_id != '' && format('CarPaly Pages deploy ({0})', inputs.dispatch_id) || format('CarPaly Pages deploy ({0})', github.sha) }}
 
@@ -8,9 +8,8 @@ on:
     paths:
       - 'site/**'
       - 'scripts/build_site.py'
+      - 'scripts/preserve_ota_feeds.py'
       - 'scripts/ota_manifest.py'
-      - 'scripts/build_ota_manifests.py'
-      - 'scripts/export_ota_public_key.py'
       - 'scripts/sync_release_docs.py'
       - 'config/ota-policy.json'
       - 'config/android-version-ledger.json'
@@ -19,14 +18,18 @@ on:
       - 'requirements-ota.txt'
       - '.github/workflows/pages.yml'
       - 'scripts/test_ota_public_key.py'
-  release:
-    types: [published, edited, deleted]
+      - 'scripts/test_preserve_ota_feeds.py'
   workflow_dispatch:
     inputs:
       dispatch_id:
         description: Correlation ID for a release follow-up dispatch
         required: false
         type: string
+      allow_initial_static_bootstrap:
+        description: Confirm this is the first static Pages deployment, with no deployed site or OTA feeds
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -40,7 +43,6 @@ jobs:
     if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment: ota-manifest-publisher
     permissions:
       contents: read
     steps:
@@ -53,26 +55,31 @@ jobs:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: requirements-ota.txt
-      - name: Install pinned OTA tooling
+      - name: Install pinned public-site tooling
         run: python -m pip install --disable-pip-version-check -r requirements-ota.txt
-      - name: Build public site from published verified Releases
-        run: python scripts/build_site.py --snapshot-out "$RUNNER_TEMP/carpaly-release-snapshot.json"
-      - name: Build signed Stable and Beta OTA manifests
+      - name: Build public site and preserve only verified live OTA feeds
         env:
-          OTA_MANIFEST_SIGNING_PRIVATE_KEY_PEM: ${{ secrets.OTA_MANIFEST_SIGNING_PRIVATE_KEY_PEM }}
-          OTA_MANIFEST_SIGNING_KEY_ID: ${{ vars.OTA_MANIFEST_SIGNING_KEY_ID }}
-        run: >-
-          python scripts/build_ota_manifests.py
-          --release-snapshot "$RUNNER_TEMP/carpaly-release-snapshot.json"
-          --output site/updates
-      - name: Run offline site and signing regression tests
+          ALLOW_INITIAL_STATIC_BOOTSTRAP: ${{ inputs.allow_initial_static_bootstrap }}
+        run: |
+          args=(
+            --snapshot-out "$RUNNER_TEMP/carpaly-release-snapshot.json"
+            --preserve-existing-ota-feeds
+            --output-dir "$RUNNER_TEMP/carpaly-site"
+          )
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$ALLOW_INITIAL_STATIC_BOOTSTRAP" == "true" ]]; then
+            args+=(--allow-initial-static-bootstrap)
+          fi
+          python scripts/build_site.py "${args[@]}"
+      - name: Run offline site, OTA, and feed-preservation tests
         env:
           PYTHONDONTWRITEBYTECODE: '1'
-        run: python -m unittest scripts.test_ota_manifest scripts.test_build_site scripts.test_ota_public_key
+        run: >-
+          python -m unittest scripts.test_ota_manifest scripts.test_build_site
+          scripts.test_ota_public_key scripts.test_preserve_ota_feeds
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # actions/configure-pages v5
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # actions/upload-pages-artifact v3
         with:
-          path: site
+          path: ${{ runner.temp }}/carpaly-site
 
   deploy:
     needs: build

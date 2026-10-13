@@ -168,19 +168,21 @@ def sha256(payload: bytes) -> str:
 
 
 class SourceArchiveTests(unittest.TestCase):
-    def test_authenticated_release_requires_manual_or_reviewed_main_intent(self):
+    def test_authenticated_release_requires_protected_main_intent_and_merge_authorization(self):
         workflow = (ROOT / ".github/workflows/android.yml").read_text(encoding="utf-8")
         self.assertIn(":mobile:lintRelease", workflow)
         self.assertIn(":mobile:verifyStandaloneAuthentication", workflow)
         self.assertIn(":mobile:assembleRelease", workflow)
         self.assertNotIn("MFI_PUBLIC_DISTRIBUTION_REVIEWED", workflow)
         self.assertNotIn("MFI_PUBLIC_DISTRIBUTION_AUTHORIZATION_REF", workflow)
-        self.assertIn("publish_authenticated_release:", workflow)
+        self.assertNotIn("publish_authenticated_release", workflow)
         self.assertIn("default: false", workflow)
-        self.assertIn("github.event_name == 'workflow_dispatch'", workflow)
-        self.assertIn("inputs.publish_authenticated_release == true", workflow)
         self.assertIn("release_intent:", workflow)
+        self.assertIn("release_authorization:", workflow)
+        self.assertIn("environment: release-policy-audit", workflow)
         self.assertIn("needs.check.result == 'success'", workflow)
+        self.assertIn("needs.release_authorization.result == 'success'", workflow)
+        self.assertIn("github.event_name == 'push' && github.ref == 'refs/heads/main'", workflow)
         self.assertIn("needs.release_intent.outputs.should_publish == 'true'", workflow)
         self.assertIn("config/release-intent.json", (ROOT / "scripts/release_intent.py").read_text(encoding="utf-8"))
         self.assertNotIn("tags: ['v1.*']", workflow)

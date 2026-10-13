@@ -13,11 +13,13 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from datetime import datetime
 from typing import Any, Mapping, Sequence
 
 if __package__:
-    from . import sync_release_docs as release_docs
+    from . import preserve_ota_feeds, sync_release_docs as release_docs
 else:
+    import preserve_ota_feeds
     import sync_release_docs as release_docs
 
 
@@ -26,9 +28,12 @@ SITE = ROOT / "site"
 CONTENT_PATH = SITE / "content.json"
 METADATA_PATH = ROOT / "config/release-documentation.json"
 LEDGER_PATH = ROOT / "config/android-version-ledger.json"
+OTA_POLICY_PATH = ROOT / "config/ota-policy.json"
+OTA_TRUST_PATH = ROOT / "common/src/main/res/raw/ota_manifest_public_keys.json"
 USER_AGENT = "CarPaly-Pages-builder"
 API_ROOT = "https://api.github.com"
 MAX_API_BYTES = 8 * 1024 * 1024
+REPOSITORY = "Qwy20040320/carpaly"
 
 TEXT: dict[str, dict[str, str]] = {
     "nav_home": {"en": "Home", "zh-Hans": "首页"},
@@ -133,6 +138,20 @@ def fetch_releases(repository: str) -> list[dict[str, Any]]:
             return result
         url = f"{API_ROOT}/repos/{repository}/releases?per_page=100&page={len(result) // 100 + 1}"
     raise ValueError("Release history exceeds the safe pagination limit")
+
+
+def fetch_tags(repository: str) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    url = f"{API_ROOT}/repos/{repository}/tags?per_page=100"
+    for _ in range(10):
+        page = github_json(url)
+        if not isinstance(page, list):
+            raise ValueError("GitHub Tags API response is not an array")
+        result.extend(item for item in page if isinstance(item, dict))
+        if len(page) < 100:
+            return result
+        url = f"{API_ROOT}/repos/{repository}/tags?per_page=100&page={len(result) // 100 + 1}"
+    raise ValueError("Git tag history exceeds the safe pagination limit")
 
 
 def require_readable_verification_assets(releases: Sequence[Mapping[str, Any]],
@@ -265,7 +284,8 @@ def page_url(base: str, lang: str, route: str) -> str:
 
 def render_page(*, content: Mapping[str, Any], records: Sequence[Mapping[str, Any]],
                 stable: Mapping[str, Any] | None, beta: Mapping[str, Any] | None,
-                base: str, lang: str, route: str) -> str:
+                base: str, lang: str, route: str,
+                ota_feed_channels: Mapping[str, bool]) -> str:
     is_zh = lang == "zh-Hans"
     title = content["name"] if not route else TEXT[{"downloads": "nav_downloads", "compatibility": "nav_compatibility",
                                                     "guide": "nav_guide", "history": "nav_history"}[route]][lang]
@@ -320,13 +340,32 @@ def render_page(*, content: Mapping[str, Any], records: Sequence[Mapping[str, An
         steps = "".join(f"<li>{e(step)}</li>" for step in TEXT["install_steps"][lang])
         faq = "".join(f"<article class=\"card\"><h3>{e(question)}</h3><p>{e(answer)}</p></article>"
                       for question, answer in TEXT["questions"][lang])
+        signed_channels = [channel for channel in ("stable", "beta") if channel in ota_feed_channels]
+        update_channels = [channel for channel in signed_channels if ota_feed_channels[channel]]
+        if not signed_channels:
+            ota_status = (
+                "Online updates are currently unavailable: no deployed production feed passed the app-pinned signature check."
+                if not is_zh else "在线更新暂不可用：当前没有已部署且通过应用内固定公钥校验的生产清单。"
+            )
+        elif update_channels:
+            names = ", ".join(channel.title() for channel in update_channels)
+            ota_status = (
+                f"A signed OTA feed with a verified Release is available for {names}; the app still verifies the APK's "
+                "Android signer before installation."
+                if not is_zh else f"{names} 通道已有签名更新清单；应用仍会在安装前独立验证 APK 的 Android 签名。"
+            )
+        else:
+            ota_status = (
+                "The signed OTA feed is reachable, but it currently advertises no eligible update."
+                if not is_zh else "签名 OTA 清单服务可用，但当前没有符合条件的更新版本。"
+            )
         content_html = (
             f'<section class="hero compact"><h1>{e(TEXT["guide"][lang])}</h1>'
             f'<p>{"Android 7.1 (API 25)+; package install permission must be permitted by the head unit." if not is_zh else "要求 Android 7.1（API 25）以上，且车机允许安装 APK。"}</p></section>'
             f'<section class="card"><ol>{steps}</ol></section><section><h2>FAQ</h2><div class="grid">{faq}</div></section>'
             f'<section class="card"><h2>{"Update security" if not is_zh else "更新安全"}</h2>'
             f'<p>{e("The app checks a signed manifest using an app-pinned public key, then verifies the APK SHA-256, package, version and actual Android signing certificate. The OTA signing key is not bundled in the app." if not is_zh else "应用使用内置固定公钥验证签名清单，再验证 APK SHA-256、包名、版本和 Android 实际签名证书。OTA 清单私钥不会打包进应用。")}</p>'
-            f'<p>{e("The production manifest trust key is not yet provisioned; OTA downloads therefore remain fail-closed." if not is_zh else "生产验签公钥尚未配置，OTA 下载当前保持 fail-closed。")}</p></section>'
+            f'<p>{e(ota_status)}</p></section>'
         )
     else:
         content_html = f'<section class="hero compact"><h1>{e(TEXT["history"][lang])}</h1></section><section>{history_table(records, lang)}</section>'
@@ -356,18 +395,97 @@ def render_legacy_redirect(base: str) -> str:
 
 
 def generate_site(*, content: Mapping[str, Any], records: Sequence[Mapping[str, Any]],
-                  output_dir: Path, base_url: str) -> dict[str, Any]:
+                  output_dir: Path, base_url: str,
+                  preserve_existing_ota_feeds: bool = False,
+                  allow_initial_static_bootstrap: bool = False,
+                  local_ota_feed_dir: Path | None = None,
+                  prior_site_state_path: Path | None = None,
+                  feed_fetcher: preserve_ota_feeds.FeedFetcher | None = None,
+                  feed_policy: Mapping[str, Any] | None = None,
+                  feed_trusted_keys: Mapping[str, Any] | None = None,
+                  now: datetime | None = None) -> dict[str, Any]:
     base = base_url.rstrip("/")
     stable = select_release(records, prerelease=False)
     beta = select_release(records, prerelease=True)
-    state = {
+    state: dict[str, Any] = {
         "schemaVersion": 1,
-        "repository": str(content["repository"]),
+        "repository": REPOSITORY,
         "generatedFrom": "public GitHub Releases API + matching APK verification assets",
         "stable": _release_json(stable),
         "beta": _release_json(beta),
         "publishedHistory": [_release_json(item) for item in records],
     }
+    feeds: dict[str, preserve_ota_feeds.VerifiedFeed] = {}
+    previous_history = {"stable": False, "beta": False}
+    policy = feed_policy if feed_policy is not None else read_json(OTA_POLICY_PATH)
+    trusted_keys = feed_trusted_keys if feed_trusted_keys is not None else read_json(OTA_TRUST_PATH)
+    if prior_site_state_path is not None:
+        try:
+            prior_site_state = json.loads(prior_site_state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise preserve_ota_feeds.FeedPreservationError("Prior Pages state artifact is unreadable") from exc
+        if not isinstance(prior_site_state, dict) or prior_site_state.get("schemaVersion") != 1 \
+                or prior_site_state.get("repository") != REPOSITORY:
+            raise preserve_ota_feeds.FeedPreservationError("Prior Pages state artifact has a wrong schema or repository")
+        history = prior_site_state.get("otaFeedEverPublished")
+        if not isinstance(history, dict) or any(not isinstance(history.get(c), bool) for c in ("stable", "beta")):
+            raise preserve_ota_feeds.FeedPreservationError("Prior Pages state artifact lacks feed-preservation history")
+        previous_history = {channel: history[channel] for channel in ("stable", "beta")}
+    if preserve_existing_ota_feeds:
+        existing_feed_paths = [output_dir / "updates" / f"{channel}.json" for channel in ("stable", "beta")]
+        if any(path.exists() for path in existing_feed_paths):
+            raise preserve_ota_feeds.FeedPreservationError(
+                "Feed-preserving Pages builds require a fresh output directory; refusing to keep stale local feeds"
+            )
+        fetcher = feed_fetcher or preserve_ota_feeds.fetch_url
+        deployed_history = preserve_ota_feeds.fetch_site_deployment_state(fetcher=fetcher)
+        if deployed_history is None and not allow_initial_static_bootstrap:
+            raise preserve_ota_feeds.FeedPreservationError(
+                "Target Pages site is not initialized; first static deployment requires an explicit workflow_dispatch confirmation"
+            )
+        if deployed_history is not None:
+            previous_history = deployed_history
+        elif prior_site_state_path is not None:
+            raise preserve_ota_feeds.FeedPreservationError(
+                "Pages disappeared after a prior state artifact was supplied; refusing bootstrap"
+            )
+        feeds = preserve_ota_feeds.fetch_validated_feeds(
+            site_state=state,
+            urls=policy.get("channels", {}),
+            trusted_keys=trusted_keys,
+            policy=policy,
+            previously_published=previous_history,
+            fetcher=fetcher,
+            **({"now": now} if now is not None else {}),
+        )
+        if deployed_history is None and feeds:
+            raise preserve_ota_feeds.FeedPreservationError(
+                "One or more feeds exist while the target site is not initialized; refusing first deployment"
+            )
+    elif local_ota_feed_dir is not None:
+        for channel in ("stable", "beta"):
+            path = local_ota_feed_dir / f"{channel}.json"
+            if not path.exists():
+                continue
+            try:
+                body = path.read_bytes()
+            except OSError as exc:
+                raise preserve_ota_feeds.FeedPreservationError(
+                    f"Could not read locally signed {channel} OTA feed"
+                ) from exc
+            feeds[channel] = preserve_ota_feeds.validate_feed(
+                channel=channel, body=body, site_state=state, trusted_keys=trusted_keys,
+                policy=policy, now=now,
+            )
+    feed_state = {channel: bool(feed.payload.get("available")) for channel, feed in feeds.items()}
+    state["otaFeedEverPublished"] = {
+        channel: bool(previous_history[channel] or channel in feeds) for channel in ("stable", "beta")
+    }
+    state["otaFeedChannels"] = sorted(feeds)
+    state["otaUpdateChannels"] = sorted(channel for channel, available in feed_state.items() if available)
+    state["otaFeedStatus"] = "unavailable" if not feeds else (
+        "available" if state["otaUpdateChannels"] else "no-eligible-update"
+    )
     pages = ["", "downloads", "compatibility", "guide", "history"]
     # Render in memory before replacing any prior site files. API/config errors never publish partial data.
     rendered: dict[Path, str] = {}
@@ -379,7 +497,7 @@ def generate_site(*, content: Mapping[str, Any], records: Sequence[Mapping[str, 
             file_path = output_dir / page_path / "index.html"
             rendered[file_path] = render_page(
                 content=content, records=records, stable=stable, beta=beta,
-                base=base, lang=lang, route=route,
+                base=base, lang=lang, route=route, ota_feed_channels=feed_state,
             )
     for locale in ("ar", "es", "ru", "uk", "zh-Hant"):
         rendered[output_dir / locale / "index.html"] = render_legacy_redirect(base)
@@ -391,6 +509,12 @@ def generate_site(*, content: Mapping[str, Any], records: Sequence[Mapping[str, 
         temporary = path.with_suffix(path.suffix + ".tmp")
         temporary.write_text(text, encoding="utf-8")
         os.replace(temporary, path)
+    for channel, feed in feeds.items():
+        path = output_dir / "updates" / f"{channel}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        temporary.write_bytes(feed.body)
+        os.replace(temporary, path)
     return state
 
 
@@ -400,6 +524,12 @@ def _release_json(record: Mapping[str, Any] | None) -> dict[str, Any] | None:
     verified_apk = record.get("verifiedApk")
     safe_apk = None
     if isinstance(verified_apk, Mapping):
+        checksum_name = f"{verified_apk.get('name', '')}.sha256"
+        checksum_assets = [
+            asset for asset in record.get("assets", [])
+            if isinstance(asset, Mapping) and asset.get("name") == checksum_name
+        ]
+        checksum = checksum_assets[0] if len(checksum_assets) == 1 else None
         safe_apk = {
             "name": verified_apk.get("name"),
             "url": verified_apk.get("url"),
@@ -408,9 +538,12 @@ def _release_json(record: Mapping[str, Any] | None) -> dict[str, Any] | None:
             "versionName": verified_apk.get("versionName"),
             "versionCode": verified_apk.get("versionCode"),
             "signerSha256": verified_apk.get("signerSha256"),
+            "checksumUrl": checksum.get("url") if checksum else None,
+            "checksumSize": checksum.get("size") if checksum else None,
         }
     return {
         "tag": record.get("tag"),
+        "tagSha": record.get("tagSha"),
         "title": record.get("title"),
         "publishedDate": record.get("publishedDate"),
         "prerelease": bool(record.get("prerelease")),
@@ -422,13 +555,15 @@ def _release_json(record: Mapping[str, Any] | None) -> dict[str, Any] | None:
 
 
 def write_release_snapshot(path: Path, repository: str, releases: Sequence[Mapping[str, Any]],
-                           verifications: Mapping[str, Any]) -> None:
+                           verifications: Mapping[str, Any],
+                           tags: Sequence[Mapping[str, Any]] = ()) -> None:
     """Atomically save the public Release/API evidence shared with the OTA signer in one workflow run."""
     snapshot = {
         "schemaVersion": 1,
         "repository": repository,
         "releases": list(releases),
         "verifications": dict(verifications),
+        "tags": list(tags),
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -443,36 +578,74 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--verifications-json", type=Path, help="offline per-tag verification records")
     parser.add_argument("--snapshot-out", type=Path,
                         help="write the exact Release and verification snapshot for the OTA signer")
+    parser.add_argument("--release-snapshot", type=Path,
+                        help="rebuild from an existing exact public Release snapshot")
     parser.add_argument("--output-dir", type=Path, default=SITE)
     parser.add_argument("--base-url", default="https://qwy20040320.github.io/carpaly")
+    parser.add_argument(
+        "--preserve-existing-ota-feeds", action="store_true",
+        help="carry forward only live feeds that verify against the app trust store and current Release snapshot",
+    )
+    parser.add_argument(
+        "--allow-initial-static-bootstrap", action="store_true",
+        help="explicitly attest this is the first Pages deployment (workflow_dispatch only)",
+    )
+    parser.add_argument("--local-ota-feed-dir", type=Path,
+                        help="include locally signed manifests after verifying them against the app-pinned key")
+    parser.add_argument("--prior-site-state", type=Path,
+                        help="carry forward per-channel feed history from this workflow's no-secret preflight artifact")
     args = parser.parse_args(argv)
     try:
         content = read_json(CONTENT_PATH)
         metadata = read_json(METADATA_PATH)
         ledger = read_json(LEDGER_PATH)
         repository = str(metadata["repository"]["slug"])
-        if args.releases_json:
+        if repository != REPOSITORY:
+            raise ValueError("Site metadata repository differs from the reviewed CarPaly repository")
+        if args.release_snapshot:
+            snapshot = json.loads(args.release_snapshot.read_text(encoding="utf-8"))
+            if not isinstance(snapshot, dict) or snapshot.get("schemaVersion") != 1 \
+                    or snapshot.get("repository") != repository:
+                raise ValueError("Release snapshot must match the configured CarPaly repository")
+            releases = snapshot.get("releases")
+            verifications = snapshot.get("verifications")
+            tags = snapshot.get("tags", [])
+            if not isinstance(releases, list) or not all(isinstance(item, dict) for item in releases) \
+                    or not isinstance(verifications, dict) or not isinstance(tags, list) \
+                    or not all(isinstance(item, dict) for item in tags):
+                raise ValueError("Release snapshot is malformed")
+        elif args.releases_json:
             releases = read_json(args.releases_json)
             if not isinstance(releases, list) or not all(isinstance(item, dict) for item in releases):
                 raise ValueError("Release fixture must be an array of objects")
             verifications = read_json(args.verifications_json) if args.verifications_json else {}
             if not isinstance(verifications, dict):
                 raise ValueError("Verification fixture must be an object indexed by Release tag")
+            tags = []
         else:
             releases = fetch_releases(repository)
             verifications = release_docs.fetch_verifications(releases, repository)
             require_readable_verification_assets(releases, verifications)
+            tags = fetch_tags(repository)
         if args.snapshot_out:
-            write_release_snapshot(args.snapshot_out, repository, releases, verifications)
-        records = release_docs._released_records(releases, [], repository, ledger, verifications)
-        state = generate_site(content=content, records=records, output_dir=args.output_dir, base_url=args.base_url)
-    except (ValueError, KeyError, TypeError, release_docs.SyncError) as exc:
+            write_release_snapshot(args.snapshot_out, repository, releases, verifications, tags)
+        records = release_docs._released_records(releases, tags, repository, ledger, verifications)
+        state = generate_site(
+            content=content, records=records, output_dir=args.output_dir, base_url=args.base_url,
+            preserve_existing_ota_feeds=args.preserve_existing_ota_feeds,
+            allow_initial_static_bootstrap=args.allow_initial_static_bootstrap,
+            local_ota_feed_dir=args.local_ota_feed_dir,
+            prior_site_state_path=args.prior_site_state,
+        )
+    except (ValueError, KeyError, TypeError, release_docs.SyncError,
+            preserve_ota_feeds.FeedPreservationError) as exc:
         print(f"SITE_BUILD_STATUS=FAIL: {exc}", file=sys.stderr)
         return 2
     print(f"SITE_BUILD_STATUS=PASS")
     print(f"SITE_RELEASE_HISTORY_COUNT={len(state['publishedHistory'])}")
     print(f"SITE_STABLE_VERSION={state['stable']['tag'] if state['stable'] else 'NONE'}")
     print(f"SITE_BETA_VERSION={state['beta']['tag'] if state['beta'] else 'NONE'}")
+    print(f"OTA_FEED_STATUS={state['otaFeedStatus']}")
     print("OTA_MANIFEST_STATUS=NOT_GENERATED_BY_SITE_BUILDER")
     return 0
 

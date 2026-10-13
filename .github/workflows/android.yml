@@ -5,11 +5,6 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
-      publish_authenticated_release:
-        description: Explicitly publish the authenticated Release APK from a reviewed version tag
-        required: true
-        type: boolean
-        default: false
       verify_release_signer_only:
         description: Verify the protected Release keystore and certificate without building or publishing
         required: true
@@ -44,7 +39,7 @@ jobs:
         run: |
           bash -n .github/scripts/publish-authenticated-apk-release.sh
           python3 -m py_compile scripts/package_source_archive.py
-          python3 -m py_compile scripts/release_intent.py scripts/release_review_gate.py scripts/dispatch_release_followups.py scripts/check_release_automation.py
+          python3 -m py_compile scripts/release_intent.py scripts/release_review_gate.py scripts/dispatch_release_followups.py scripts/check_release_automation.py scripts/preserve_ota_feeds.py scripts/ota_publisher_policy.py scripts/validate_ota_release_target.py
           python3 -m pip install --disable-pip-version-check -r requirements-ota.txt
           python3 scripts/check_workflow_action_pins.py
           python3 scripts/check_pages_workflow.py
@@ -60,7 +55,9 @@ jobs:
             scripts.test_release_followups \
             scripts.test_ota_manifest \
             scripts.test_build_site \
-            scripts.test_ota_public_key
+            scripts.test_ota_public_key \
+            scripts.test_preserve_ota_feeds \
+            scripts.test_ota_publisher_policy
           python3 scripts/android_versioning.py check
           python3 scripts/check_project_docs.py
           python3 scripts/release_intent.py \
@@ -105,33 +102,6 @@ jobs:
             --conclusion success \
             --main-sha "$main_sha" \
             --github-output "$GITHUB_OUTPUT"
-      - name: Require an approved merged PR for an enabled release intent
-        if: steps.gate.outputs.should_publish == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          review_dir="$(mktemp -d "$RUNNER_TEMP/carpaly-release-review.XXXXXX")"
-          trap 'rm -rf -- "$review_dir"' EXIT
-          associated="$review_dir/associated-pull-requests.json"
-          details="$review_dir/pull-request-details.json"
-          gh api "repos/$GH_REPO/commits/$GITHUB_SHA/pulls" > "$associated"
-          matches="$(jq -c --arg sha "$GITHUB_SHA" \
-            '[.[] | select(.state == "closed" and .merged_at != null and .merge_commit_sha == $sha and .base.ref == "main")]' \
-            "$associated")"
-          [[ "$(jq 'length' <<<"$matches")" == 1 ]] || {
-            echo "Release intent must be associated with exactly one merged PR to main." >&2
-            exit 1
-          }
-          pr_number="$(jq -r '.[0].number' <<<"$matches")"
-          gh pr view "$pr_number" --repo "$GH_REPO" \
-            --json number,reviewDecision,mergedAt,baseRefName,isDraft > "$details"
-          python3 scripts/release_review_gate.py \
-            --commit "$GITHUB_SHA" \
-            --pull-requests-file "$associated" \
-            --pull-request-file "$details"
       - name: Validate clean source archive packaging
         shell: bash
         run: |
@@ -200,12 +170,85 @@ jobs:
               exit 1
             fi
           done
+  release_authorization:
+    name: Verify human merge and active main protection for an enabled release intent
+    needs: [check, release_intent]
+    if: >-
+      always() &&
+      needs.check.result == 'success' &&
+      needs.release_intent.result == 'success' &&
+      needs.release_intent.outputs.should_publish == 'true' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: release-policy-audit
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify exact merged PR, maintainer policy, branch ruleset, and CI result
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_POLICY_READ_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          review_dir="$(mktemp -d "$RUNNER_TEMP/carpaly-release-review.XXXXXX")"
+          trap 'rm -rf -- "$review_dir"' EXIT
+          associated="$review_dir/associated-pull-requests.json"
+          details="$review_dir/pull-request-details.json"
+          reviews="$review_dir/reviews.json"
+          decision="$review_dir/review-decision.json"
+          rulesets="$review_dir/rulesets.json"
+          ruleset="$review_dir/main-ruleset.json"
+          ruleset_suites="$review_dir/ruleset-suites.json"
+          ruleset_suite="$review_dir/main-ruleset-suite.json"
+          gh api "repos/$GH_REPO/commits/$GITHUB_SHA/pulls" > "$associated"
+          matches="$(jq -c --arg sha "$GITHUB_SHA" \
+            '[.[] | select(.state == "closed" and .merged_at != null and .merge_commit_sha == $sha and .base.ref == "main")]' \
+            "$associated")"
+          [[ "$(jq 'length' <<<"$matches")" == 1 ]] || {
+            echo "Release intent must belong to exactly one PR merged to main at this exact SHA." >&2
+            exit 1
+          }
+          pr_number="$(jq -r '.[0].number' <<<"$matches")"
+          gh api "repos/$GH_REPO/pulls/$pr_number" > "$details"
+          gh pr view "$pr_number" --repo "$GH_REPO" --json reviewDecision > "$decision"
+          jq -s '.[0] + .[1]' "$details" "$decision" > "$review_dir/pull-request-details.json"
+          mv "$review_dir/pull-request-details.json" "$details"
+          gh api --paginate "repos/$GH_REPO/pulls/$pr_number/reviews?per_page=100" | jq -s 'add' > "$reviews"
+          gh api --paginate "repos/$GH_REPO/rulesets?per_page=100" | jq -s 'add' > "$rulesets"
+          ruleset_name="$(jq -er '.mainRulesetName' config/release-review-policy.json)"
+          ruleset_id="$(jq -er --arg name "$ruleset_name" \
+            '[.[] | select(.name == $name and .enforcement == "active")] | if length == 1 then .[0].id else error("expected one active main ruleset") end' \
+            "$rulesets")"
+          gh api "repos/$GH_REPO/rulesets/$ruleset_id" > "$ruleset"
+          gh api --paginate "repos/$GH_REPO/rulesets/rule-suites?ref=refs/heads/main&time_period=week&per_page=100" | jq -s 'add' > "$ruleset_suites"
+          suite_id="$(jq -er --arg sha "$GITHUB_SHA" \
+            '[.[] | select(.after_sha == $sha and .ref == "refs/heads/main")] | if length == 1 then .[0].id else error("expected one exact main ruleset evaluation") end' \
+            "$ruleset_suites")"
+          gh api "repos/$GH_REPO/rulesets/rule-suites/$suite_id" > "$ruleset_suite"
+          default_branch="$(gh api "repos/$GH_REPO" --jq .default_branch)"
+          python3 scripts/release_review_gate.py \
+            --commit "$GITHUB_SHA" \
+            --pull-requests-file "$associated" \
+            --pull-request-file "$details" \
+            --reviews-file "$reviews" \
+            --ruleset-file "$ruleset" \
+            --ruleset-suite-file "$ruleset_suite" \
+            --policy-file config/release-review-policy.json \
+            --default-branch "$default_branch" \
+            --ci-conclusion success
   release_signer_preflight:
     name: Verify protected Release signer only
     if: >-
       github.event_name == 'workflow_dispatch' &&
       inputs.verify_release_signer_only == true &&
-      inputs.publish_authenticated_release == false &&
       github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -237,22 +280,17 @@ jobs:
 
   authenticated_release:
     name: Build and publish an explicitly authorized authenticated Release APK
-    needs: [check, release_intent]
+    needs: [check, release_intent, release_authorization]
     if: >-
       always() &&
       needs.check.result == 'success' &&
       needs.release_intent.result == 'success' &&
       github.repository == 'Qwy20040320/carpaly' &&
-      ((github.event_name == 'workflow_dispatch' &&
-      inputs.publish_authenticated_release == true &&
-      inputs.verify_release_signer_only == false &&
-      startsWith(github.ref, 'refs/tags/v1.')) ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main' &&
-      needs.release_intent.result == 'success' &&
-      needs.release_intent.outputs.should_publish == 'true'))
+      github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      needs.release_intent.outputs.should_publish == 'true' &&
+      needs.release_authorization.result == 'success'
     runs-on: ubuntu-latest
-    # Automatic main publishing requires main to be added to this Environment's allowed refs;
-    # keep the existing v1.*.* tag rule for manual recovery and signer-only checks.
+    # Only an enabled, CI-verified release intent on the current protected main can publish.
     environment: mfi-public-release
     concurrency:
       group: carpaly-authenticated-release
@@ -264,25 +302,22 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      # A tag push alone never publishes. This job runs only after an explicit manual dispatch input.
+      # The publisher creates a tag only after CI and exact protected-main authorization pass.
       - name: Confirm release tag is contained in main
         env:
-          RELEASE_TAG: ${{ needs.release_intent.outputs.release_tag || github.ref_name }}
-          AUTO_CREATE_TAG: ${{ needs.release_intent.outputs.should_publish || 'false' }}
+          RELEASE_TAG: ${{ needs.release_intent.outputs.release_tag }}
+          AUTO_CREATE_TAG: ${{ needs.release_intent.outputs.should_publish }}
         shell: bash
         run: |
           set -euo pipefail
           git fetch origin main --no-tags
           main_commit="$(git rev-parse origin/main)"
-          if [[ "$AUTO_CREATE_TAG" == true ]]; then
-            [[ "$GITHUB_REF" == "refs/heads/main" && "$main_commit" == "$GITHUB_SHA" ]] || {
-              echo "Automatic release source is no longer the current main commit." >&2
-              exit 1
-            }
-            release_commit="$GITHUB_SHA"
-          else
-            release_commit="$(git rev-parse "${RELEASE_TAG}^{commit}")"
-          fi
+          [[ "$AUTO_CREATE_TAG" == true && "$GITHUB_REF" == "refs/heads/main" && \
+            "$main_commit" == "$GITHUB_SHA" ]] || {
+            echo "Automatic release requires an enabled intent on the exact current main commit." >&2
+            exit 1
+          }
+          release_commit="$GITHUB_SHA"
           git merge-base --is-ancestor "$release_commit" "$main_commit" || {
             echo "Release tag does not point to a commit contained in main." >&2
             exit 1
@@ -397,7 +432,7 @@ jobs:
       - name: Package commit-pinned source and release checksums
         id: package
         env:
-          RELEASE_TAG: ${{ needs.release_intent.outputs.release_tag || github.ref_name }}
+          RELEASE_TAG: ${{ needs.release_intent.outputs.release_tag }}
           RELEASE_SOURCE_REF: ${{ github.sha }}
           APK_PATH: ${{ steps.apk.outputs.apk_path }}
           APK_NAME: ${{ steps.apk.outputs.apk_name }}
@@ -436,10 +471,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ needs.release_intent.outputs.release_tag || github.ref_name }}
+          RELEASE_TAG: ${{ needs.release_intent.outputs.release_tag }}
           RELEASE_COMMIT: ${{ github.sha }}
-          AUTO_CREATE_TAG: ${{ needs.release_intent.outputs.should_publish || 'false' }}
-          RELEASE_PRERELEASE: ${{ needs.release_intent.outputs.prerelease || 'true' }}
+          AUTO_CREATE_TAG: ${{ needs.release_intent.outputs.should_publish }}
+          RELEASE_PRERELEASE: ${{ needs.release_intent.outputs.prerelease }}
           RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}
           APK_PATH: ${{ steps.apk.outputs.apk_path }}
           APK_NAME: ${{ steps.apk.outputs.apk_name }}

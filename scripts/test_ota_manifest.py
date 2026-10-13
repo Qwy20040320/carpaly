@@ -8,8 +8,9 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
 if __package__:
-    from . import ota_manifest
+    from . import build_ota_manifests, ota_manifest
 else:
+    import build_ota_manifests
     import ota_manifest
 
 
@@ -179,6 +180,35 @@ class SignedManifestTests(unittest.TestCase):
         self.assertFalse(ota_manifest.checksum_sidecar_matches(
             body, apk_name="other.apk", expected_sha256=APK_HASH, expected_size=len(body),
         ))
+
+    def test_required_ota_release_must_be_published_verified_and_merged_to_main(self):
+        release, proof = make_release("1.1.51", 39)
+        tags = make_tags((release, proof))
+        args = {
+            "releases": [release], "tags": tags, "ledger": self.ledger,
+            "verifications": {release["tag_name"]: proof}, "policy": self.policy,
+            "main_verified_tags": {release["tag_name"]},
+            "verified_checksum_tags": {release["tag_name"]},
+        }
+        build_ota_manifests.validate_required_release_tag("v1.1.51", **args)
+        for override, message in (
+            ({"main_verified_tags": set()}, "not contained in current main"),
+            ({"verified_checksum_tags": set()}, "checksum evidence"),
+            ({"releases": [{**release, "draft": True}]}, "published GitHub Release"),
+            ({"verifications": {}}, "checksum evidence"),
+        ):
+            with self.subTest(override=override), self.assertRaisesRegex(
+                    ota_manifest.ManifestError, message):
+                build_ota_manifests.validate_required_release_tag(
+                    "v1.1.51", **{**args, **override},
+                )
+
+    def test_required_ota_release_rejects_invalid_tag(self):
+        with self.assertRaisesRegex(ota_manifest.ManifestError, "semantic version"):
+            build_ota_manifests.validate_required_release_tag(
+                "latest", releases=[], tags=[], ledger=self.ledger, verifications={},
+                policy=self.policy, main_verified_tags=set(), verified_checksum_tags=set(),
+            )
 
 
 if __name__ == "__main__":
