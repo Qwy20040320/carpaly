@@ -3,6 +3,10 @@
     <string name="contrib_audio_home_choice_summary">%1$s · %2$s</string>
     <string name="contrib_audio_home_media_channel_label">Media audio stream</string>
     <string name="contrib_audio_home_nav_channel_label">Navigation audio stream</string>
+    <string name="contrib_audio_home_call_channel_label">Call audio stream</string>
+    <string name="contrib_audio_home_channel_automatic">Auto</string>
+    <string name="contrib_audio_home_call_stream_voice_call">0 · Voice call</string>
+    <string name="contrib_audio_home_call_channel_note">Auto uses Android voice-communication routing. Android stream 0 is Voice call; 1–10 are standard Android streams, while 11–20 are ROM-specific attempts and may fall back. Changes apply after reconnect. Actual speaker and microphone routing depend on head-unit support.</string>
     <string name="contrib_audio_home_nav_channel_note">0 = automatic routing. Values 1–20 select legacy audio stream IDs, including vendor-specific outputs where supported by the head unit. Tap a value to preview it. Changes apply on reconnect.</string>
     <string name="contrib_audio_home_toggle_audio_focus">Audio focus</string>
     <string name="contrib_audio_home_toggle_audio_focus_desc">CarPlay media claims audio focus. If sound disappears while enabled (some head units handle focus badly), turn it off. Changes apply on reconnect.</string>

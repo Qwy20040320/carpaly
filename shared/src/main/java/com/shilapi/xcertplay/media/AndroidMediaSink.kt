@@ -126,7 +126,11 @@ internal class AudioFocusCoordinator(
         request = next
         requestedChannel = primary.channel
         val result = manager?.let(next::request)
-        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) setMediaVolume(FULL_VOLUME)
+        // A call/Siri track can replace this sink's focus request while another app still owns
+        // transient focus. Only a granted media request restores a previously ducked media track.
+        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED && primary.channel == AudioChannel.MEDIA) {
+            setMediaVolume(FULL_VOLUME)
+        }
         val line = "Audio: focus requested channel=${primary.channel} gain=$gain granted=$result activeTracks=${active.size}"
         Log.i(TAG, line)
         runCatching { report(line) }
@@ -147,8 +151,8 @@ internal class AudioFocusCoordinator(
 
     private fun AudioChannel.focusPriority(): Int = when (this) {
         AudioChannel.MEDIA -> 3
-        AudioChannel.PHONE -> 2
-        AudioChannel.ASSISTANT -> 1
+        AudioChannel.PHONE -> 4
+        AudioChannel.ASSISTANT -> 2
         AudioChannel.NAVIGATION -> 0
     }
 
@@ -176,6 +180,7 @@ class AndroidMediaSink(
     private val audioFocusAutoYield: Boolean = true,
     private val mediaChannel: Int = 0,
     private val navigationChannel: Int = 0,
+    private val phoneChannel: Int = CALL_AUDIO_AUTO,
     context: Context? = null,
     private val navigationStreamType: Int = AudioChannelMapper.DEFAULT_NAVIGATION_STREAM_TYPE,
     onScreenStreamActiveChanged: ((Int, Boolean) -> Unit)? = null,
@@ -627,6 +632,7 @@ class AndroidMediaSink(
             audioFocusEnabled,
             mediaChannel,
             navigationChannel,
+            phoneChannel,
             audioFocusCoordinator,
             navigationStreamType,
             mediaBufferMillis,
@@ -1277,6 +1283,7 @@ private class AudioRenderer(
     private val audioFocusEnabled: Boolean,
     private val mediaChannel: Int,
     private val navigationChannel: Int,
+    private val phoneChannel: Int,
     private val audioFocusCoordinator: AudioFocusCoordinator,
     private val navigationStreamType: Int,
     private val mediaBufferMillis: Int,
@@ -1476,7 +1483,8 @@ private class AudioRenderer(
         val built: AudioTrack
         var routeLabel: String
         diagnosticStage = "track-build"
-        if (streamOverride == 0) {
+        val usesUsageBasedRoute = usesUsageBasedAudioRouting(selection.channel, streamOverride)
+        if (usesUsageBasedRoute) {
             attributes = audioAttributesFor(selection)
             routeLabel = "usage"
             built = AudioTrack.Builder()
@@ -1540,16 +1548,17 @@ private class AudioRenderer(
                 "channel=${selection.channel} usage=${usageFor(selection.channel)} " +
                 "contentType=${contentTypeFor(selection.contentType)} " +
                 "streamOverride=$streamOverride " +
+                "phoneChannel=$phoneChannel " +
                 "focus=${if (audioFocusEnabled) "on" else "off"}",
         )
     }
 
     /** 0 uses usage-based routing; 1–20 attempt legacy stream types supported by the head unit. */
-    private fun channelOverride(channel: AudioChannel): Int = when (channel) {
-        AudioChannel.MEDIA -> mediaChannel
-        AudioChannel.NAVIGATION -> navigationChannel
-        else -> 0
-    }
+    private fun channelOverride(channel: AudioChannel): Int = AudioChannelOverrides(
+        media = mediaChannel,
+        navigation = navigationChannel,
+        call = phoneChannel,
+    ).forChannel(channel)
 
     private fun audioAttributesFor(
         selection: AudioChannelSelection,
@@ -1875,6 +1884,22 @@ private class AudioRenderer(
         underrunsAtPlaybackStart = track.underrunCount
         track.play()
         playbackStarted = true
+        // A track being constructed does not prove it reached an output route. Capture the
+        // observed Android route state when audio actually starts; never log device names or device IDs.
+        runCatching {
+            val routeType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                runCatching { track.routedDevice?.type?.toString() ?: "none" }
+                    .getOrDefault("unavailable")
+            } else {
+                "api-legacy"
+            }
+            report(
+                "Audio: playback active audioType=${format.audioType} channel=${mappedChannel ?: "unknown"} " +
+                    "trackState=${track.state} playState=${track.playState} session=${track.audioSessionId} " +
+                    "usage=${trackAttributes?.usage ?: "unknown"} routeDeviceType=$routeType " +
+                    "underruns=${track.underrunCount}",
+            )
+        }
     }
 
     private fun maintainPlaybackBuffer() {

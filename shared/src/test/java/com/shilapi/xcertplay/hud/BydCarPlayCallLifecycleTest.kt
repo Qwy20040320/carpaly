@@ -16,6 +16,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
+import org.robolectric.shadows.ShadowBuild
 import org.robolectric.util.ReflectionHelpers
 
 @RunWith(RobolectricTestRunner::class)
@@ -29,6 +30,8 @@ class BydCarPlayCallLifecycleTest {
     }
 
     @Before fun setup() {
+        ShadowBuild.setFingerprint("BYD/DiLink:test")
+        BydOutputSettings.setEnabled(app, true)
         BydCarPlayCall.watcherReadyMillis = 500L
         drain()
         ReflectionHelpers.getField<CarPlayCallState>(BydCarPlayCall, "state").clear()
@@ -55,10 +58,21 @@ class BydCarPlayCallLifecycleTest {
         Shell.omitCompletion = false
         Shell.omitCancelCompletion = false
         BydCarPlayCall.end(); drain()
+        BydOutputSettings.setEnabled(app, false)
     }
 
     @Test fun defaultOffTracksCallWithoutAnyShellOrWatcherMutation() {
         BydCarPlayCall.onFrame(ringing("a")); drain()
+        assertNotNull(BydCarPlayCall.current())
+        assertTrue(Shell.commands.isEmpty())
+    }
+
+    @Test fun nonBydVehicleTracksCallStateWithoutVendorWritesEvenWhenLegacySettingWasEnabled() {
+        ShadowBuild.setFingerprint("generic/kx11:test")
+        BydOutputSettings.setCarPlayCalls(app, true)
+
+        BydCarPlayCall.onFrame(ringing("a")); drain()
+
         assertNotNull(BydCarPlayCall.current())
         assertTrue(Shell.commands.isEmpty())
     }

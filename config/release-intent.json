@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "enabled": false,
+  "channel": "beta",
+  "versionName": "1.1.52",
+  "versionCode": 40,
+  "reason": "Disabled baseline; a reviewed main-branch change must explicitly arm a future release."
+}

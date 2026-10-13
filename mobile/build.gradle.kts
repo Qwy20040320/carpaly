@@ -1,6 +1,8 @@
 import java.io.ByteArrayInputStream
+import java.io.FileInputStream
 import java.nio.file.Files
 import java.security.KeyFactory
+import java.security.KeyStore
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.security.Signature
@@ -8,7 +10,6 @@ import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 import java.security.interfaces.ECPublicKey
 import java.security.spec.PKCS8EncodedKeySpec
-import java.util.zip.ZipFile
 import org.gradle.api.tasks.Sync
 
 plugins {
@@ -34,9 +35,60 @@ val gitCommit = providers.exec {
     commandLine("git", "rev-parse", "--short=12", "HEAD")
 }.standardOutput.asText.map { it.trim() }
 
+// This is the signing identity already present in the published v1.1.4 APK. Do not change it
+// to accommodate a different local or CI keystore: that would break the installed upgrade chain.
+val CARPALY_RELEASE_CERT_SHA256 =
+    "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90"
+
 fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
     .digest(bytes)
     .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+
+val verifyCarPalyReleaseSigning by tasks.registering {
+    group = "verification"
+    description = "Require the original v1.1.4 Release signing identity before any Release build."
+    notCompatibleWithConfigurationCache("Reads protected signing inputs only when a Release build is requested.")
+    doLast {
+        fun requiredSecret(name: String): String = providers.environmentVariable(name).orNull
+            ?.takeIf { it.isNotBlank() }
+            ?: error("Authorized Release signing input $name is not configured")
+
+        val keystorePath = requiredSecret("ANDROID_KEYSTORE_PATH")
+        val storePassword = requiredSecret("ANDROID_KEYSTORE_PASSWORD").toCharArray()
+        val keyAlias = requiredSecret("ANDROID_KEY_ALIAS")
+        val keyPassword = requiredSecret("ANDROID_KEY_PASSWORD").toCharArray()
+        try {
+            val keystoreFile = file(keystorePath).canonicalFile
+            check(keystoreFile.isFile && keystoreFile.length() > 0L) {
+                "Authorized Release keystore is missing or empty"
+            }
+            val keystore = KeyStore.getInstance("PKCS12")
+            FileInputStream(keystoreFile).use { keystore.load(it, storePassword) }
+            check(keystore.isKeyEntry(keyAlias)) { "Configured Release alias is not a private-key entry" }
+            val certificate = keystore.getCertificate(keyAlias) as? X509Certificate
+                ?: error("Configured Release alias has no X.509 signing certificate")
+            check(keystore.getKey(keyAlias, keyPassword) != null) {
+                "Configured Release key password does not unlock the signing key"
+            }
+            val actualFingerprint = sha256(certificate.encoded)
+            check(actualFingerprint == CARPALY_RELEASE_CERT_SHA256) {
+                "Release keystore does not match the v1.1.4 signing certificate"
+            }
+            val configuredFingerprint = providers.environmentVariable("RELEASE_SIGNING_CERT_SHA256").orNull
+                ?.filter(Char::isLetterOrDigit)
+                ?.lowercase()
+            check(configuredFingerprint == null || configuredFingerprint == CARPALY_RELEASE_CERT_SHA256) {
+                "Configured Release certificate pin does not match the fixed v1.1.4 signing identity"
+            }
+            logger.lifecycle("SIGNING_CERTIFICATE_MATCH=PASS (fixed v1.1.4 certificate)")
+        } catch (_: Exception) {
+            error("Release signing identity could not be verified; no Release APK may be produced")
+        } finally {
+            storePassword.fill('\u0000')
+            keyPassword.fill('\u0000')
+        }
+    }
+}
 
 fun verifyMfiIdentity(directory: java.io.File): Map<String, String> {
     val identityFile = directory.resolve("offline-mfi/identity.pk8")
@@ -104,17 +156,17 @@ android {
         applicationId = "com.shihab.diplay.hudtest"
         minSdk = 25
         targetSdk = 37
-        versionCode = 36
-        versionName = "1.1.4"
+        versionCode = 40
+        versionName = "1.1.52"
         buildConfigField("String", "GIT_COMMIT", "\"${gitCommit.get()}\"")
 
     }
 
 
-    // Stage only the two selected runtime inputs. DIPLAY_AUTH_ASSETS_DIR may be the repository
-    // root, so never register that parent directory itself as an APK assets source.
+    // Stage only the two selected runtime inputs and expose them to Release only.
+    // DIPLAY_AUTH_ASSETS_DIR may be the repository root, so never register that parent directory itself.
     localAuthenticationAssets?.let {
-        sourceSets.getByName("main").assets.directories.add(stagedAuthenticationAssets.get().asFile.absolutePath)
+        sourceSets.getByName("release").assets.directories.add(stagedAuthenticationAssets.get().asFile.absolutePath)
     }
 
     signingConfigs {
@@ -156,6 +208,11 @@ android {
         compose = true
         buildConfig = true
     }
+}
+
+// A Release APK must never silently fall back to the developer/debug signer.
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    dependsOn(verifyCarPalyReleaseSigning)
 }
 
 dependencies {
@@ -201,15 +258,15 @@ val rejectBundledCredentials by tasks.registering {
 }
 tasks.named("preBuild") { dependsOn(rejectBundledCredentials) }
 
-// Car-test packages must be standalone. Keep ordinary source/CI builds identity-free.
+// Only user-facing Release builds may receive explicit runtime authentication assets.
 val verifyStandaloneAuthentication by tasks.registering {
     group = "verification"
-    description = "Require the explicit runtime authentication input for a standalone car-test APK."
+    description = "Validate the explicit runtime authentication inputs for a user Release APK."
     notCompatibleWithConfigurationCache("Validates local authentication material without serializing it into the configuration cache.")
     val directory = localAuthenticationAssets
     doLast {
         check(directory != null) {
-            "Standalone car builds require DIPLAY_AUTH_ASSETS_DIR; assembleDebug alone is source-only."
+            "Authenticated Release builds require DIPLAY_AUTH_ASSETS_DIR; Debug builds stay identity-free."
         }
         val authDirectory = directory.resolve("offline-mfi")
         val expectedPaths = setOf(
@@ -236,59 +293,7 @@ val verifyStandaloneAuthentication by tasks.registering {
     }
 }
 if (localAuthenticationAssets != null) {
-    tasks.named("preBuild") { dependsOn(verifyStandaloneAuthentication) }
-}
-tasks.register("assembleStandaloneDebug") {
-    group = "build"
-    description = "Build a standalone car-test APK with explicitly provisioned authentication."
-    dependsOn(verifyStandaloneAuthentication, "assembleDebug")
-}
-
-tasks.register("verifyStandaloneDebugApk") {
-    group = "verification"
-    description = "Build a standalone authenticated debug APK and verify both embedded identity assets."
-    notCompatibleWithConfigurationCache("Validates local authentication material without serializing it into the configuration cache.")
-    dependsOn("assembleStandaloneDebug")
-    doLast {
-        val directory = checkNotNull(localAuthenticationAssets)
-        val sourceHashes = verifyMfiIdentity(directory)
-        val apk = layout.buildDirectory.file("outputs/apk/debug/mobile-debug.apk").get().asFile
-        check(apk.isFile && apk.length() > 0) { "Standalone mobile APK was not produced" }
-
-        ZipFile(apk).use { archive ->
-            for ((name, expectedHash) in sourceHashes) {
-                val entryName = "assets/offline-mfi/$name"
-                val entry = archive.getEntry(entryName)
-                    ?: error("Authenticated APK is missing $entryName")
-                val actualHash = archive.getInputStream(entry).use { input ->
-                    val digest = MessageDigest.getInstance("SHA-256")
-                    val buffer = ByteArray(8192)
-                    while (true) {
-                        val count = input.read(buffer)
-                        if (count < 0) break
-                        digest.update(buffer, 0, count)
-                    }
-                    digest.digest().joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
-                }
-                check(actualHash == expectedHash) { "Authenticated APK asset hash mismatch for $name" }
-            }
-        }
-
-        val report = layout.buildDirectory.file("reports/standalone-authentication-verification.txt").get().asFile
-        report.parentFile.mkdirs()
-        report.writeText(
-            buildString {
-                appendLine("APK: ${apk.name}")
-                appendLine("Bytes: ${apk.length()}")
-                appendLine("Application ID: ${android.defaultConfig.applicationId}${android.buildTypes.getByName("debug").applicationIdSuffix}")
-                appendLine("Version name: ${android.defaultConfig.versionName}")
-                appendLine("Version code: ${android.defaultConfig.versionCode}")
-                sourceHashes.toSortedMap().forEach { (name, hash) -> appendLine("$name SHA-256: $hash") }
-                appendLine("APK SHA-256: ${sha256(apk.readBytes())}")
-                appendLine("Signature: verify separately with apksigner")
-                appendLine("Vehicle and iPhone CarPlay runtime: NOT_TESTED")
-            },
-        )
-        logger.lifecycle("Authenticated APK asset hashes verified; report: ${report.absolutePath}")
+    tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+        dependsOn(verifyStandaloneAuthentication)
     }
 }

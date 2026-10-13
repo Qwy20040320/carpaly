@@ -109,7 +109,7 @@ class DiagnosticRedactorTest {
             assertFalse(folder.listFiles()!!.any { it.readText().contains("secret") })
         } finally { folder.deleteRecursively() }
     }
-    @Test fun failuresSurviveLaterSuccessfulSessionsAndOldestHistoryExpires() {
+    @Test fun failuresSurviveLaterSuccessfulSessionsWithinOriginalRotationLimit() {
         val folder = Files.createTempDirectory("diplay-history-test").toFile()
         try {
             repeat(10) { session ->
@@ -121,8 +121,8 @@ class DiagnosticRedactorTest {
             }
             val history = SessionLogFile.REPORT_NAMES.filter { folder.resolve(it).isFile }
                 .map { folder.resolve(it).readText() }
-            assertEquals(10, folder.listFiles()!!.size)
-            assertTrue(history.first().contains("session=0"))
+            assertEquals(8, folder.listFiles()!!.size)
+            assertTrue(history.first().contains("session=2"))
             assertTrue(history.last().contains("session=9"))
             assertTrue(history.any { it.contains("rejected code=0") })
             assertFalse(history.any { it.contains("secret") })

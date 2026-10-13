@@ -682,7 +682,6 @@ class CarPlayHostActivity : ComponentActivity() {
         if (activeHeadUnitProfile == HeadUnitProfile.GEELY_XINGYUE_L) {
             manufacturer = GeelyXingyueLProfile.CARPLAY_MANUFACTURER
             model = GeelyXingyueLProfile.CARPLAY_MODEL
-            oemLabel = GeelyXingyueLProfile.CARPLAY_OEM_LABEL
             hevcEnabled = false
             hideTopBar = true
             hideBottomBar = true
@@ -1408,6 +1407,18 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private fun buildContentView(): View {
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            fun androidx.core.graphics.Insets.asContentInsets() = CarPlayContentInsets(left, top, right, bottom)
+            val safe = CarPlaySystemBarInsets.resolve(
+                statusBarsVisible = insets.isVisible(WindowInsetsCompat.Type.statusBars()),
+                statusBars = insets.getInsets(WindowInsetsCompat.Type.statusBars()).asContentInsets(),
+                navigationBarsVisible = insets.isVisible(WindowInsetsCompat.Type.navigationBars()),
+                navigationBars = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).asContentInsets(),
+                displayCutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout()).asContentInsets(),
+            )
+            view.setPadding(safe.left, safe.top, safe.right, safe.bottom)
+            insets
+        }
         val video = TextureView(this).apply {
             isOpaque = false
             surfaceTextureListener = textureListener
@@ -1556,13 +1567,6 @@ class CarPlayHostActivity : ComponentActivity() {
             updatePreparationLayout()
             fitPreparationContent()
         }
-        ViewCompat.setOnApplyWindowInsetsListener(viewport) { _, insets ->
-            val safe = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            viewport.setPadding(safe.left, safe.top, safe.right, safe.bottom)
-            viewport.post { updatePreparationLayout() }
-            insets
-        }
-        ViewCompat.requestApplyInsets(viewport)
         settingsMenu = buildSettingsMenu().apply { visibility = View.GONE }
         root.addView(settingsMenu, FrameLayout.LayoutParams(-1, -1))
         safeAreaEditor = buildSafeAreaEditor().apply { visibility = View.GONE }
@@ -3773,12 +3777,9 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private fun defaultAirPlayIconBytes(): ByteArray {
         // The default app-list icon is shown as CarPlay's "back to the car" button.
-        if (!CarPlayVehicleBranding.usesGeelyIcon(activeHeadUnitProfile)) {
-            return resources.openRawResource(R.raw.ic_car_home).use { it.readBytes() }
-        }
         val bitmap = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888)
         return try {
-            resources.getDrawable(R.drawable.ic_geely_auto_2023, theme)
+            resources.getDrawable(CarPlayVehicleBranding.DEFAULT_ICON_RESOURCE, theme)
                 .apply { setBounds(0, 0, bitmap.width, bitmap.height) }
                 .draw(Canvas(bitmap))
             ByteArrayOutputStream().use { output ->
@@ -3805,11 +3806,7 @@ class CarPlayHostActivity : ComponentActivity() {
         if (customBitmap != null) {
             preview.setImageBitmap(customBitmap)
         } else {
-            preview.setImageResource(if (CarPlayVehicleBranding.usesGeelyIcon(activeHeadUnitProfile)) {
-                R.drawable.ic_geely_auto_2023
-            } else {
-                R.raw.ic_car_home
-            })
+            preview.setImageResource(CarPlayVehicleBranding.DEFAULT_ICON_RESOURCE)
         }
         iconStatusView?.text =
             if (customBitmap != null) getString(R.string.custom_1_1_icon) else getString(R.string.default_placeholder_icon)
@@ -3944,6 +3941,7 @@ class CarPlayHostActivity : ComponentActivity() {
             audioFocusAutoYield = AirPlayPersistence.loadAudioFocusAutoYield(this),
             mediaChannel = AirPlayPersistence.loadMediaAudioChannel(this),
             navigationChannel = AirPlayPersistence.loadNavigationAudioChannel(this),
+            phoneChannel = AirPlayPersistence.loadCallAudioChannel(this),
             context = this,
             navigationStreamType = navigationStreamType,
             onScreenStreamActiveChanged = { type, active ->
@@ -5044,13 +5042,7 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private fun initializeSessionLog() {
         val logFile = File(File(filesDir, "logs"), "diplay.log")
-        val appContext = applicationContext
-        runCatching { DiagnosticLogManager.prune(appContext) }
-        val activeLog = SessionLogFile(
-            logFile,
-            loggingEnabled = { DiagnosticLogManager.isEnabled(appContext) },
-            onRotation = { DiagnosticLogManager.prune(appContext) },
-        )
+        val activeLog = SessionLogFile(logFile)
         runCatching {
             activeLog.reset(
                 "DiPlay log started " +
@@ -5087,7 +5079,9 @@ class CarPlayHostActivity : ComponentActivity() {
         val multiWindow = isMultiWindowActive()
         val hideTop = hideTopBar && !multiWindow
         val hideBottom = hideBottomBar && !multiWindow
-        WindowCompat.setDecorFitsSystemWindows(window, !(hideTop && hideBottom))
+        // Handle the system bars ourselves so a head unit that refuses a hide request cannot draw
+        // its fixed top/side bars over the video or leave touch coordinates offset from the picture.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         val controller = WindowInsetsControllerCompat(window, window.decorView)
         if (hideTop) {
             controller.hide(WindowInsetsCompat.Type.statusBars())
@@ -5101,6 +5095,7 @@ class CarPlayHostActivity : ComponentActivity() {
         }
         controller.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        ViewCompat.requestApplyInsets(window.decorView)
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()

@@ -11,11 +11,26 @@ internal object UpdateClient {
         "https://api.github.com/repos/Qwy20040320/carpaly/releases?per_page=30"
     private const val CONNECT_TIMEOUT_MILLIS = 10_000
     private const val READ_TIMEOUT_MILLIS = 30_000
-    private const val MAXIMUM_TEXT_BYTES = 4 * 1024 * 1024
+    private const val MAXIMUM_TEXT_BYTES = 32 * 1024
+
+    internal fun manifestUrl(channel: UpdateChannel): String = UpdateManifestVerifier.channelUrl(channel)
+
+    /** Production OTA fetches use only the fixed HTTPS channel URL; redirects are rejected below. */
+    internal fun fetchManifest(channel: UpdateChannel, userAgent: String): String {
+        val url = manifestUrl(channel)
+        val parsed = URL(url)
+        if (parsed.protocol != "https" || parsed.host != "qwy20040320.github.io" ||
+            parsed.userInfo != null || parsed.port != -1 || parsed.query != null || parsed.ref != null ||
+            parsed.path !in setOf("/carpaly/updates/stable.json", "/carpaly/updates/beta.json")) {
+            throw IOException("OTA manifest URL is not the pinned HTTPS endpoint")
+        }
+        return fetchText(url, "application/json", userAgent)
+    }
 
     internal fun fetchText(url: String, accept: String?, userAgent: String): String {
         val connection = URL(url).openConnection() as HttpURLConnection
         try {
+            connection.instanceFollowRedirects = false
             connection.requestMethod = "GET"
             connection.connectTimeout = CONNECT_TIMEOUT_MILLIS
             connection.readTimeout = READ_TIMEOUT_MILLIS

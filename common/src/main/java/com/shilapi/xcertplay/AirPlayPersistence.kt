@@ -1,6 +1,7 @@
 package com.shilapi.xcertplay
 
 import android.content.Context
+import android.media.AudioManager
 import android.os.Build
 import com.shilapi.xcertplay.airplay.AirPlayDisplaySettings
 import com.shilapi.xcertplay.airplay.AirPlayPhysicalSizeBasis
@@ -24,6 +25,9 @@ import java.io.File
 object AirPlayPersistence {
     /** 0 uses usage-based routing; 1–20 select stream types supported by the head unit. */
     val AUDIO_CHANNELS = 0..20
+    /** Calls use -1 for automatic routing so Android's real STREAM_VOICE_CALL value 0 is selectable. */
+    const val CALL_AUDIO_AUTO = -1
+    val CALL_AUDIO_CHANNELS = CALL_AUDIO_AUTO..20
     private const val PREFS = "xcertplay_airplay"
     private const val KEY_IDENT_PRIVATE = "identity_private"
     private const val KEY_IDENT_PUBLIC = "identity_public"
@@ -47,6 +51,7 @@ object AirPlayPersistence {
     private const val KEY_AUDIO_FOCUS_AUTO_YIELD = "audio_focus_auto_yield"
     private const val KEY_MEDIA_AUDIO_CHANNEL = "media_audio_channel"
     private const val KEY_NAVIGATION_AUDIO_CHANNEL = "navigation_audio_channel"
+    private const val KEY_CALL_AUDIO_CHANNEL = "call_audio_channel"
     private const val KEY_NAVIGATION_STREAM_TYPE = "navigation_stream_type"
     private const val KEY_WIRELESS_ENABLED = "wireless_enabled"
     private const val KEY_WIRELESS_HOTSPOT_MODE = "wireless_hotspot_mode"
@@ -60,6 +65,10 @@ object AirPlayPersistence {
     private const val KEY_MANUFACTURER = "manufacturer"
     private const val KEY_MODEL = "model"
     private const val KEY_OEM_LABEL = "oem_label"
+    private const val KEY_BRANDING_DEFAULTS_MIGRATED = "geely_branding_defaults_migrated_v1"
+    private const val KEY_MANUFACTURER_CUSTOMIZED = "manufacturer_customized"
+    private const val KEY_MODEL_CUSTOMIZED = "model_customized"
+    private const val KEY_OEM_LABEL_CUSTOMIZED = "oem_label_customized"
     private const val KEY_APP_APPEARANCE = "app_appearance"
     private const val KEY_CARPLAY_NIGHT_MODE = "carplay_night_mode"
     private const val KEY_CARPLAY_NIGHT_START = "carplay_night_start_minute"
@@ -108,9 +117,9 @@ object AirPlayPersistence {
     private const val SAFE_AREA_KEY_PREFIX = "safe_area_"
     private const val CUSTOM_ICON_FILE = "airplay-icon.png"
 
-    const val DEFAULT_MANUFACTURER = "DiPlay"
-    const val DEFAULT_MODEL = "DiPlay"
-    const val DEFAULT_OEM_LABEL = "BYD"
+    const val DEFAULT_MANUFACTURER = CarPlayVehicleBranding.DEFAULT_MANUFACTURER
+    const val DEFAULT_MODEL = CarPlayVehicleBranding.DEFAULT_MODEL
+    const val DEFAULT_OEM_LABEL = CarPlayVehicleBranding.DEFAULT_OEM_LABEL
     const val DEFAULT_MFI_I2C_PATH = "/dev/i2c-1"
 
     fun loadAmbientDelaySeconds(context: Context): Int =
@@ -236,9 +245,31 @@ object AirPlayPersistence {
 
     fun loadNavigationAudioChannel(context: Context): Int {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        // Inherit the legacy value only when the new key is absent; preserve fresh-install and explicit 0 defaults.
-        return prefs.getInt(KEY_NAVIGATION_AUDIO_CHANNEL, prefs.getInt(KEY_NAVIGATION_STREAM_TYPE, 0))
+        // The Geely head unit has a user-reported working media path while navigation guidance
+        // is silent. For a fresh Geely profile, request Android's standard media stream so the
+        // OEM media route can carry prompts. Explicit and legacy preferences always win; users
+        // can still select 0 to return to usage-based navigation routing.
+        val geelyDefault = if (HeadUnitProfile.active(context) == HeadUnitProfile.GEELY_XINGYUE_L) {
+            AudioManager.STREAM_MUSIC
+        } else {
+            0
+        }
+        return prefs.getInt(
+            KEY_NAVIGATION_AUDIO_CHANNEL,
+            prefs.getInt(KEY_NAVIGATION_STREAM_TYPE, geelyDefault),
+        )
             .takeIf { it in AUDIO_CHANNELS } ?: 0
+    }
+
+    fun loadCallAudioChannel(context: Context): Int =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getInt(KEY_CALL_AUDIO_CHANNEL, CALL_AUDIO_AUTO)
+            .takeIf { it in CALL_AUDIO_CHANNELS } ?: CALL_AUDIO_AUTO
+
+    fun saveCallAudioChannel(context: Context, channel: Int) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putInt(KEY_CALL_AUDIO_CHANNEL, channel.takeIf { it in CALL_AUDIO_CHANNELS } ?: CALL_AUDIO_AUTO)
+            .apply()
     }
 
     fun saveNavigationAudioChannel(context: Context, channel: Int) {
@@ -439,40 +470,69 @@ object AirPlayPersistence {
             .apply()
     }
 
-    fun loadManufacturer(context: Context): String =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_MANUFACTURER, null)
-            ?.takeIf { it.isNotBlank() }
-            ?: DEFAULT_MANUFACTURER
+    fun loadManufacturer(context: Context): String {
+        migrateLegacyBrandDefaults(context)
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_MANUFACTURER, null)?.takeIf { it.isNotBlank() } ?: DEFAULT_MANUFACTURER
+    }
 
     fun saveManufacturer(context: Context, manufacturer: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(KEY_MANUFACTURER, manufacturer)
+            .putBoolean(KEY_MANUFACTURER_CUSTOMIZED, true)
             .apply()
     }
 
-    fun loadModel(context: Context): String =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_MODEL, null)
-            ?.takeIf { it.isNotBlank() }
-            ?: DEFAULT_MODEL
+    fun loadModel(context: Context): String {
+        migrateLegacyBrandDefaults(context)
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_MODEL, null)?.takeIf { it.isNotBlank() } ?: DEFAULT_MODEL
+    }
 
     fun saveModel(context: Context, model: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(KEY_MODEL, model)
+            .putBoolean(KEY_MODEL_CUSTOMIZED, true)
             .apply()
     }
 
-    fun loadOemLabel(context: Context): String =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    fun loadOemLabel(context: Context): String {
+        migrateLegacyBrandDefaults(context)
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(KEY_OEM_LABEL, DEFAULT_OEM_LABEL)
             // iOS hides the car icon without a label.
             .orEmpty().ifBlank { DEFAULT_OEM_LABEL }
+    }
 
     fun saveOemLabel(context: Context, oemLabel: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(KEY_OEM_LABEL, oemLabel)
+            .putBoolean(KEY_OEM_LABEL_CUSTOMIZED, true)
             .apply()
+    }
+
+    /**
+     * Earlier DiPlay versions wrote all three built-in identity defaults together when saving an
+     * unrelated receiver setting. Migrate only that exact legacy tuple; standalone labels and any
+     * other saved identity are treated as user data and left untouched.
+     */
+    private fun migrateLegacyBrandDefaults(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_BRANDING_DEFAULTS_MIGRATED, false)) return
+        val hasLegacyDefaults = prefs.getString(KEY_MANUFACTURER, null) ==
+            CarPlayVehicleBranding.LEGACY_DEFAULT_MANUFACTURER &&
+            prefs.getString(KEY_MODEL, null) == CarPlayVehicleBranding.LEGACY_DEFAULT_MODEL &&
+            prefs.getString(KEY_OEM_LABEL, null) == CarPlayVehicleBranding.LEGACY_DEFAULT_OEM_LABEL &&
+            !prefs.getBoolean(KEY_MANUFACTURER_CUSTOMIZED, false) &&
+            !prefs.getBoolean(KEY_MODEL_CUSTOMIZED, false) &&
+            !prefs.getBoolean(KEY_OEM_LABEL_CUSTOMIZED, false)
+        val edit = prefs.edit().putBoolean(KEY_BRANDING_DEFAULTS_MIGRATED, true)
+        if (hasLegacyDefaults) {
+            edit.putString(KEY_MANUFACTURER, DEFAULT_MANUFACTURER)
+                .putString(KEY_MODEL, DEFAULT_MODEL)
+                .putString(KEY_OEM_LABEL, DEFAULT_OEM_LABEL)
+        }
+        edit.apply()
     }
 
     fun loadAmbientLightThreshold(context: Context): AmbientLightThreshold = AmbientLightThreshold.fromStored(

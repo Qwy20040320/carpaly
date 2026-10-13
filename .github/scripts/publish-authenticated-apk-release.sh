@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-required=(GH_TOKEN GH_REPO RELEASE_TAG APK_PATH APK_NAME APK_SHA256 APK_SIZE APK_VERSION_CODE \
+required=(GH_TOKEN GH_REPO RELEASE_TAG RELEASE_COMMIT RELEASE_SIGNING_CERT_SHA256 APK_PATH APK_NAME APK_SHA256 APK_SIZE APK_VERSION_CODE \
   SOURCE_ZIP_PATH SOURCE_ZIP_NAME SOURCE_ZIP_SHA256 SOURCE_ZIP_SIZE \
   SHA256SUMS_PATH SHA256SUMS_SHA256 SHA256SUMS_SIZE RUNNER_TEMP)
 for variable in "${required[@]}"; do
@@ -11,12 +11,23 @@ for variable in "${required[@]}"; do
   fi
 done
 
+AUTO_CREATE_TAG="${AUTO_CREATE_TAG:-false}"
+RELEASE_PRERELEASE="${RELEASE_PRERELEASE:-true}"
+[[ "$AUTO_CREATE_TAG" == true || "$AUTO_CREATE_TAG" == false ]] || {
+  echo "AUTO_CREATE_TAG must be true or false." >&2
+  exit 1
+}
+[[ "$RELEASE_PRERELEASE" == true || "$RELEASE_PRERELEASE" == false ]] || {
+  echo "RELEASE_PRERELEASE must be true or false." >&2
+  exit 1
+}
+
 [[ "$RELEASE_TAG" =~ ^v1\.[0-9]+\.[0-9]+$ ]] || {
   echo "Authenticated CarPaly releases must use v1.x.y semantic-version tags." >&2
   exit 1
 }
 version="${RELEASE_TAG#v}"
-canonical_apk="CarPaly-XingyueL${version}.apk"
+canonical_apk="CarPaly-XingyueL-v${version}.apk"
 canonical_source="${canonical_apk%.apk}-source.zip"
 canonical_sums="SHA256SUMS.txt"
 [[ "$APK_NAME" == "$canonical_apk" ]] || {
@@ -43,6 +54,14 @@ for digest in "$APK_SHA256" "$SOURCE_ZIP_SHA256" "$SHA256SUMS_SHA256"; do
 done
 [[ "$APK_VERSION_CODE" =~ ^[1-9][0-9]*$ ]] || {
   echo "APK_VERSION_CODE must be a positive integer." >&2
+  exit 1
+}
+[[ "$RELEASE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
+  echo "RELEASE_COMMIT must be the full lowercase source commit SHA." >&2
+  exit 1
+}
+[[ "$RELEASE_SIGNING_CERT_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
+  echo "RELEASE_SIGNING_CERT_SHA256 must be a lowercase public certificate digest." >&2
   exit 1
 }
 [[ -s "$APK_PATH" && -s "$SOURCE_ZIP_PATH" && -s "$SHA256SUMS_PATH" ]] || {
@@ -87,7 +106,12 @@ api() {
 }
 
 release_endpoint="repos/$GH_REPO/releases/tags/$RELEASE_TAG"
-release_title="CarPaly Xingyue L v$version — Public Preview"
+release_channel="stable"
+release_title="CarPaly Xingyue L v$version"
+if [[ "$RELEASE_PRERELEASE" == true ]]; then
+  release_channel="pre-release"
+  release_title+=" — Public Preview"
+fi
 release_notes="## 中文
 
 - 版本：$version（Android versionCode: $APK_VERSION_CODE）
@@ -126,22 +150,76 @@ release_notes="## 中文
 - Source ZIP SHA-256: $SOURCE_ZIP_SHA256
 - Checksum manifest: $canonical_sums (lists APK and source ZIP digests)
 - SHA256SUMS.txt SHA-256: $SHA256SUMS_SHA256
-- Feedback: use GitHub Issues with vehicle/firmware, iOS version, connection mode, reproduction steps, and a manually exported redacted report."
+- Feedback: use GitHub Issues with vehicle/firmware, iOS version, connection mode, reproduction steps, and a manually exported redacted report.
+
+<!-- CARPALY:RELEASE_NOTES:START -->
+## Machine-managed publication facts
+
+- GitHub channel: $release_channel.
+- Tag source commit: $RELEASE_COMMIT.
+- APK verification record: PASS (version $version, versionCode $APK_VERSION_CODE, SHA-256 $APK_SHA256).
+- Release signer certificate SHA-256: $RELEASE_SIGNING_CERT_SHA256.
+- Vehicle features not listed as independently verified remain NOT_TESTED.
+<!-- CARPALY:RELEASE_NOTES:END -->"
 
 release_json=""
+release_index="$(api "repos/$GH_REPO/releases?per_page=100")"
+jq -e 'type == "array"' <<<"$release_index" >/dev/null || {
+  echo "GitHub Releases API returned an unexpected response; refusing to create a Release." >&2
+  exit 1
+}
+release_json="$(jq -c --arg tag "$RELEASE_TAG" '[.[] | select(.tag_name == $tag)] | first // empty' <<<"$release_index")"
 release_exists=true
-if ! release_json="$(api "$release_endpoint" 2>/dev/null)"; then
+if [[ -z "$release_json" ]]; then
   release_exists=false
 fi
 
-release_index="$(api "repos/$GH_REPO/releases?per_page=100")"
+remote_tag_commit() {
+  local refs status direct peeled
+  if refs="$(git ls-remote --exit-code origin \
+      "refs/tags/$RELEASE_TAG" "refs/tags/$RELEASE_TAG^{}" 2>&1)"; then
+    status=0
+  else
+    status=$?
+  fi
+  if (( status == 2 )) && [[ -z "$refs" ]]; then
+    return 1
+  fi
+  if (( status != 0 )); then
+    echo "Could not safely inspect the remote release tag (git ls-remote status $status)." >&2
+    return 2
+  fi
+  direct="$(awk -v ref="refs/tags/$RELEASE_TAG" '$2 == ref { print $1; exit }' <<<"$refs")"
+  peeled="$(awk -v ref="refs/tags/$RELEASE_TAG^{}" '$2 == ref { print $1; exit }' <<<"$refs")"
+  printf '%s\n' "${peeled:-$direct}"
+}
+
+remote_tag_commit=""
+if remote_tag_commit="$(remote_tag_commit)"; then
+  [[ "$remote_tag_commit" == "$RELEASE_COMMIT" ]] || {
+    echo "The remote release tag already points to a different source commit; refusing publication." >&2
+    exit 1
+  }
+  remote_tag_exists=true
+else
+  tag_status=$?
+  if (( tag_status == 1 )); then
+    remote_tag_exists=false
+  else
+    exit 1
+  fi
+fi
+if [[ "$release_exists" == true && "$remote_tag_exists" != true ]]; then
+  echo "GitHub has a Release without its expected remote tag; refusing to mutate it." >&2
+  exit 1
+fi
 highest_version_code=0
 existing_tag_version_code=""
 while IFS= read -r encoded_release; do
   prior_release="$(base64 --decode <<<"$encoded_release")"
   prior_tag="$(jq -r '.tag_name // ""' <<<"$prior_release")"
   prior_body="$(jq -r '.body // ""' <<<"$prior_release")"
-  prior_code="$(sed -nE 's/^Android versionCode: ([0-9]+)$/\1/p' <<<"$prior_body" | head -n 1)"
+  prior_code="$(sed -nE 's/.*Android versionCode: ([0-9]+).*/\1/p' <<<"$prior_body" | head -n 1)"
   if [[ -z "$prior_code" ]]; then
     case "$prior_tag" in
       v0.1.0) prior_code=34 ;;
@@ -169,15 +247,41 @@ elif (( APK_VERSION_CODE <= highest_version_code )); then
 fi
 
 if [[ "$release_exists" == false ]]; then
-  # Validate the tag and version sequence before creating even a draft release.
-  api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" >/dev/null
-  gh release create "$RELEASE_TAG" --verify-tag --draft --prerelease \
-    --title "$release_title" --notes "$release_notes"
+  # All artifacts are already built and verified. For an auto-release, create the
+  # version tag only together with its draft Release, after the version/code gates.
+  create_args=(release create "$RELEASE_TAG" --draft --title "$release_title" --notes "$release_notes")
+  if [[ "$RELEASE_PRERELEASE" == true ]]; then
+    create_args+=(--prerelease)
+  fi
+  if [[ "$remote_tag_exists" == true ]]; then
+    create_args+=(--verify-tag)
+  elif [[ "$AUTO_CREATE_TAG" == true ]]; then
+    create_args+=(--target "$RELEASE_COMMIT")
+  else
+    echo "The release tag is missing; manual tag-based publication requires a reviewed existing tag." >&2
+    exit 1
+  fi
+  gh "${create_args[@]}"
+  created_tag_commit=""
+  if created_tag_commit="$(remote_tag_commit)"; then
+    [[ "$created_tag_commit" == "$RELEASE_COMMIT" ]] || {
+      echo "The newly created release tag does not resolve to RELEASE_COMMIT." >&2
+      exit 1
+    }
+  else
+    echo "GitHub did not expose the expected release tag after creating the draft." >&2
+    exit 1
+  fi
   release_json="$(api "$release_endpoint")"
 fi
 
 release_id="$(jq -er '.id | tostring' <<<"$release_json")"
 is_draft="$(jq -r '.draft' <<<"$release_json")"
+original_prerelease="$(jq -r '.prerelease' <<<"$release_json")"
+[[ "$original_prerelease" == "$RELEASE_PRERELEASE" ]] || {
+  echo "Existing Release channel differs from the reviewed release intent; preserving it without mutation." >&2
+  exit 1
+}
 
 assets_endpoint="repos/$GH_REPO/releases/$release_id/assets?per_page=100"
 assets="$(api "$assets_endpoint")"
@@ -268,15 +372,22 @@ cmp -s "$SHA256SUMS_PATH" "$download_dir/$canonical_sums"
 [[ "$(sha256sum "$download_dir/$canonical_sums" | awk '{print $1}')" == "$SHA256SUMS_SHA256" ]]
 (cd "$download_dir" && sha256sum --check --status "$canonical_sums")
 
-api --method PATCH "repos/$GH_REPO/releases/$release_id" \
-  -f "name=$release_title" \
-  -f "body=$release_notes" \
-  -F draft=false \
-  -F prerelease=true >/dev/null
+if [[ "$is_draft" == true ]]; then
+  # Preserve an existing draft's title and hand-authored notes. Only change its
+  # publication flags after every asset has been downloaded and verified.
+  api --method PATCH "repos/$GH_REPO/releases/$release_id" \
+    -F draft=false \
+    -F "prerelease=$RELEASE_PRERELEASE" >/dev/null
+  expected_prerelease="$RELEASE_PRERELEASE"
+else
+  # A published Release is immutable from this workflow's perspective. In
+  # particular, never overwrite its title, notes, or channel on a rerun.
+  expected_prerelease="$original_prerelease"
+fi
 
 final_release="$(api "$release_endpoint")"
 [[ "$(jq -r '.draft' <<<"$final_release")" == false ]]
-[[ "$(jq -r '.prerelease' <<<"$final_release")" == true ]]
+[[ "$(jq -r '.prerelease' <<<"$final_release")" == "$expected_prerelease" ]]
 final_assets="$(api "$assets_endpoint")"
 [[ "$(jq 'length' <<<"$final_assets")" == 3 ]]
 verify_asset "$final_assets" "$canonical_apk" "$APK_SIZE" "$APK_SHA256"

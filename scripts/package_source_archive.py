@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import json
 import os
 from pathlib import PurePosixPath
 import stat
@@ -16,7 +17,6 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ALLOWED_MARKDOWN = {"CarPaly/README.md"}
 BLOCKED_SUFFIXES = {
     ".aab",
     ".apk",
@@ -70,6 +70,24 @@ def build_archive(ref: str, output: Path) -> tuple[int, int]:
         )
         tar_file.seek(0)
         with tarfile.open(fileobj=tar_file, mode="r:") as source:
+            try:
+                manifest_member = source.getmember("CarPaly/config/public-markdown-allowlist.json")
+            except KeyError as error:
+                raise ValueError("Source commit is missing the public Markdown allow-list") from error
+            if not manifest_member.isfile():
+                raise ValueError("Public Markdown allow-list must be a regular file")
+            manifest_stream = source.extractfile(manifest_member)
+            if manifest_stream is None:
+                raise ValueError("Could not read the source commit Markdown allow-list")
+            with manifest_stream:
+                markdown_config = json.loads(manifest_stream.read().decode("utf-8"))
+            if markdown_config.get("schemaVersion") != 1:
+                raise ValueError("Unsupported public Markdown allow-list schema")
+            allowed_markdown = {
+                f"CarPaly/{name}" for name in markdown_config.get("publicMarkdown", [])
+            }
+            if "CarPaly/README.md" not in allowed_markdown:
+                raise ValueError("Public Markdown allow-list must contain the root README")
             temporary_path: Path | None = None
             included: set[str] = set()
             try:
@@ -86,7 +104,7 @@ def build_archive(ref: str, output: Path) -> tuple[int, int]:
                             raise ValueError(f"Private/build path found in source commit: {member.name}")
                         if path.suffix.lower() in BLOCKED_SUFFIXES:
                             raise ValueError(f"Credential or installable artifact found in source commit: {member.name}")
-                        if path.suffix.lower() == ".md" and member.name not in ALLOWED_MARKDOWN:
+                        if path.suffix.lower() == ".md" and member.name not in allowed_markdown:
                             continue
                         # A ZIP symlink can escape the extraction root even when its
                         # member name is safe. Public source archives do not need

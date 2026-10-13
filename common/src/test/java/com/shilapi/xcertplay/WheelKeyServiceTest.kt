@@ -94,6 +94,18 @@ class WheelKeyServiceTest {
         assertEquals(KeyEvent.KEYCODE_F1, WheelZoomSettings.key(service, WheelZoomSettings.Role.MODE)?.code)
     }
 
+    @Test fun geelyProfileDoesNotApplyHistoricBydWheelCodesButKeepsLearnedKeys() {
+        service.getSharedPreferences("diplay_wheel_map_zoom", Context.MODE_PRIVATE).edit().clear().commit()
+        HeadUnitProfile.save(service, HeadUnitProfile.GEELY_XINGYUE_L)
+        assertNull(WheelZoomSettings.key(service, WheelZoomSettings.Role.MODE))
+        assertNull(WheelZoomSettings.key(service, WheelZoomSettings.Role.ZOOM_IN))
+        assertNull(WheelZoomSettings.key(service, WheelZoomSettings.Role.JOYSTICK))
+
+        val learned = WheelKey(KeyEvent.KEYCODE_F6, 0, "geely-wheel")
+        WheelZoomSettings.assign(service, WheelZoomSettings.Role.MODE, learned)
+        assertEquals(learned, WheelZoomSettings.key(service, WheelZoomSettings.Role.MODE))
+    }
+
     @Test fun cancelAndTimeoutDoNotLeaveTheNextKeyCaptured() {
         var cancelled = 0
         assertTrue(learn { cancelled++ })

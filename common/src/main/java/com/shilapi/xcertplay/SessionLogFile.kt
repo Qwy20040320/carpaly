@@ -6,41 +6,33 @@ import java.io.File
 /** Bounded, private diagnostics. Each write is redacted before touching storage. */
 internal class SessionLogFile(
     val file: File,
-    private val loggingEnabled: () -> Boolean = { true },
-    private val maxFileBytes: Long = DiagnosticLogManager.MAX_FILE_BYTES,
-    private val onRotation: () -> Unit = {},
+    private val maxFileBytes: Long = MAX_BYTES,
 ) : Closeable {
     private val lock = Any()
     private var closed = false
 
     init { require(maxFileBytes > 0) }
 
-    fun isLoggingEnabled(): Boolean = synchronized(lock) { !closed && enabled() }
-
     fun reset(header: String) = synchronized(lock) {
-        if (!closed && enabled()) {
+        if (!closed) {
             file.parentFile?.mkdirs()
             rotate()
             file.writeText("")
             append(header)
-            runCatching(onRotation)
         }
     }
     fun append(line: String) = synchronized(lock) {
-        if (closed || !enabled()) return@synchronized
+        if (closed) return@synchronized
         val safe = DiagnosticRedactor.redact(line)?.take(MAX_LOG_LINE_CHARS) ?: return@synchronized
         runCatching {
             file.parentFile?.mkdirs()
             val bytes = (safe + "\n").toByteArray(Charsets.UTF_8)
             if (bytes.size > maxFileBytes) return@runCatching
-            var rotated = false
             if (file.exists() && file.length() + bytes.size > maxFileBytes) {
                 rotate()
                 file.writeText("")
-                rotated = true
             }
             file.appendBytes(bytes)
-            if (rotated) runCatching(onRotation)
         }
         Unit
     }
@@ -55,12 +47,10 @@ internal class SessionLogFile(
     }
     override fun close() = synchronized(lock) { closed = true }
 
-    private fun enabled(): Boolean = runCatching(loggingEnabled).getOrDefault(false)
-
     companion object {
-        const val MAX_BYTES = DiagnosticLogManager.MAX_FILE_BYTES
+        const val MAX_BYTES = 512 * 1024L
         const val MAX_LOG_LINE_CHARS = 16 * 1024
-        private val ARCHIVE_NAMES = listOf("previous.log") + (2..19).map { "previous-$it.log" }
+        private val ARCHIVE_NAMES = listOf("previous.log") + (2..7).map { "previous-$it.log" }
         val REPORT_NAMES = ARCHIVE_NAMES.reversed() + "diplay.log"
     }
 }

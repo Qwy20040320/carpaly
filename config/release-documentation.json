@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "repository": {
+    "slug": "Qwy20040320/carpaly",
+    "description": "CarPaly — Android CarPlay receiver project with Geely Xingyue L (KX11) compatibility development.",
+    "descriptionMaxLength": 350,
+    "homepage": "https://qwy20040320.github.io/carpaly/",
+    "topics": [
+      "android",
+      "automotive",
+      "carplay",
+      "diplay",
+      "geely",
+      "kx11",
+      "xingyuel"
+    ]
+  },
+  "candidate": {
+    "status": "local_candidate",
+    "versionName": "1.1.52",
+    "summaryZh": "本地候选版本；尚无 GitHub 标签或公开 Release。当前资料没有证明本候选修复了任何实车 CarPlay、音频或车机显示故障。",
+    "summaryEn": "Local candidate only; no GitHub tag or public Release exists. Available evidence does not establish that this candidate fixes any in-vehicle CarPlay, audio, or head-unit display issue.",
+    "vehicleStatus": "NOT_TESTED",
+    "releaseClaims": [],
+    "releaseNotesZh": [
+      "本地候选版本，尚未发布。",
+      "不得据此宣称音乐自动暂停、导航无声或顶部状态栏遮挡问题已修复。",
+      "HUD、仪表、燃油及其他未经实际验证的车辆功能保持 NOT_TESTED。"
+    ],
+    "releaseNotesEn": [
+      "Local candidate only; not released.",
+      "Do not claim that media auto-pause, silent navigation prompts, or OEM status-bar overlap is fixed.",
+      "HUD, instrument cluster, fuel data, and other unverified vehicle features remain NOT_TESTED."
+    ]
+  },
+  "vehicleFeedback": [
+    {
+      "id": "carplay_connection",
+      "labelZh": "CarPlay 连接",
+      "labelEn": "CarPlay connection",
+      "status": "USER_REPORTED_PASS",
+      "detailZh": "用户反馈连接正常；测试 APK 版本、车型配置及有线/无线模式未记录，维护者未独立复现。",
+      "detailEn": "User reported a normal connection; APK version, vehicle trim, and wired/wireless mode were not recorded and have not been independently reproduced."
+    },
+    {
+      "id": "media_audio",
+      "labelZh": "音乐播放",
+      "labelEn": "Media playback",
+      "status": "USER_REPORTED_ISSUE",
+      "detailZh": "用户反馈音乐播放约一秒后自动暂停；唤醒 Siri 时音乐可播放。",
+      "detailEn": "User reported that music pauses after about one second, while playback works when Siri is active."
+    },
+    {
+      "id": "navigation_audio",
+      "labelZh": "导航语音",
+      "labelEn": "Navigation prompts",
+      "status": "USER_REPORTED_FAIL",
+      "detailZh": "用户反馈导航提示音无声；根因及修复状态尚未由本轮新实车复测确认。",
+      "detailEn": "User reported silent navigation prompts; the root cause and any fix have not been confirmed by a new vehicle retest."
+    },
+    {
+      "id": "siri_audio",
+      "labelZh": "Siri 双向语音",
+      "labelEn": "Siri two-way audio",
+      "status": "USER_REPORTED_PASS",
+      "detailZh": "用户反馈可听见 Siri 且 Siri 能听见用户；未独立复现。",
+      "detailEn": "User reported hearing Siri and being heard by Siri; not independently reproduced."
+    },
+    {
+      "id": "steering_keys",
+      "labelZh": "方向盘按键",
+      "labelEn": "Steering-wheel keys",
+      "status": "USER_REPORTED_PASS",
+      "detailZh": "用户反馈按键有响应；具体按键与映射未记录，未独立复现。",
+      "detailEn": "User reported responsive keys; individual keys and mappings were not recorded and have not been independently reproduced."
+    },
+    {
+      "id": "oem_status_bar",
+      "labelZh": "顶部原车状态栏",
+      "labelEn": "OEM top status bar",
+      "status": "USER_REPORTED_FAIL",
+      "detailZh": "用户反馈仍遮挡 CarPlay 画面。",
+      "detailEn": "User reported that the OEM status bar still overlaps the CarPlay view."
+    },
+    {
+      "id": "hud_cluster_fuel",
+      "labelZh": "HUD、仪表与燃油数据",
+      "labelEn": "HUD, cluster, and fuel data",
+      "status": "NOT_TESTED",
+      "detailZh": "没有可核实的实车接口调用或验收证据。",
+      "detailEn": "No verifiable in-vehicle interface call or acceptance evidence is available."
+    }
+  ],
+  "managedMarkers": {
+    "readmeReleases": "CARPALY:RELEASES",
+    "readmeCandidate": "CARPALY:CANDIDATE",
+    "readmeVehicleFeedback": "CARPALY:VEHICLE_FEEDBACK",
+    "readmeDownloads": "CARPALY:DOWNLOADS",
+    "readmeEnglishReleases": "CARPALY:ENGLISH_RELEASES",
+    "readmeEnglishVehicleFeedback": "CARPALY:ENGLISH_VEHICLE_FEEDBACK",
+    "readmeEnglishDownloads": "CARPALY:ENGLISH_DOWNLOADS",
+    "changelog": "CARPALY:CHANGELOG",
+    "releaseNotes": "CARPALY:RELEASE_NOTES"
+  }
+}

@@ -2,3 +2,5 @@ fda5def28facabd820b6685b8a21ac5d87e09881:common/src/test/java/com/shilapi/xcertp
 3e6356019650916454b9ba26d0d1cb7307e5ba2e:common/src/test/java/com/shilapi/xcertplay/ClusterActivityOutputTest.kt:generic-api-key:19
 fe246fdc534151dadcd4438beb09adc2060895be:common/src/test/java/com/shilapi/xcertplay/AdbClusterRouterTest.kt:generic-api-key:22
 3b67c80b0acf663dec01dba5c9e1a8cc8d516c47:shared/src/main/java/com/shilapi/xcertplay/transport/LockdownTlsEngineFactory.kt:private-key:102
+9dae21e9db6c42c2b86cd0891d6725c8cd16782a:common/src/test/java/com/shilapi/xcertplay/ClusterActivityOutputTest.kt:generic-api-key:128
+60300d8977c04f875953aae7a1facdf546b36696:shared/src/test/java/com/shilapi/xcertplay/hud/BydAmbientLightPolicyTest.kt:generic-api-key:7

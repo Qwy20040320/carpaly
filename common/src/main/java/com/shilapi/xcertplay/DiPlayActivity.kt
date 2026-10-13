@@ -19,6 +19,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioTrack
 import android.net.Uri
 import android.os.Build
@@ -60,7 +61,6 @@ import com.shilapi.xcertplay.network.CarHotspotSettings
 import com.shilapi.xcertplay.network.CarHotspotTethering
 import com.shilapi.xcertplay.network.WifiP2pChannels
 import com.shilapi.xcertplay.orchestration.WirelessHotspotMode
-import com.shilapi.xcertplay.orchestration.MfiTarget
 import com.shilapi.xcertplay.settings.SettingsTheme
 import com.shilapi.xcertplay.settings.SettingsWidgets
 import com.shilapi.xcertplay.setup.DiLinkGeneration
@@ -76,6 +76,12 @@ import com.shilapi.xcertplay.update.UpdateApkCompatibility
 import com.shilapi.xcertplay.update.UpdateApkDownloader
 import com.shilapi.xcertplay.update.UpdateApkInstallIntent
 import com.shilapi.xcertplay.update.UpdateApkIncompatibilityException
+import com.shilapi.xcertplay.update.UpdateManifestVerifier
+import com.shilapi.xcertplay.update.UpdateManifestException
+import com.shilapi.xcertplay.update.UpdateManifestReplayGuard
+import com.shilapi.xcertplay.update.UpdateDownloadCancellation
+import com.shilapi.xcertplay.update.UpdateInstallSafety
+import com.shilapi.xcertplay.update.TrustedVehicleMotion
 import java.io.File
 import java.io.IOException
 import java.text.SimpleDateFormat
@@ -84,7 +90,7 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 internal enum class SettingsCategory {
-    OVERVIEW, CONNECTION, DISPLAY, AUDIO, NAVIGATION, VEHICLE, LANGUAGE, ABOUT, DIAGNOSTICS, ADVANCED,
+    OVERVIEW, CONNECTION, DISPLAY, AUDIO, NAVIGATION, VEHICLE, LANGUAGE, ABOUT, APP_UPDATES, DIAGNOSTICS, ADVANCED,
 }
 
 /** A settings card. Every entry needs one category in [SettingsInformationArchitecture]; see AGENTS.md. */
@@ -104,6 +110,7 @@ internal enum class SettingsSection {
     CLUSTER_MAP,
     BYD_NAVIGATION,
     PERMISSIONS_AND_HELP,
+    APP_UPDATES,
     LANGUAGE,
 }
 
@@ -112,6 +119,7 @@ internal object SettingsInformationArchitecture {
         SettingsCategory.OVERVIEW to emptySet(),
         SettingsCategory.LANGUAGE to setOf(SettingsSection.LANGUAGE),
         SettingsCategory.ABOUT to emptySet(),
+        SettingsCategory.APP_UPDATES to setOf(SettingsSection.APP_UPDATES),
         SettingsCategory.CONNECTION to setOf(
             SettingsSection.CONNECTION_SETUP,
             SettingsSection.AUTOMATIC_CONNECTION,
@@ -202,6 +210,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var updateRelease: UpdateRelease? = null
     private var updateApkFile: File? = null
     private var updateMessage: String? = null
+    @Volatile private var updateDownloadCancellation: UpdateDownloadCancellation? = null
+    @Volatile private var updateDownloadProgress = 0L
     private var updatePromptDismissedTag: String? = null
     private var carButtonCard: LinearLayout? = null
     private var bydAdbControls: LinearLayout? = null
@@ -486,6 +496,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     override fun onDestroy() {
+        updateDownloadCancellation?.cancel()
+        updateDownloadCancellation = null
         appearanceObserverRemoval?.invoke()
         appearanceObserverRemoval = null
         handler.removeCallbacks(appearancePoll)
@@ -973,6 +985,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         SettingsCategory.ADVANCED -> R.drawable.ic_dp_advanced
         SettingsCategory.LANGUAGE -> R.drawable.ic_dp_language
         SettingsCategory.ABOUT -> R.drawable.ic_dp_about
+        SettingsCategory.APP_UPDATES -> R.drawable.ic_dp_about
     }
 
     private fun settingsCategoryTitle(category: SettingsCategory): String = getString(when (category) {
@@ -986,6 +999,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         SettingsCategory.ADVANCED -> R.string.settings_advanced
         SettingsCategory.LANGUAGE -> R.string.language_section_title
         SettingsCategory.ABOUT -> R.string.about
+        SettingsCategory.APP_UPDATES -> R.string.settings_app_updates
     })
 
     private fun settingsCategoryContent(content: LinearLayout) {
@@ -1003,6 +1017,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.LANGUAGE))
             }
             SettingsCategory.ABOUT -> about(content)
+            SettingsCategory.APP_UPDATES -> {
+                settingsPageTitle(content, getString(R.string.settings_app_updates),
+                    getString(R.string.settings_app_updates_description))
+                renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.APP_UPDATES))
+            }
         }
     }
 
@@ -1029,6 +1048,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             SettingsCategory.VEHICLE to R.string.settings_vehicle_summary,
             SettingsCategory.LANGUAGE to R.string.settings_language_summary,
             SettingsCategory.ABOUT to R.string.about_diplay,
+            SettingsCategory.APP_UPDATES to R.string.settings_app_updates_description,
         )
         val twoColumns = isExpandedSettingsLayout && resources.configuration.let {
             SettingsLayoutPolicy.overviewHasTwoColumns(it.screenWidthDp, it.fontScale)
@@ -1186,9 +1206,17 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         Unit
     }
 
-    private fun openSettingsCategory(category: SettingsCategory) {
-        if (category == SettingsCategory.ABOUT) page = "about"
-        else settingsCategory = category
+    private fun openSettingsCategory(category: SettingsCategory) = openSettingsCategory(category, checkAutomatically = true)
+
+    private fun openSettingsCategory(category: SettingsCategory, checkAutomatically: Boolean) {
+        if (category == SettingsCategory.ABOUT) {
+            page = "about"
+            maybeCheckForUpdatesAutomatically()
+        } else {
+            page = "settings"
+            settingsCategory = category
+            if (category == SettingsCategory.APP_UPDATES && checkAutomatically) maybeCheckForUpdatesAutomatically()
+        }
         render()
     }
 
@@ -1493,19 +1521,14 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         filteredSection(content, SettingsSection.DIAGNOSTICS,
             getString(R.string.diagnostics), R.drawable.ic_dp_diagnostics) { card ->
-            card.addView(label(getString(R.string.settings_diagnostics_summary), 16, MUTED))
-            card.addView(button(getString(R.string.settings_open_diagnostics), true) {
-                val authStatus = when {
-                    setupError != null -> "UNAVAILABLE"
-                    AirPlayPersistence.loadMfiTarget(this) == MfiTarget.LOCAL -> "LOADED_NOT_TRUSTED"
-                    else -> "CONFIGURED_NOT_VERIFIED"
-                }
-                startActivity(Intent(this, GeelyDiagnosticCenterActivity::class.java)
-                    .putExtra(GeelyDiagnosticCenterActivity.EXTRA_MFI_AUTH_STATUS, authStatus))
-            }, matchButton(12, 60))
-            card.addView(label(getString(R.string.reports_save_to_downloads_diplay) +
-                getString(R.string.nothing_is_sent_automatically_protocol_payloads_and_creden), 14, MUTED)
-                .apply { setPadding(0, dp(12), 0, 0) })
+            exportButton = button(if (exportInProgress) getString(R.string.saving_report) else getString(R.string.save_diagnostic_report), false) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) exportDiagnostics()
+                else chooseReportDestination()
+            }.apply { isEnabled = !exportInProgress }
+            card.addView(exportButton, matchButton(10, 60))
+            card.addView(button(getString(R.string.choose_save_location), false) { chooseReportDestination() }, matchButton(10, 60))
+            val destination = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) getString(R.string.reports_save_to_downloads_diplay) else getString(R.string.choose_where_to_save_your_report)
+            card.addView(label(destination + getString(R.string.nothing_is_sent_automatically_protocol_payloads_and_creden), 14, MUTED).apply { setPadding(0, dp(12), 0, 0) })
         }
         filteredSection(content, SettingsSection.AUTOMATIC_CONNECTION,
             getString(R.string.automatic_connection), R.drawable.ic_dp_automation) { card ->
@@ -1733,6 +1756,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             getString(R.string.audio_routing), R.drawable.ic_dp_audio) { card ->
             mediaChannelControl(card)
             navigationChannelControl(card)
+            callChannelControl(card)
             val bufferPresets = com.shilapi.xcertplay.media.MediaAudioBuffer.presets
             choice(card, getString(R.string.music_buffer), listOf(getString(R.string.s_300_ms_default), getString(R.string.s_500_ms), getString(R.string.s_1000_ms_most_stable)),
                 bufferPresets.indexOf(AirPlayPersistence.loadMediaBufferMillis(this)).coerceAtLeast(0)) {
@@ -2011,39 +2035,55 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             card.addView(button(getString(R.string.bluetooth_settings), false) { openSystem(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }, matchButton(10, 60))
             card.addView(button(getString(R.string.wireless_connection_help), false) { wirelessHelp() }, matchButton(10, 60))
         }
+        filteredSection(content, SettingsSection.APP_UPDATES,
+            getString(R.string.settings_app_updates), R.drawable.ic_dp_about, ::appUpdatesSettings)
         languageSettings(content)
     }
 
     private fun about(content: LinearLayout) {
         content.addView(label(getString(R.string.app_name), 40, TEXT, true))
         content.addView(label(getString(R.string.carplay_at_home_in_your_car), 20, MUTED).apply { setPadding(0, dp(8), 0, dp(24)) })
-        section(content, getString(R.string.about_public_preview_prefix, version())) { card ->
+        section(content, getString(R.string.settings_app_updates)) { card ->
             card.addView(label(getString(R.string.an_independent_carplay_receiver_for_android_head_units_wir), 17, TEXT))
-            toggle(card, getString(R.string.settings_auto_update_check),
-                getString(R.string.settings_auto_update_check_description), autoUpdateChecksEnabled()) { enabled ->
-                getSharedPreferences("diplay", MODE_PRIVATE).edit()
-                    .putBoolean(UpdateCheckPolicy.AUTO_CHECK_ENABLED_KEY, enabled).apply()
-                if (enabled) maybeCheckForUpdatesAutomatically()
-            }
-            card.addView(button(getString(R.string.update_channel_row, getString(updateChannelLabel(updateChannel()))), false) {
-                showUpdateChannelDialog()
-            }, matchButton(8, 60))
-            card.addView(label(getString(R.string.update_channel_description), 14, MUTED)
-                .apply { setPadding(0, dp(4), 0, 0) })
-            card.addView(updateRow())
+            card.addView(label(getString(R.string.settings_app_updates_description), 14, MUTED)
+                .apply { setPadding(0, dp(6), 0, dp(8)) })
+            card.addView(button(getString(R.string.update_check), false) {
+                openSettingsCategory(SettingsCategory.APP_UPDATES, checkAutomatically = false)
+                checkForUpdates()
+            }, matchButton(4, 56))
         }
         section(content, getString(R.string.made_possible_by_open_source)) { card ->
             card.addView(label(getString(R.string.receiver_based_on_xcertplay_licensed_under_gpl_3_0_diplay), 16, MUTED))
         }
     }
 
-    private enum class UpdateStage { IDLE, CHECKING, AVAILABLE, DOWNLOADING, VERIFYING_INSTALL, READY_TO_INSTALL, FAILED }
+    private fun appUpdatesSettings(card: LinearLayout) {
+        card.addView(label(getString(R.string.an_independent_carplay_receiver_for_android_head_units_wir), 17, TEXT))
+        card.addView(label(getString(R.string.update_current_version_details, version(), currentVersionCode()), 14, MUTED)
+            .apply { setPadding(0, dp(4), 0, dp(8)) })
+        card.addView(label(getString(R.string.settings_app_updates_description), 14, MUTED)
+            .apply { setPadding(0, 0, 0, dp(8)) })
+        toggle(card, getString(R.string.settings_auto_update_check),
+            getString(R.string.settings_auto_update_check_description), autoUpdateChecksEnabled()) { enabled ->
+            getSharedPreferences("diplay", MODE_PRIVATE).edit()
+                .putBoolean(UpdateCheckPolicy.AUTO_CHECK_ENABLED_KEY, enabled).apply()
+            if (enabled) maybeCheckForUpdatesAutomatically()
+        }
+        card.addView(button(getString(R.string.update_channel_row, getString(updateChannelLabel(updateChannel()))), false) {
+            showUpdateChannelDialog()
+        }, matchButton(8, 60))
+        card.addView(label(getString(R.string.update_channel_description), 14, MUTED)
+            .apply { setPadding(0, dp(4), 0, 0) })
+        card.addView(updateRow())
+    }
+
+    private enum class UpdateStage { IDLE, CHECKING, AVAILABLE, DOWNLOADING, VERIFYING_INSTALL, READY_TO_INSTALL, FAILED, CANCELLED }
 
     private fun updateRow(): View {
         val container = column().apply { setPadding(0, dp(12), 0, 0) }
         updateMessage?.let { container.addView(label(it, 14, MUTED)) }
         when (updateStage) {
-            UpdateStage.IDLE, UpdateStage.FAILED ->
+            UpdateStage.IDLE, UpdateStage.FAILED, UpdateStage.CANCELLED ->
                 container.addView(button(getString(R.string.update_check), false) { checkForUpdates() },
                     matchButton(if (updateMessage == null) 0 else 10, 60))
             UpdateStage.CHECKING -> container.addView(label(getString(R.string.update_checking), 14, MUTED))
@@ -2051,6 +2091,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 val packageSize = android.text.format.Formatter.formatShortFileSize(this, release.sizeBytes)
                 container.addView(label(getString(R.string.update_available_details,
                     version(), release.versionName, packageSize), 14, MUTED))
+                container.addView(label(getString(R.string.update_release_metadata,
+                    release.versionCode, release.releaseDate, getString(updateChannelLabel(release.channel))), 14, MUTED)
+                    .apply { setPadding(0, dp(4), 0, 0) })
                 container.addView(label(getString(R.string.update_apk_filename, release.apkName), 13, MUTED)
                     .apply { setPadding(0, dp(4), 0, 0) })
                 val releaseType = getString(if (release.isPrerelease) R.string.update_preview_release
@@ -2063,6 +2106,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 container.addView(label(notes, 14, MUTED).apply { setPadding(0, dp(4), 0, dp(8)) })
                 container.addView(label(getString(R.string.update_manual_install_warning), 13, WARNING)
                     .apply { setPadding(0, dp(4), 0, dp(4)) })
+                container.addView(label(getString(R.string.update_install_waiting_for_parked), 13, WARNING)
+                    .apply { setPadding(0, dp(4), 0, dp(4)) })
                 container.addView(updateActionView(release), matchButton(4, 60))
                 if (updateStage == UpdateStage.AVAILABLE) {
                     container.addView(button(getString(R.string.update_open_release, release.tagName), false) {
@@ -2070,9 +2115,16 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     }, matchButton(4, 56))
                 }
             }
-            UpdateStage.DOWNLOADING -> container.addView(label(
-                getString(R.string.update_downloading, updateRelease?.apkName.orEmpty()), 14, MUTED,
-            ))
+            UpdateStage.DOWNLOADING -> {
+                val release = updateRelease
+                val percent = if (release == null || release.sizeBytes <= 0L) 0
+                    else ((updateDownloadProgress * 100L) / release.sizeBytes).toInt().coerceIn(0, 100)
+                container.addView(label(getString(R.string.update_download_progress,
+                    release?.apkName.orEmpty(), percent), 14, MUTED))
+                container.addView(button(getString(R.string.update_cancel_download), false) {
+                    cancelUpdateDownload()
+                }, matchButton(8, 56))
+            }
             UpdateStage.VERIFYING_INSTALL -> container.addView(label(getString(R.string.update_verifying_install), 14, MUTED))
         }
         return container
@@ -2129,16 +2181,16 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun updateChannel(): UpdateChannel = UpdateChannel.fromPreference(
         getSharedPreferences("diplay", MODE_PRIVATE)
-            .getString(UpdateCheckPolicy.UPDATE_CHANNEL_KEY, UpdateChannel.PREVIEW.name),
+            .getString(UpdateCheckPolicy.UPDATE_CHANNEL_KEY, UpdateChannel.STABLE.name),
     )
 
     private fun updateChannelLabel(channel: UpdateChannel): Int = when (channel) {
-        UpdateChannel.PREVIEW -> R.string.update_channel_preview
+        UpdateChannel.BETA -> R.string.update_channel_beta
         UpdateChannel.STABLE -> R.string.update_channel_stable
     }
 
     private fun showUpdateChannelDialog() {
-        val channels = arrayOf(UpdateChannel.PREVIEW, UpdateChannel.STABLE)
+        val channels = arrayOf(UpdateChannel.STABLE, UpdateChannel.BETA)
         val labels = channels.map { getString(updateChannelLabel(it)) }.toTypedArray()
         appDialogBuilder()
             .setTitle(R.string.update_channel_title)
@@ -2176,7 +2228,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         updateRelease = null
         updateApkFile = null
         val generation = ++updateGeneration
-        if (page == "about") render()
+        if (isUpdatePageVisible()) render()
         Thread({
             val outcome = runCatching { latestRelease() }
             runOnUiThread {
@@ -2190,15 +2242,20 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                             updateRelease = release
                             updateStage = UpdateStage.AVAILABLE
                         }
-                        if (page == "about" || (page == "home" && !CarPlayBackgroundSession.hasSession())) {
+                        if (isUpdatePageVisible() || (page == "home" && !CarPlayBackgroundSession.hasSession())) {
                             render()
                         }
                     },
                     { failure ->
                         Log.w("DiPlay-Update", "update check failed", failure)
-                        updateMessage = getString(R.string.update_failed)
+                        updateMessage = getString(
+                            if (failure is UpdateManifestException &&
+                                failure.message.orEmpty().contains("not provisioned")) {
+                                R.string.update_ota_not_provisioned
+                            } else R.string.update_failed,
+                        )
                         updateStage = UpdateStage.FAILED
-                        if (page == "about") render()
+                        if (isUpdatePageVisible()) render()
                     },
                 )
             }
@@ -2206,14 +2263,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun latestRelease(): UpdateRelease? {
-        val json = UpdateClient.fetchText(
-            UpdateClient.RELEASES_URL,
-            "application/vnd.github+json",
-            userAgent(),
-        )
-        val release = UpdateCatalog.parse(json, updateChannel())
-        if (release == null) return null
-        return release.takeIf { UpdateVersion.isNewer(it.versionName, version()) }
+        val channel = updateChannel()
+        val keys = UpdateManifestVerifier.loadPinnedKeys(this)
+        val json = UpdateClient.fetchManifest(channel, userAgent())
+        val verified = UpdateManifestVerifier.verifyEnvelope(json, channel, currentVersionCode(), keys)
+        UpdateManifestReplayGuard.accept(applicationContext, channel, verified)
+        return verified.release
     }
 
     private fun openUpdateRelease(release: UpdateRelease) {
@@ -2234,12 +2289,28 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         updateRelease = release
         updateApkFile = null
         updateMessage = null
+        updateDownloadProgress = 0L
         updateStage = UpdateStage.DOWNLOADING
         val generation = ++updateGeneration
+        val cancellation = UpdateDownloadCancellation()
+        updateDownloadCancellation = cancellation
         renderUpdateStatusIfVisible()
         Thread({
             val outcome = runCatching {
-                val apk = UpdateApkDownloader.download(release, File(cacheDir, "update"))
+                val apk = UpdateApkDownloader.download(
+                    release,
+                    File(cacheDir, "update"),
+                    cancellation = cancellation,
+                    onProgress = { downloaded, _ ->
+                        if (generation == updateGeneration && !isFinishing && !isDestroyed) {
+                            runOnUiThread {
+                                if (generation != updateGeneration || isFinishing || isDestroyed) return@runOnUiThread
+                                updateDownloadProgress = downloaded
+                                renderUpdateStatusIfVisible()
+                            }
+                        }
+                    },
+                )
                 try {
                     if (!UpdateApkDownloader.matchesVerifiedRelease(apk, release)) {
                         throw UpdateApkIncompatibilityException("Downloaded APK no longer matches its release digest")
@@ -2250,6 +2321,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                         ?: throw UpdateApkIncompatibilityException("Could not inspect the downloaded APK signer")
                     val incompatibility = UpdateApkCompatibility.incompatibility(installed, candidate)
                     if (incompatibility != null) throw UpdateApkIncompatibilityException(incompatibility)
+                    if (!UpdateApkCompatibility.hasSigner(candidate, release.signerCertSha256) ||
+                        !UpdateApkCompatibility.hasSigner(installed, UpdateManifestVerifier.RELEASE_SIGNER_SHA256)) {
+                        throw UpdateApkIncompatibilityException("APK or installed app does not use the pinned Release signer")
+                    }
                     if (candidate.versionName != release.versionName) {
                         throw UpdateApkIncompatibilityException("APK versionName does not match its release tag")
                     }
@@ -2263,6 +2338,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 }
             }
             runOnUiThread {
+                if (updateDownloadCancellation === cancellation) updateDownloadCancellation = null
                 if (generation != updateGeneration || isFinishing || isDestroyed) return@runOnUiThread
                 outcome.fold(
                     { apk ->
@@ -2272,11 +2348,13 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     },
                     { failure ->
                         Log.w("DiPlay-Update", "verified update download failed", failure)
-                        updateMessage = getString(
-                            if (failure is UpdateApkIncompatibilityException) R.string.update_incompatible
-                            else R.string.update_failed,
-                        )
-                        updateStage = UpdateStage.AVAILABLE
+                        val wasCancelled = cancellation.isCancelled()
+                        updateMessage = getString(when {
+                            wasCancelled -> R.string.update_download_cancelled
+                            failure is UpdateApkIncompatibilityException -> R.string.update_incompatible
+                            else -> R.string.update_failed
+                        })
+                        updateStage = if (wasCancelled) UpdateStage.CANCELLED else UpdateStage.AVAILABLE
                     },
                 )
                 renderUpdateStatusIfVisible()
@@ -2284,7 +2362,36 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }, "carpaly-update-download").start()
     }
 
+    private fun cancelUpdateDownload() {
+        updateDownloadCancellation?.cancel()
+    }
+
     private fun installDownloadedUpdate() {
+        if (updateStage != UpdateStage.READY_TO_INSTALL) return
+        if (CarPlayBackgroundSession.hasSession()) {
+            updateMessage = getString(R.string.update_carplay_must_stop)
+            renderUpdateStatusIfVisible()
+            return
+        }
+        when (TrustedVehicleMotion.UNKNOWN) {
+            TrustedVehicleMotion.MOVING -> {
+                updateMessage = getString(R.string.update_install_waiting_for_parked)
+                renderUpdateStatusIfVisible()
+                return
+            }
+            TrustedVehicleMotion.PARKED -> validateAndLaunchDownloadedUpdate(userConfirmedUnknownParked = false)
+            TrustedVehicleMotion.UNKNOWN -> appDialogBuilder()
+                .setTitle(R.string.update_confirm_parked_title)
+                .setMessage(R.string.update_confirm_parked_message)
+                .setNegativeButton(R.string.cancel, null)
+                .setPositiveButton(R.string.update_confirm_parked_button) { _, _ ->
+                    validateAndLaunchDownloadedUpdate(userConfirmedUnknownParked = true)
+                }
+                .show()
+        }
+    }
+
+    private fun validateAndLaunchDownloadedUpdate(userConfirmedUnknownParked: Boolean) {
         if (updateStage != UpdateStage.READY_TO_INSTALL) return
         val release = updateRelease
         val apk = updateApkFile
@@ -2309,6 +2416,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     ?: throw UpdateApkIncompatibilityException("Could not inspect downloaded package identity")
                 val incompatibility = UpdateApkCompatibility.incompatibility(installed, candidate)
                 if (incompatibility != null) throw UpdateApkIncompatibilityException(incompatibility)
+                    if (!UpdateApkCompatibility.hasSigner(candidate, release.signerCertSha256) ||
+                        !UpdateApkCompatibility.hasSigner(installed, UpdateManifestVerifier.RELEASE_SIGNER_SHA256)) {
+                        throw UpdateApkIncompatibilityException("APK or installed app does not use the pinned Release signer")
+                    }
                 if (candidate.versionName != release.versionName ||
                     !UpdateApkCompatibility.hasAuthenticationAssets(apk)) {
                     throw UpdateApkIncompatibilityException("APK version or required authentication assets are invalid")
@@ -2318,6 +2429,17 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 if (generation != updateGeneration || isFinishing || isDestroyed) return@runOnUiThread
                 validation.fold(
                     {
+                        if (!UpdateInstallSafety.mayLaunchInstaller(
+                                TrustedVehicleMotion.UNKNOWN,
+                                CarPlayBackgroundSession.hasSession(),
+                                userConfirmedUnknownParked,
+                            )) {
+                            updateMessage = getString(if (CarPlayBackgroundSession.hasSession())
+                                R.string.update_carplay_must_stop else R.string.update_install_waiting_for_parked)
+                            updateStage = UpdateStage.READY_TO_INSTALL
+                            renderUpdateStatusIfVisible()
+                            return@fold
+                        }
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
                             updateMessage = getString(R.string.update_install_permission_required)
                             updateStage = UpdateStage.READY_TO_INSTALL
@@ -2356,8 +2478,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }, "carpaly-update-install-check").start()
     }
 
+    private fun isUpdatePageVisible(): Boolean = page == "about" ||
+        (page == "settings" && settingsCategory == SettingsCategory.APP_UPDATES)
+
     private fun renderUpdateStatusIfVisible() {
-        if (page == "about" || (page == "home" && !CarPlayBackgroundSession.hasSession())) render()
+        if (isUpdatePageVisible() || (page == "home" && !CarPlayBackgroundSession.hasSession())) render()
     }
 
     private fun userAgent() = "CarPaly/${version()}"
@@ -2950,17 +3075,45 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         })
     }
 
-    private fun showChannelDialog(title: String, current: Int, navigation: Boolean, onApply: (Int) -> Unit) {
+    private fun callChannelControl(parent: LinearLayout) {
+        val summary: (Int) -> String = {
+            getString(R.string.contrib_audio_home_choice_summary,
+                getString(R.string.contrib_audio_home_call_channel_label), callChannelLabel(it))
+        }
+        val control = button(summary(AirPlayPersistence.loadCallAudioChannel(this)), false) {}
+        control.setOnClickListener {
+            val current = AirPlayPersistence.loadCallAudioChannel(this)
+            showChannelDialog(
+                title = getString(R.string.contrib_audio_home_call_channel_label),
+                current = current,
+                navigation = false,
+                phone = true,
+                onApply = { value -> applyCallChannel(value, current, control, summary) },
+            )
+        }
+        parent.addView(control, matchButton(10, 60))
+        parent.addView(label(getString(R.string.contrib_audio_home_call_channel_note), 14, MUTED).apply {
+            setPadding(0, dp(8), 0, dp(18))
+        })
+    }
+
+    private fun showChannelDialog(
+        title: String,
+        current: Int,
+        navigation: Boolean,
+        phone: Boolean = false,
+        onApply: (Int) -> Unit,
+    ) {
         val preview = AudioChannelPreview { channel ->
             toast(getString(R.string.contrib_audio_home_channel_preview_unavailable, channel))
         }
-        val channels = AirPlayPersistence.AUDIO_CHANNELS
-        val labels = channels.map(Int::toString).toTypedArray()
-        var selection = current.coerceIn(channels.first, channels.last)
+        val channels = if (phone) AirPlayPersistence.CALL_AUDIO_CHANNELS else AirPlayPersistence.AUDIO_CHANNELS
+        val labels = channels.map { if (phone) callChannelLabel(it) else channelLabel(it) }.toTypedArray()
+        var selection = current.takeIf { it in channels } ?: channels.first
         appDialogBuilder().setTitle(title)
-            .setSingleChoiceItems(labels, selection) { _, which ->
-                selection = which
-                preview.play(which, navigation)
+            .setSingleChoiceItems(labels, channels.indexOf(selection)) { _, which ->
+                selection = channels.elementAt(which)
+                preview.play(selection, navigation, phone)
             }
             .setPositiveButton(if (CarPlayBackgroundSession.hasSession()) getString(R.string.apply_and_reconnect) else getString(R.string.save)) { _, _ ->
                 onApply(selection)
@@ -2984,7 +3137,21 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         if (CarPlayBackgroundSession.hasSession()) connect(AirPlayPersistence.loadWirelessEnabled(this))
     }
 
-    private fun channelLabel(value: Int): String = value.toString()
+    private fun applyCallChannel(value: Int, previous: Int, control: Button, summary: (Int) -> String) {
+        if (value == previous) return
+        AirPlayPersistence.saveCallAudioChannel(this, value)
+        control.text = summary(value)
+        if (CarPlayBackgroundSession.hasSession()) connect(AirPlayPersistence.loadWirelessEnabled(this))
+    }
+
+    private fun channelLabel(value: Int): String =
+        if (value == 0) getString(R.string.contrib_audio_home_channel_automatic) else value.toString()
+
+    private fun callChannelLabel(value: Int): String = when (value) {
+        AirPlayPersistence.CALL_AUDIO_AUTO -> getString(R.string.contrib_audio_home_channel_automatic)
+        AudioManager.STREAM_VOICE_CALL -> getString(R.string.contrib_audio_home_call_stream_voice_call)
+        else -> value.toString()
+    }
 
     private fun storedSsid() = AirPlayPersistence.loadManualHotspotSsid(this)
     private fun storedPassword() = AirPlayPersistence.loadManualHotspotPassphrase(this)
@@ -4564,8 +4731,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun carButtonControls(parent: LinearLayout) {
         val custom = AirPlayPersistence.loadCustomAirPlayIconFile(this)?.let { BitmapFactory.decodeFile(it.absolutePath) }
-        val geelyBranding = CarPlayVehicleBranding.usesGeelyIcon(HeadUnitProfile.active(this))
-        val defaultIcon = if (geelyBranding) R.drawable.ic_geely_auto_2023 else R.raw.ic_car_home
+        val defaultIcon = CarPlayVehicleBranding.DEFAULT_ICON_RESOURCE
         val preview = row().apply { gravity = Gravity.CENTER_VERTICAL }
         preview.addView(ImageView(this).apply {
             if (custom != null) setImageBitmap(custom) else setImageResource(defaultIcon)
@@ -4591,8 +4757,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             refreshCarButton()
             carButtonSaved()
         }, matchButton(10, 60))
-        val name = if (geelyBranding) GeelyXingyueLProfile.CARPLAY_OEM_LABEL
-            else AirPlayPersistence.loadOemLabel(this)
+        val name = AirPlayPersistence.loadOemLabel(this)
         parent.addView(button("${getString(R.string.car_button_name)} · $name", false) {
             textInput(getString(R.string.car_button_name), name, secret = false) {
                 AirPlayPersistence.saveOemLabel(this, it)
@@ -5063,6 +5228,13 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         return grid
     }
     private fun version() = packageManager.getPackageInfo(packageName, 0).versionName ?: "0.1.0-beta.1"
+
+    private fun currentVersionCode(): Long = if (Build.VERSION.SDK_INT >= 28) {
+        packageManager.getPackageInfo(packageName, 0).longVersionCode
+    } else {
+        @Suppress("DEPRECATION")
+        packageManager.getPackageInfo(packageName, 0).versionCode.toLong()
+    }
     private fun languageSettings(content: LinearLayout) {
         filteredSection(content, SettingsSection.LANGUAGE,
             getString(R.string.language_section_title), R.drawable.ic_dp_language) { card ->

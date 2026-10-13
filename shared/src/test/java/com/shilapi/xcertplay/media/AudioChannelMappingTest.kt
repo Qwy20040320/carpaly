@@ -2,6 +2,8 @@ package com.shilapi.xcertplay.media
 
 import android.media.AudioManager
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AudioChannelMappingTest {
@@ -111,6 +113,26 @@ class AudioChannelMappingTest {
             AudioChannelSelection(AudioChannel.MEDIA, AudioContentType.MUSIC, AudioManager.STREAM_MUSIC),
             AudioChannelMapper.map("media", 100, AudioChannelMappingMode.AUTOMOTIVE_BUS, custom),
         )
+    }
+
+    @Test
+    fun mediaNavigationAndCallRouteOverridesStayIndependent() {
+        val overrides = AudioChannelOverrides(media = 3, navigation = 14, call = AudioManager.STREAM_VOICE_CALL)
+        assertEquals(3, overrides.forChannel(AudioChannel.MEDIA))
+        assertEquals(14, overrides.forChannel(AudioChannel.NAVIGATION))
+        assertEquals(AudioManager.STREAM_VOICE_CALL, overrides.forChannel(AudioChannel.PHONE))
+        assertEquals(0, overrides.forChannel(AudioChannel.ASSISTANT))
+        assertEquals(CALL_AUDIO_AUTO, AudioChannelOverrides().forChannel(AudioChannel.PHONE))
+    }
+
+    @Test
+    fun voiceCallStreamZeroRemainsDistinctFromAutomaticUsageRouting() {
+        assertTrue(usesUsageBasedAudioRouting(AudioChannel.PHONE, CALL_AUDIO_AUTO))
+        assertFalse(usesUsageBasedAudioRouting(AudioChannel.PHONE, AudioManager.STREAM_VOICE_CALL))
+        assertTrue(usesUsageBasedAudioRouting(AudioChannel.MEDIA, 0))
+        assertTrue(usesUsageBasedAudioRouting(AudioChannel.NAVIGATION, 0))
+        assertTrue(usesUsageBasedAudioRouting(AudioChannel.ASSISTANT, AudioManager.STREAM_MUSIC))
+        assertFalse(usesUsageBasedAudioRouting(AudioChannel.NAVIGATION, 14))
     }
 
     private fun assertMapped(

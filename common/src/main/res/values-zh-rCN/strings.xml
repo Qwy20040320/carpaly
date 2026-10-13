@@ -47,10 +47,10 @@
     <string name="hotspot_channel_prefix">\n信道：</string>
     <string name="auto_label">自动</string>
     <string name="auto_value">自动</string>
-    <string name="fullscreen_top_hidden">顶部已隐藏</string>
-    <string name="fullscreen_top_shown">顶部已显示</string>
-    <string name="fullscreen_bottom_hidden">底部已隐藏</string>
-    <string name="fullscreen_bottom_shown">底部已显示</string>
+    <string name="fullscreen_top_hidden">已请求隐藏 Android 状态栏</string>
+    <string name="fullscreen_top_shown">Android 状态栏显示中</string>
+    <string name="fullscreen_bottom_hidden">已请求隐藏 Android 导航栏</string>
+    <string name="fullscreen_bottom_shown">Android 导航栏显示中</string>
     <string name="preview_identity">标识：</string>
     <string name="preview_oem_label">OEM 标签：</string>
     <string name="preview_empty">（空）</string>
@@ -92,7 +92,7 @@
     <string name="a_familiar_drive">熟悉的驾乘体验。</string>
     <string name="a_previous_wi_fi_direct_connection_is_still_running_reset">之前的 Wi-Fi Direct 连接仍在运行。请重置后再连接。</string>
     <string name="about">关于</string>
-    <string name="about_diplay">关于 DiPlay</string>
+    <string name="about_diplay">关于 CarPaly</string>
     <string name="active">已启用</string>
     <string name="advanced_audio_channel_mapping">高级音频通道映射</string>
     <string name="airplay_icon">AirPlay 图标</string>
@@ -214,9 +214,9 @@
     <string name="hevc_software_decoder">HEVC 软件解码器</string>
     <string name="hide_bottom_bar">隐藏底部导航栏</string>
     <string name="hide_keyboard">隐藏键盘</string>
-    <string name="hide_the_car_s_system_bars_while_carplay_is_open">在 DiPlay 与 CarPlay 中隐藏对应的系统栏。</string>
-    <string name="hide_the_navigation_bar">隐藏导航栏</string>
-    <string name="hide_the_status_bar">隐藏状态栏</string>
+    <string name="hide_the_car_s_system_bars_while_carplay_is_open">请求 Android 在 DiPlay 和 CarPlay 中隐藏标准系统栏。厂商状态栏或车辆侧边栏可能仍显示，且不受应用控制。</string>
+    <string name="hide_the_navigation_bar">隐藏 Android 导航栏</string>
+    <string name="hide_the_status_bar">隐藏 Android 状态栏</string>
     <string name="hide_top_bar">隐藏顶部状态栏</string>
     <string name="hotspot_name">热点名称</string>
     <string name="hotspot_password">热点密码</string>
@@ -299,7 +299,7 @@
     <string name="preparing_mfi_authentication">正在准备 MFi 认证</string>
     <string name="ready">就绪</string>
     <string name="ready_when_you_are">一切就绪</string>
-    <string name="receiver_based_on_xcertplay_licensed_under_gpl_3_0_diplay">接收器基于采用 GPL-3.0 许可的 xcertplay。DiPlay 界面沿用采用 AGPL-3.0 许可的 DiAuto 设计。\n\n项目包含 AndroidX、Bouncy Castle、JmDNS 和 SLF4J。本版本附有源代码和许可声明。\n\nCarPlay 和 CarPlay 图标归 Apple Inc. 所有。DiPlay 是独立项目。</string>
+    <string name="receiver_based_on_xcertplay_licensed_under_gpl_3_0_diplay">CarPaly 接收器源自 xcertplay 和 DiPlay，按 GPL-3.0 许可。部分界面组件源自按 AGPL-3.0 许可的 DiAuto；请查看项目仓库中的版权和许可证声明。\n\n项目包含 AndroidX、Bouncy Castle、JmDNS 和 SLF4J。源码和许可证声明可在项目仓库查阅。\n\nCarPlay 及其图标归 Apple Inc. 所有。CarPaly 是独立社区项目，与 Apple 无隶属关系。</string>
     <string name="reconnecting_to_your_iphone">正在重新连接 iPhone…</string>
     <string name="remote">远程</string>
     <string name="remote_server_address_contains_u_0000">远程服务器地址包含 U+0000</string>
@@ -394,6 +394,7 @@
     <string name="use_usage_content_type_routing_instead_of_stream_type">使用 usage / content-type 路由代替流类型</string>
     <string name="use_your_last_connection_type_and_selected_iphone">使用上次的连接方式和已选 iPhone。</string>
     <string name="vpn_consent_was_denied">VPN 授权被拒绝</string>
+    <string name="vpn_consent_screen_unavailable">系统 VPN 授权界面不可用。恢复系统授权组件前，有线 CarPlay 将保持阻止状态。</string>
     <string name="waiting_for_iphone_over_usb">正在等待 USB 连接的 iPhone</string>
     <string name="waiting_for_mfi_coprocessor">正在等待 MFi 协处理器</string>
     <string name="waiting_for_paired_iphone">正在等待已配对的 iPhone</string>
@@ -713,6 +714,20 @@
     <string name="settings_interface_size">界面大小</string>
     <string name="settings_interface_size_auto">自动</string>
     <string name="settings_interface_size_hint">DiPlay 自身界面中文字和控件的大小。自动模式会在大尺寸低密度屏幕上放大它们。不影响 CarPlay。</string>
+    <string name="settings_app_updates">应用更新</string>
+    <string name="settings_app_updates_description">检查经过签名的 CarPaly 更新清单。下载由你手动发起；安装仍由 Android 系统确认。</string>
+    <string name="update_current_version_details">当前版本：%1$s（versionCode %2$d）</string>
+    <string name="update_release_metadata">versionCode %1$d · 发布于 %2$s · %3$s</string>
+    <string name="update_install_waiting_for_parked">应用无法读取可信的驻车状态。只有你确认车辆已安全停稳且 CarPlay 已停止后，才会继续打开安装器。</string>
+    <string name="update_confirm_parked_title">确认安全驻车</string>
+    <string name="update_confirm_parked_message">应用无法核实车辆状态。仅在车辆完全停稳、已拉起驻车制动，且 CarPlay、通话、Siri 和倒车影像均已停止时继续。Android 仍会要求你确认安装。</string>
+    <string name="update_confirm_parked_button">我已安全驻车</string>
+    <string name="update_carplay_must_stop">打开安装器前请先停止 CarPlay。已下载的更新会保留。</string>
+    <string name="update_download_progress">正在下载 %1$s · %2$d%%</string>
+    <string name="update_cancel_download">取消下载</string>
+    <string name="update_ota_not_provisioned">此版本尚未配置安全 OTA。签名更新清单配置完成后再试。</string>
+    <string name="update_download_cancelled">下载已取消，未保留未完成的 APK。</string>
+    <string name="update_channel_beta">测试版</string>
     <string name="update_check">检查更新</string>
     <string name="update_checking">正在检查…</string>
     <string name="update_up_to_date">已是最新版本</string>
@@ -723,7 +738,7 @@
     <string name="update_channel_preview">预览版</string>
     <string name="update_channel_stable">稳定版</string>
     <string name="update_channel_row">更新通道：%1$s</string>
-    <string name="update_channel_description">预览通道检查预览版和稳定版；稳定通道只检查稳定版。CarPaly 实车验证期间默认使用预览通道。</string>
+    <string name="update_channel_description">默认选择稳定版，仅检查正式版本。测试版需手动启用，且只检查预发布版本。</string>
     <string name="update_available_details">当前版本：%1$s\n最新版本：%2$s\n安装包大小：%3$s</string>
     <string name="update_apk_filename">APK 文件：%1$s</string>
     <string name="update_manual_install_warning">CarPaly 会下载带版本号的 APK，校验 SHA-256、包名、版本和签名，并检查必需认证资源文件存在后，才提供 Android 安装器入口。若签名密钥不同，Android 仍可能拒绝覆盖安装。请先备份数据；安装始终需要你在系统界面确认。</string>
@@ -777,5 +792,4 @@
     <string name="head_unit_profile_description">星越 L 配置使用已公布的 1920 × 720 中控屏几何尺寸、300 mm 物理宽度、全屏、H.264 和 60 fps。它不会访问车辆数据、仪表盘或车辆控制。更改后请重新连接 CarPlay。</string>
     <string name="geely_kx11_candidate_profile">吉利 KX11 候选车型配置</string>
     <string name="geely_kx11_detection_evidence">KX11 识别：%1$s · %2$s</string>
-    <string name="settings_open_diagnostics">打开诊断中心与日志</string>
 </resources>

@@ -18,10 +18,10 @@ class UpdateApkDownloaderTest {
     private val release = UpdateRelease(
         tagName = "v1.1.5",
         versionName = "1.1.5",
-        apkName = "CarPaly-XingyueL1.1.5.apk",
-        apkUrl = "https://github.com/Qwy20040320/carpaly/releases/download/v1.1.5/CarPaly-XingyueL1.1.5.apk",
-        checksumUrl = "https://github.com/Qwy20040320/carpaly/releases/download/v1.1.5/CarPaly-XingyueL1.1.5.apk.sha256",
-        checksumSizeBytes = "$sha256  CarPaly-XingyueL1.1.5.apk\n".toByteArray().size.toLong(),
+        apkName = "CarPaly-XingyueL-v1.1.5.apk",
+        apkUrl = "https://github.com/Qwy20040320/carpaly/releases/download/v1.1.5/CarPaly-XingyueL-v1.1.5.apk",
+        checksumUrl = "https://github.com/Qwy20040320/carpaly/releases/download/v1.1.5/CarPaly-XingyueL-v1.1.5.apk.sha256",
+        checksumSizeBytes = "$sha256  CarPaly-XingyueL-v1.1.5.apk\n".toByteArray().size.toLong(),
         releasePageUrl = "https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.5",
         releaseNotes = "test",
         sizeBytes = bytes.size.toLong(),
@@ -34,10 +34,10 @@ class UpdateApkDownloaderTest {
         val directory = createTempDirectory()
         try {
             val openedUrls = mutableListOf<URL>()
-            val apk = UpdateApkDownloader.download(release, directory) { url ->
+            val apk = UpdateApkDownloader.download(release, directory, connectionFactory = { url ->
                 openedUrls += url
                 fakeFor(url)
-            }
+            })
             assertEquals(listOf(URL(release.checksumUrl), URL(release.apkUrl)), openedUrls)
             assertEquals(release.apkName, apk.name)
             assertArrayEquals(bytes, apk.readBytes())
@@ -53,9 +53,9 @@ class UpdateApkDownloaderTest {
         try {
             val badRelease = release.copy(sha256 = "0".repeat(64))
             try {
-                UpdateApkDownloader.download(badRelease, directory) { url ->
+                UpdateApkDownloader.download(badRelease, directory, connectionFactory = { url ->
                     fakeFor(url, badRelease)
-                }
+                })
                 throw AssertionError("expected digest mismatch")
             } catch (expected: IOException) {
                 assertTrue(expected.message!!.contains("SHA-256"))
@@ -73,10 +73,11 @@ class UpdateApkDownloaderTest {
         try {
             var opened = false
             try {
-                UpdateApkDownloader.download(release.copy(sizeBytes = UpdateApkDownloader.MAX_APK_BYTES + 1), directory) {
+                UpdateApkDownloader.download(release.copy(sizeBytes = UpdateApkDownloader.MAX_APK_BYTES + 1), directory,
+                    connectionFactory = { url ->
                     opened = true
-                    FakeConnection(it, 200, bytes)
-                }
+                    FakeConnection(url, 200, bytes)
+                })
                 throw AssertionError("expected size rejection")
             } catch (expected: IllegalArgumentException) {
                 assertTrue(expected.message!!.contains("size"))
@@ -92,9 +93,9 @@ class UpdateApkDownloaderTest {
         val directory = createTempDirectory()
         try {
             try {
-                UpdateApkDownloader.download(release, directory) { url ->
+                UpdateApkDownloader.download(release, directory, connectionFactory = { url ->
                     FakeConnection(url, 302, byteArrayOf(), mapOf("Location" to "http://example.com/CarPaly.apk"))
-                }
+                })
                 throw AssertionError("expected redirect rejection")
             } catch (expected: IOException) {
                 assertTrue(expected.message!!.contains("untrusted"))
@@ -109,14 +110,14 @@ class UpdateApkDownloaderTest {
         val directory = createTempDirectory()
         try {
             try {
-                UpdateApkDownloader.download(release, directory) { url ->
+                UpdateApkDownloader.download(release, directory, connectionFactory = { url ->
                     val body = if (url.path.endsWith(".sha256")) {
                         "${"0".repeat(64)}  ${release.apkName}\n".toByteArray()
                     } else {
                         bytes
                     }
                     FakeConnection(url, 200, body, mapOf("Content-Length" to body.size.toString()))
-                }
+                })
                 throw AssertionError("expected checksum metadata mismatch")
             } catch (expected: IOException) {
                 assertTrue(expected.message!!.contains("disagrees"))

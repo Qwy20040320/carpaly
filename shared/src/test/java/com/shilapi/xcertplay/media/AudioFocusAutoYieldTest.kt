@@ -126,6 +126,28 @@ class AudioFocusAutoYieldTest {
         assertEquals(listOf(0f, 1f), volumes(second))
     }
 
+    @Test fun phoneUsesTransientFocusAndMediaFocusReturnsAfterTheCallTrackEnds() {
+        val reports = mutableListOf<String>()
+        val coordinator = AudioFocusCoordinator(context, enabled = true, report = reports::add)
+            .also(coordinators::add)
+        val media = track()
+        val phone = track()
+        val phoneAttributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+            .build()
+
+        coordinator.acquire(media, AudioChannel.MEDIA, attributes)
+        coordinator.acquire(phone, AudioChannel.PHONE, phoneAttributes)
+        assertTrue(reports.any { it.contains("focus requested channel=PHONE gain=${AudioManager.AUDIOFOCUS_GAIN_TRANSIENT}") })
+
+        coordinator.release(phone)
+        assertTrue(reports.any { it.contains("focus requested channel=MEDIA gain=${AudioManager.AUDIOFOCUS_GAIN}") })
+        assertEquals("MEDIA", reports.last { it.startsWith("Audio: focus requested") }
+            .substringAfter("channel=").substringBefore(' '))
+        coordinator.release(media)
+    }
+
     @Test fun sinkFocusTeardownRejectsLateWorkerAcquisitionAndQueuedCallbacks() {
         val coordinator = coordinator()
         val first = track(); val late = track()

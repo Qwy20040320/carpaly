@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "productionEnabled": false,
+  "environment": "ota-manifest-publisher",
+  "environmentConfigurationReviewed": false,
+  "allowedBranch": "main",
+  "minimumRequiredReviewers": 1,
+  "keyId": ""
+}

@@ -2,13 +2,21 @@ name: Android checks
 on:
   push:
     branches: [main, 'feature/**']
-    tags: ['v1.*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      verify_release_signer_only:
+        description: Verify the protected Release keystore and certificate without building or publishing
+        required: true
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
   check:
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      inputs.verify_release_signer_only != true
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -31,8 +39,71 @@ jobs:
         run: |
           bash -n .github/scripts/publish-authenticated-apk-release.sh
           python3 -m py_compile scripts/package_source_archive.py
+          python3 -m py_compile scripts/release_intent.py scripts/release_review_gate.py scripts/dispatch_release_followups.py scripts/check_release_automation.py scripts/preserve_ota_feeds.py scripts/ota_publisher_policy.py scripts/validate_ota_release_target.py scripts/ota_key_material.py scripts/ota_key_preflight.py scripts/verify_ota_environment.py
+          python3 -m pip install --disable-pip-version-check -r requirements-ota.txt
           python3 scripts/check_workflow_action_pins.py
+          python3 scripts/check_pages_workflow.py
+          python3 scripts/check_release_automation.py
+          python3 scripts/validate_release_metadata.py
           python3 scripts/test_release_pipeline.py
+          python3 -m unittest \
+            scripts.test_android_versioning \
+            scripts.test_release_docs_sync \
+            scripts.test_release_signing_preflight \
+            scripts.test_release_intent \
+            scripts.test_release_review_gate \
+            scripts.test_release_followups \
+            scripts.test_ota_manifest \
+            scripts.test_build_site \
+            scripts.test_ota_public_key \
+            scripts.test_preserve_ota_feeds \
+            scripts.test_ota_publisher_policy \
+            scripts.test_ota_environment \
+            scripts.test_ota_key_preflight
+          python3 scripts/android_versioning.py check
+          python3 scripts/check_project_docs.py
+          python3 scripts/release_intent.py \
+            --commit "$GITHUB_SHA" --event pull_request --branch feature \
+            --conclusion success --main-sha "$GITHUB_SHA"
+          ruby -e 'require "yaml"; Dir.glob(".github/workflows/*.yml").each { |path| YAML.parse_file(path) }'
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          "$(go env GOPATH)/bin/actionlint" .github/workflows/*.yml
+  release_intent:
+    name: Run full CI and gate an explicit release intent
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      inputs.verify_release_signer_only != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      should_publish: ${{ steps.gate.outputs.should_publish }}
+      release_tag: ${{ steps.gate.outputs.release_tag }}
+      version_name: ${{ steps.gate.outputs.version_name }}
+      version_code: ${{ steps.gate.outputs.version_code }}
+      prerelease: ${{ steps.gate.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Compare the release intent to the current main commit
+        id: gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin main --no-tags
+          main_sha="$(git rev-parse refs/remotes/origin/main)"
+          python3 scripts/release_intent.py \
+            --commit "$GITHUB_SHA" \
+            --event "$GITHUB_EVENT_NAME" \
+            --branch "$GITHUB_REF_NAME" \
+            --conclusion success \
+            --main-sha "$main_sha" \
+            --github-output "$GITHUB_OUTPUT"
       - name: Validate clean source archive packaging
         shell: bash
         run: |
@@ -41,16 +112,20 @@ jobs:
           python3 scripts/package_source_archive.py --ref "$GITHUB_SHA" --output "$archive"
           python3 - "$archive" <<'PY'
           from pathlib import PurePosixPath
+          import json
           import sys
           from zipfile import ZipFile
 
+          with open("config/public-markdown-allowlist.json", encoding="utf-8") as manifest:
+              allowed_markdown = {f"CarPaly/{path}" for path in json.load(manifest)["publicMarkdown"]}
           with ZipFile(sys.argv[1]) as source:
               names = set(source.namelist())
               assert "CarPaly/LICENSE" in names
               assert "CarPaly/README.md" in names
               assert "CarPaly/docs/licenses/DiAuto-AGPL-3.0.txt" in names
               assert "CarPaly/shared/src/main/jni/speexdsp/COPYING" in names
-              assert all(name.lower().endswith(".md") is False or name == "CarPaly/README.md" for name in names)
+              included_markdown = {name for name in names if name.lower().endswith(".md")}
+              assert included_markdown == allowed_markdown
               blocked = {".apk", ".aab", ".pk8", ".p7b", ".pem", ".key", ".p12", ".pfx", ".jks", ".keystore"}
               assert all(PurePosixPath(name).suffix.lower() not in blocked for name in names)
               assert all(((info.external_attr >> 16) & 0o170000) != 0o120000 for info in source.infolist())
@@ -92,43 +167,136 @@ jobs:
             "$build_tools/apksigner" verify --verbose "$apk"
             echo "APK: $apk" | tee -a apk-metadata.txt
             "$build_tools/aapt" dump badging "$apk" | sed -n '1,2p' | tee -a apk-metadata.txt
-          done
-      - name: Reject authentication credentials from public Actions artifacts
-        if: success()
-        run: |
-          set -euo pipefail
-          mapfile -d '' apks < <(find mobile samples/home samples/maphost -path '*/build/outputs/apk/debug/*.apk' -type f -print0 | sort -z)
-          test "${#apks[@]}" -gt 0
-          for apk in "${apks[@]}"; do
-            entries="$(unzip -Z1 "$apk")"
-            if grep -E '(^|/)(identity\.pk8|certificate\.p7b|[^/]+\.(key|pk8|p7b|pem|p12|pfx|jks|keystore))$' <<<"$entries"; then
-              echo "Refusing to upload authentication material in a public Actions artifact: $apk" >&2
+            if unzip -Z1 "$apk" | grep -Eq '^assets/offline-mfi/(identity\.pk8|certificate\.p7b)$'; then
+              echo "Debug APK must not contain user authentication identity: $apk" >&2
               exit 1
             fi
           done
-      - name: Calculate debug APK SHA-256
-        if: success()
-        run: |
-          find mobile samples/home samples/maphost -path '*/build/outputs/apk/debug/*.apk' -type f -print0 | sort -z | xargs -0 -r sha256sum | tee apk-sha256.txt
-          test -s apk-sha256.txt
-      - name: Debug APKs and checksums
-        if: success()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # actions/upload-artifact v7
-        with:
-          name: debug-apks-and-sha256
-          path: |
-            mobile/build/outputs/apk/debug/*.apk
-            samples/home/build/outputs/apk/debug/*.apk
-            samples/maphost/build/outputs/apk/debug/*.apk
-            apk-sha256.txt
-            apk-metadata.txt
-  authenticated_release:
-    name: Build and publish Release-signed authenticated CarPaly preview
-    needs: check
-    if: startsWith(github.ref, 'refs/tags/v1.')
+  release_authorization:
+    name: Verify human merge and active main protection for an enabled release intent
+    needs: [check, release_intent]
+    if: >-
+      always() &&
+      needs.check.result == 'success' &&
+      needs.release_intent.result == 'success' &&
+      needs.release_intent.outputs.should_publish == 'true' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    # This environment scopes the existing release secrets/tag policy; it does not require an approval reviewer.
+    timeout-minutes: 10
+    environment: release-policy-audit
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify exact merged PR, maintainer policy, branch ruleset, and CI result
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_POLICY_READ_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          review_dir="$(mktemp -d "$RUNNER_TEMP/carpaly-release-review.XXXXXX")"
+          trap 'rm -rf -- "$review_dir"' EXIT
+          associated="$review_dir/associated-pull-requests.json"
+          details="$review_dir/pull-request-details.json"
+          reviews="$review_dir/reviews.json"
+          decision="$review_dir/review-decision.json"
+          rulesets="$review_dir/rulesets.json"
+          ruleset="$review_dir/main-ruleset.json"
+          ruleset_suites="$review_dir/ruleset-suites.json"
+          ruleset_suite="$review_dir/main-ruleset-suite.json"
+          gh api "repos/$GH_REPO/commits/$GITHUB_SHA/pulls" > "$associated"
+          matches="$(jq -c --arg sha "$GITHUB_SHA" \
+            '[.[] | select(.state == "closed" and .merged_at != null and .merge_commit_sha == $sha and .base.ref == "main")]' \
+            "$associated")"
+          [[ "$(jq 'length' <<<"$matches")" == 1 ]] || {
+            echo "Release intent must belong to exactly one PR merged to main at this exact SHA." >&2
+            exit 1
+          }
+          pr_number="$(jq -r '.[0].number' <<<"$matches")"
+          gh api "repos/$GH_REPO/pulls/$pr_number" > "$details"
+          gh pr view "$pr_number" --repo "$GH_REPO" --json reviewDecision > "$decision"
+          jq -s '.[0] + .[1]' "$details" "$decision" > "$review_dir/pull-request-details.json"
+          mv "$review_dir/pull-request-details.json" "$details"
+          gh api --paginate "repos/$GH_REPO/pulls/$pr_number/reviews?per_page=100" | jq -s 'add' > "$reviews"
+          gh api --paginate "repos/$GH_REPO/rulesets?per_page=100" | jq -s 'add' > "$rulesets"
+          ruleset_name="$(jq -er '.mainRulesetName' config/release-review-policy.json)"
+          ruleset_id="$(jq -er --arg name "$ruleset_name" \
+            '[.[] | select(.name == $name and .enforcement == "active")] | if length == 1 then .[0].id else error("expected one active main ruleset") end' \
+            "$rulesets")"
+          gh api "repos/$GH_REPO/rulesets/$ruleset_id" > "$ruleset"
+          gh api --paginate "repos/$GH_REPO/rulesets/rule-suites?ref=refs/heads/main&time_period=week&per_page=100" | jq -s 'add' > "$ruleset_suites"
+          suite_id="$(jq -er --arg sha "$GITHUB_SHA" \
+            '[.[] | select(.after_sha == $sha and .ref == "refs/heads/main")] | if length == 1 then .[0].id else error("expected one exact main ruleset evaluation") end' \
+            "$ruleset_suites")"
+          gh api "repos/$GH_REPO/rulesets/rule-suites/$suite_id" > "$ruleset_suite"
+          default_branch="$(gh api "repos/$GH_REPO" --jq .default_branch)"
+          python3 scripts/release_review_gate.py \
+            --commit "$GITHUB_SHA" \
+            --pull-requests-file "$associated" \
+            --pull-request-file "$details" \
+            --reviews-file "$reviews" \
+            --ruleset-file "$ruleset" \
+            --ruleset-suite-file "$ruleset_suite" \
+            --policy-file config/release-review-policy.json \
+            --default-branch "$default_branch" \
+            --ci-conclusion success
+  release_signer_preflight:
+    name: Verify protected Release signer only
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.verify_release_signer_only == true &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment: mfi-public-release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # actions/setup-java v6
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Verify protected Release signer without publishing
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}
+        run: >-
+          python3 scripts/release_signing_preflight.py
+          --keystore-path "$RUNNER_TEMP/carpaly-signer-preflight/carpaly-release.p12"
+      - name: Remove temporary signer material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/carpaly-signer-preflight"
+
+  authenticated_release:
+    name: Build and publish an explicitly authorized authenticated Release APK
+    needs: [check, release_intent, release_authorization]
+    if: >-
+      always() &&
+      needs.check.result == 'success' &&
+      needs.release_intent.result == 'success' &&
+      github.repository == 'Qwy20040320/carpaly' &&
+      github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      needs.release_intent.outputs.should_publish == 'true' &&
+      needs.release_authorization.result == 'success'
+    runs-on: ubuntu-latest
+    # Only an enabled, CI-verified release intent on the current protected main can publish.
+    environment: mfi-public-release
+    concurrency:
+      group: carpaly-authenticated-release
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
@@ -136,14 +304,22 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      # Creating a v1.x.y tag is the maintainer's public-release action; verify distribution rights before tagging.
+      # The publisher creates a tag only after CI and exact protected-main authorization pass.
       - name: Confirm release tag is contained in main
+        env:
+          RELEASE_TAG: ${{ needs.release_intent.outputs.release_tag }}
+          AUTO_CREATE_TAG: ${{ needs.release_intent.outputs.should_publish }}
         shell: bash
         run: |
           set -euo pipefail
           git fetch origin main --no-tags
-          release_commit="$(git rev-parse "${GITHUB_REF_NAME}^{commit}")"
           main_commit="$(git rev-parse origin/main)"
+          [[ "$AUTO_CREATE_TAG" == true && "$GITHUB_REF" == "refs/heads/main" && \
+            "$main_commit" == "$GITHUB_SHA" ]] || {
+            echo "Automatic release requires an enabled intent on the exact current main commit." >&2
+            exit 1
+          }
+          release_commit="$GITHUB_SHA"
           git merge-base --is-ancestor "$release_commit" "$main_commit" || {
             echo "Release tag does not point to a commit contained in main." >&2
             exit 1
@@ -159,47 +335,34 @@ jobs:
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # gradle/actions setup-gradle v6
         with:
           cache-disabled: true
-      - name: Provision protected MFi inputs and formal Release signer
+      - name: Provision protected MFi inputs
         env:
           MFI_IDENTITY_PK8_BASE64: ${{ secrets.MFI_IDENTITY_PK8_BASE64 }}
           MFI_CERTIFICATE_P7B_BASE64: ${{ secrets.MFI_CERTIFICATE_P7B_BASE64 }}
-          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
-          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-          RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}
         shell: bash
         run: |
           set -euo pipefail
           umask 077
           : "${MFI_IDENTITY_PK8_BASE64:?MFI_IDENTITY_PK8_BASE64 is not configured}"
           : "${MFI_CERTIFICATE_P7B_BASE64:?MFI_CERTIFICATE_P7B_BASE64 is not configured}"
-          : "${RELEASE_KEYSTORE_BASE64:?RELEASE_KEYSTORE_BASE64 is not configured}"
-          : "${RELEASE_STORE_PASSWORD:?RELEASE_STORE_PASSWORD is not configured}"
-          : "${RELEASE_KEY_ALIAS:?RELEASE_KEY_ALIAS is not configured}"
-          : "${RELEASE_KEY_PASSWORD:?RELEASE_KEY_PASSWORD is not configured}"
-          [[ "$RELEASE_SIGNING_CERT_SHA256" =~ ^[a-fA-F0-9]{64}$ ]] || {
-            echo "RELEASE_SIGNING_CERT_SHA256 must be a 64-digit SHA-256 fingerprint." >&2
-            exit 1
-          }
           auth_dir="$RUNNER_TEMP/carpaly-auth-assets"
-          signing_dir="$RUNNER_TEMP/carpaly-signing"
-          mkdir -p "$auth_dir/offline-mfi" "$signing_dir"
+          mkdir -p "$auth_dir/offline-mfi"
           printf '%s' "$MFI_IDENTITY_PK8_BASE64" | base64 --decode > "$auth_dir/offline-mfi/identity.pk8"
           printf '%s' "$MFI_CERTIFICATE_P7B_BASE64" | base64 --decode > "$auth_dir/offline-mfi/certificate.p7b"
-          printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$signing_dir/carpaly-release.p12"
-          chmod 600 "$auth_dir/offline-mfi/identity.pk8" "$auth_dir/offline-mfi/certificate.p7b" "$signing_dir/carpaly-release.p12"
+          chmod 600 "$auth_dir/offline-mfi/identity.pk8" "$auth_dir/offline-mfi/certificate.p7b"
           test -s "$auth_dir/offline-mfi/identity.pk8"
           test -s "$auth_dir/offline-mfi/certificate.p7b"
-          test -s "$signing_dir/carpaly-release.p12"
-          keytool -list -v -alias "$RELEASE_KEY_ALIAS" -keystore "$signing_dir/carpaly-release.p12" \
-            -storetype PKCS12 -storepass:env RELEASE_STORE_PASSWORD > "$RUNNER_TEMP/release-keystore-inspection.txt"
-          signer_sha="$(awk -F': ' '/^SHA256: / { gsub(":", "", $2); print tolower($2); exit }' "$RUNNER_TEMP/release-keystore-inspection.txt")"
-          [[ "$signer_sha" == "${RELEASE_SIGNING_CERT_SHA256,,}" ]] || {
-            echo "Release keystore signer differs from the pinned environment certificate." >&2
-            exit 1
-          }
-      - name: Build authenticated standalone Release APK
+      - name: Provision and verify formal Release signer
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}
+        run: >-
+          python3 scripts/release_signing_preflight.py
+          --keystore-path "$RUNNER_TEMP/carpaly-signing/carpaly-release.p12"
+      - name: Build authenticated Release APK
         env:
           DIPLAY_AUTH_ASSETS_DIR: ${{ runner.temp }}/carpaly-auth-assets
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/carpaly-signing/carpaly-release.p12
@@ -212,6 +375,7 @@ jobs:
         env:
           DIPLAY_AUTH_ASSETS_DIR: ${{ runner.temp }}/carpaly-auth-assets
           RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}
+          RELEASE_VERSION_NAME: ${{ needs.release_intent.outputs.version_name }}
         shell: bash
         run: |
           set -euo pipefail
@@ -228,7 +392,7 @@ jobs:
           }
           badging="$("$build_tools/aapt" dump badging "$apk")"
           grep -Fq "package: name='com.shihab.diplay.hudtest'" <<<"$badging"
-          expected_version="${GITHUB_REF_NAME#v}"
+          expected_version="${RELEASE_VERSION_NAME:-${GITHUB_REF_NAME#v}}"
           grep -Fq "versionName='$expected_version'" <<<"$badging"
           version_code="$(sed -nE "s/.*versionCode='([0-9]+)'.*/\1/p" <<<"$badging" | head -n 1)"
           [[ "$version_code" =~ ^[1-9][0-9]*$ ]]
@@ -256,19 +420,22 @@ jobs:
           fi
           release_dir="$RUNNER_TEMP/carpaly-release"
           mkdir -p "$release_dir"
-          release_name="CarPaly-XingyueL${expected_version}.apk"
+          release_name="CarPaly-XingyueL-v${expected_version}.apk"
           release_apk="$release_dir/$release_name"
           cp "$apk" "$release_apk"
           test "$(sha256sum "$release_apk" | awk '{ print $1 }')" = "$actual_sha"
-          echo "apk_path=$release_apk" >> "$GITHUB_OUTPUT"
-          echo "apk_name=$release_name" >> "$GITHUB_OUTPUT"
-          echo "sha256=$actual_sha" >> "$GITHUB_OUTPUT"
-          echo "size=$size" >> "$GITHUB_OUTPUT"
-          echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
+          {
+            echo "apk_path=$release_apk"
+            echo "apk_name=$release_name"
+            echo "sha256=$actual_sha"
+            echo "size=$size"
+            echo "version_code=$version_code"
+          } >> "$GITHUB_OUTPUT"
       - name: Package commit-pinned source and release checksums
         id: package
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.release_intent.outputs.release_tag }}
+          RELEASE_SOURCE_REF: ${{ github.sha }}
           APK_PATH: ${{ steps.apk.outputs.apk_path }}
           APK_NAME: ${{ steps.apk.outputs.apk_name }}
           APK_SHA256: ${{ steps.apk.outputs.sha256 }}
@@ -279,7 +446,7 @@ jobs:
           release_dir="$RUNNER_TEMP/carpaly-release"
           source_name="${APK_NAME%.apk}-source.zip"
           source_path="$release_dir/$source_name"
-          python3 scripts/package_source_archive.py --ref "$RELEASE_TAG" --output "$source_path"
+          python3 scripts/package_source_archive.py --ref "$RELEASE_SOURCE_REF" --output "$source_path"
           source_sha="$(sha256sum "$source_path" | awk '{ print $1 }')"
           source_size="$(stat -c '%s' "$source_path")"
           sums_path="$release_dir/SHA256SUMS.txt"
@@ -292,19 +459,25 @@ jobs:
           sums_size="$(stat -c '%s' "$sums_path")"
           printf 'Source ZIP: %s (%s bytes, SHA-256 %s)\n' "$source_name" "$source_size" "$source_sha"
           printf 'SHA256SUMS.txt: %s bytes, SHA-256 %s\n' "$sums_size" "$sums_sha"
-          echo "source_path=$source_path" >> "$GITHUB_OUTPUT"
-          echo "source_name=$source_name" >> "$GITHUB_OUTPUT"
-          echo "source_sha256=$source_sha" >> "$GITHUB_OUTPUT"
-          echo "source_size=$source_size" >> "$GITHUB_OUTPUT"
-          echo "sums_path=$sums_path" >> "$GITHUB_OUTPUT"
-          echo "sums_sha256=$sums_sha" >> "$GITHUB_OUTPUT"
-          echo "sums_size=$sums_size" >> "$GITHUB_OUTPUT"
-      - name: Publish and verify authenticated pre-release
+          {
+            echo "source_path=$source_path"
+            echo "source_name=$source_name"
+            echo "source_sha256=$source_sha"
+            echo "source_size=$source_size"
+            echo "sums_path=$sums_path"
+            echo "sums_sha256=$sums_sha"
+            echo "sums_size=$sums_size"
+          } >> "$GITHUB_OUTPUT"
+      - name: Publish and verify authenticated Release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.release_intent.outputs.release_tag }}
+          RELEASE_COMMIT: ${{ github.sha }}
+          AUTO_CREATE_TAG: ${{ needs.release_intent.outputs.should_publish }}
+          RELEASE_PRERELEASE: ${{ needs.release_intent.outputs.prerelease }}
+          RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}
           APK_PATH: ${{ steps.apk.outputs.apk_path }}
           APK_NAME: ${{ steps.apk.outputs.apk_name }}
           APK_SHA256: ${{ steps.apk.outputs.sha256 }}
@@ -325,5 +498,31 @@ jobs:
           set -euo pipefail
           rm -rf -- "$RUNNER_TEMP/carpaly-auth-assets" "$RUNNER_TEMP/carpaly-release" \
             "$RUNNER_TEMP/carpaly-release-remote" "$RUNNER_TEMP/carpaly-release-published" \
-            "$RUNNER_TEMP/carpaly-signing" "$RUNNER_TEMP/carpaly-python-cache" \
-            "$RUNNER_TEMP/release-keystore-inspection.txt"
+            "$RUNNER_TEMP/carpaly-signing" "$RUNNER_TEMP/carpaly-python-cache"
+
+  publication_follow_up:
+    name: Dispatch public site and release-document synchronization
+    needs: authenticated_release
+    if: needs.authenticated_release.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch and verify Pages and release-document workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_RUN_ID: ${{ github.run_id }}
+          RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          follow_up_sha="$(gh api "repos/$GH_REPO/commits/main" --jq .sha)"
+          python3 scripts/dispatch_release_followups.py \
+            --repository "$GH_REPO" \
+            --dispatch-id "${RELEASE_RUN_ID}-${RELEASE_RUN_ATTEMPT}" \
+            --commit "$follow_up_sha" \
+            --timeout-seconds 2400 \
+            --poll-seconds 15

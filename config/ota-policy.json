@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "repository": "Qwy20040320/carpaly",
+  "applicationId": "com.shihab.diplay.hudtest",
+  "releaseSignerCertificateSha256": "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90",
+  "minimumSupportedVersionCode": 36,
+  "maximumApkBytes": 52428800,
+  "manifestSignature": {
+    "algorithm": "SHA256withECDSA-P256",
+    "publicKeysResource": "common/src/main/res/raw/ota_manifest_public_keys.json",
+    "privateKeyEnvironmentVariable": "OTA_MANIFEST_SIGNING_PRIVATE_KEY_PEM",
+    "trustBootstrap": "An empty trust store fails closed. The first app containing the reviewed key must be installed through a trusted manual channel before production feeds are signed.",
+    "remoteKeyDiscovery": false,
+    "keyRotation": "Ship a new app with the new public key before signing manifests with it; retain old keys only for a bounded transition and remove revoked keys in a reviewed app update.",
+    "replayProtection": "Persist the highest accepted issuedAt and payload digest per channel; app-data clearing resets this best-effort client checkpoint."
+  },
+  "channels": {
+    "stable": "https://qwy20040320.github.io/carpaly/updates/stable.json",
+    "beta": "https://qwy20040320.github.io/carpaly/updates/beta.json"
+  }
+}

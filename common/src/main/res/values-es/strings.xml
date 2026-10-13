@@ -47,10 +47,10 @@
     <string name="hotspot_channel_prefix">\nCanal:\u0020</string>
     <string name="auto_label">Auto</string>
     <string name="auto_value">auto</string>
-    <string name="fullscreen_top_hidden">barra superior oculta</string>
-    <string name="fullscreen_top_shown">barra superior visible</string>
-    <string name="fullscreen_bottom_hidden">barra inferior oculta</string>
-    <string name="fullscreen_bottom_shown">barra inferior visible</string>
+    <string name="fullscreen_top_hidden">ocultación de la barra de estado de Android solicitada</string>
+    <string name="fullscreen_top_shown">barra de estado de Android visible</string>
+    <string name="fullscreen_bottom_hidden">ocultación de la barra de navegación de Android solicitada</string>
+    <string name="fullscreen_bottom_shown">barra de navegación de Android visible</string>
     <string name="preview_identity">Identidad:\u0020</string>
     <string name="preview_oem_label">Etiqueta OEM:\u0020</string>
     <string name="preview_empty">(vacío)</string>
@@ -98,7 +98,7 @@
     <string name="a_familiar_drive">Un trayecto familiar.</string>
     <string name="a_previous_wi_fi_direct_connection_is_still_running_reset">Hay una conexión Wi-Fi Direct anterior todavía en ejecución. Restablécela para conectarte.</string>
     <string name="about">Acerca de</string>
-    <string name="about_diplay">Acerca de DiPlay</string>
+    <string name="about_diplay">Acerca de CarPaly</string>
     <string name="active">Activo</string>
     <string name="advanced_audio_channel_mapping">Asignación avanzada de canales de audio</string>
     <string name="airplay_icon">Icono de AirPlay</string>
@@ -213,9 +213,9 @@
     <string name="hevc_software_decoder">Decodificador por software HEVC</string>
     <string name="hide_bottom_bar">Ocultar barra inferior</string>
     <string name="hide_keyboard">Ocultar teclado</string>
-    <string name="hide_the_car_s_system_bars_while_carplay_is_open">Oculta la barra del sistema correspondiente en DiPlay y CarPlay.</string>
-    <string name="hide_the_navigation_bar">Ocultar barra de navegación</string>
-    <string name="hide_the_status_bar">Ocultar barra de estado</string>
+    <string name="hide_the_car_s_system_bars_while_carplay_is_open">Solicita a Android ocultar sus barras del sistema estándar en DiPlay y CarPlay. La barra de estado o el panel lateral del fabricante pueden permanecer fuera del control de la aplicación.</string>
+    <string name="hide_the_navigation_bar">Ocultar barra de navegación de Android</string>
+    <string name="hide_the_status_bar">Ocultar barra de estado de Android</string>
     <string name="hide_top_bar">Ocultar barra superior</string>
     <string name="hotspot_name">Nombre del punto de acceso</string>
     <string name="hotspot_password">Contraseña del punto de acceso</string>
@@ -291,7 +291,7 @@
     <string name="preparing_mfi_authentication">Preparando autenticación MFi</string>
     <string name="ready">Listo</string>
     <string name="ready_when_you_are">Listo cuando tú lo estés</string>
-    <string name="receiver_based_on_xcertplay_licensed_under_gpl_3_0_diplay">Receptor basado en xcertplay, con licencia GPL-3.0. La interfaz de DiPlay sigue el diseño de DiAuto, con licencia AGPL-3.0.\n\nIncluye AndroidX, Bouncy Castle, JmDNS y SLF4J. El código fuente y los avisos de licencia acompañan a esta versión.\n\nCarPlay y el icono de CarPlay pertenecen a Apple Inc. DiPlay es un proyecto independiente.</string>
+    <string name="receiver_based_on_xcertplay_licensed_under_gpl_3_0_diplay">CarPaly deriva de xcertplay y DiPlay, y se distribuye bajo la licencia GPL-3.0. Algunos componentes de la interfaz derivan de DiAuto bajo AGPL-3.0; consulta los avisos de autoría y licencia del repositorio.\n\nIncluye AndroidX, Bouncy Castle, JmDNS y SLF4J. El código fuente y los avisos de licencia están disponibles en el repositorio del proyecto.\n\nCarPlay y su icono pertenecen a Apple Inc. CarPaly es un proyecto comunitario independiente y no está afiliado a Apple.</string>
     <string name="reconnecting_to_your_iphone">Reconectando con tu iPhone…</string>
     <string name="remote">Remoto</string>
     <string name="remote_server_address_contains_u_0000">La dirección del servidor remoto contiene U+0000</string>
@@ -382,6 +382,7 @@
     <string name="use_usage_content_type_routing_instead_of_stream_type">Usar enrutamiento por uso/tipo de contenido en lugar del tipo de flujo</string>
     <string name="use_your_last_connection_type_and_selected_iphone">Usa tu último tipo de conexión y el iPhone seleccionado.</string>
     <string name="vpn_consent_was_denied">Se denegó el consentimiento de VPN</string>
+    <string name="vpn_consent_screen_unavailable">La pantalla del sistema para autorizar la VPN no está disponible. CarPlay por cable seguirá bloqueado hasta que se restaure el componente de autorización del sistema.</string>
     <string name="waiting_for_iphone_over_usb">Esperando iPhone por USB</string>
     <string name="waiting_for_mfi_coprocessor">Esperando al coprocesador MFi</string>
     <string name="waiting_for_paired_iphone">Esperando al iPhone emparejado</string>
@@ -653,6 +654,20 @@
     <string name="settings_interface_size">Tamaño de la interfaz</string>
     <string name="settings_interface_size_auto">Automático</string>
     <string name="settings_interface_size_hint">Tamaño del texto y los controles en las pantallas de DiPlay. Automático los agranda en pantallas grandes de baja densidad. No afecta a CarPlay.</string>
+    <string name="settings_app_updates">Actualizaciones de la aplicación</string>
+    <string name="settings_app_updates_description">Consulta el manifiesto firmado de CarPaly. Tú inicias las descargas; Android siempre solicita confirmación para instalar.</string>
+    <string name="update_current_version_details">Versión actual: %1$s (versionCode %2$d)</string>
+    <string name="update_release_metadata">versionCode %1$d · Publicado %2$s · %3$s</string>
+    <string name="update_install_waiting_for_parked">La aplicación no puede verificar que el vehículo esté estacionado. El instalador solo se abrirá tras confirmar que el coche está parado y CarPlay se ha detenido.</string>
+    <string name="update_confirm_parked_title">Confirma que estás estacionado</string>
+    <string name="update_confirm_parked_message">La aplicación no puede verificar el estado del vehículo. Continúa solo con el vehículo completamente detenido, el freno de estacionamiento activado y CarPlay, llamadas, Siri y cámara de marcha atrás detenidos. Android seguirá pidiendo confirmar la instalación.</string>
+    <string name="update_confirm_parked_button">Estoy estacionado de forma segura</string>
+    <string name="update_carplay_must_stop">Detén CarPlay antes de abrir el instalador. La actualización descargada se conservará.</string>
+    <string name="update_download_progress">Descargando %1$s · %2$d%%</string>
+    <string name="update_cancel_download">Cancelar descarga</string>
+    <string name="update_ota_not_provisioned">La OTA segura aún no está configurada en esta versión. Vuelve cuando se publique el manifiesto firmado.</string>
+    <string name="update_download_cancelled">Descarga cancelada. No se conservó ningún APK parcial.</string>
+    <string name="update_channel_beta">Beta</string>
     <string name="update_check">Buscar actualizaciones</string>
     <string name="update_checking">Buscando…</string>
     <string name="update_up_to_date">Ya tienes la última versión</string>
@@ -663,7 +678,7 @@
     <string name="update_channel_preview">Preliminar</string>
     <string name="update_channel_stable">Estable</string>
     <string name="update_channel_row">Canal de actualización: %1$s</string>
-    <string name="update_channel_description">Preliminar consulta versiones preliminares y estables; Estable consulta solo las estables. Preliminar es la opción predeterminada mientras se valida CarPaly.</string>
+    <string name="update_channel_description">Estable está seleccionado de forma predeterminada y solo busca versiones estables. Beta debe activarse manualmente y solo busca versiones preliminares.</string>
     <string name="update_available_details">Actual: %1$s\nMás reciente: %2$s\nTamaño del paquete: %3$s</string>
     <string name="update_apk_filename">Archivo APK: %1$s</string>
     <string name="update_manual_install_warning">CarPaly descarga el APK versionado, verifica su SHA-256, paquete, versión y firma, y comprueba que estén presentes los archivos de autenticación requeridos antes de ofrecer el instalador de Android. Android aún puede rechazar una actualización firmada con otra clave. Haz una copia de seguridad; siempre tendrás que confirmar la instalación.</string>
@@ -717,5 +732,4 @@
     <string name="head_unit_profile_description">El perfil Xingyue L usa la geometría publicada de la pantalla central de 1920 × 720, 300 mm de ancho físico, pantalla completa, H.264 y 60 fps. No accede a datos del vehículo, al cuadro de instrumentos ni a los mandos. Vuelve a conectar CarPlay tras cambiarlo.</string>
     <string name="geely_kx11_candidate_profile">Perfil candidato Geely KX11</string>
     <string name="geely_kx11_detection_evidence">Detección KX11: %1$s · %2$s</string>
-    <string name="settings_open_diagnostics">Abrir diagnóstico y registros</string>
 </resources>

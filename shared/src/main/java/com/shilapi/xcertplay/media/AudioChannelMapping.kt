@@ -25,6 +25,29 @@ internal data class AudioChannelSelection(
     val streamType: Int = AudioManager.STREAM_MUSIC,
 )
 
+internal const val CALL_AUDIO_AUTO = -1
+
+/** Independent user-selected legacy stream overrides for each CarPlay audio class. */
+internal data class AudioChannelOverrides(
+    val media: Int = 0,
+    val navigation: Int = 0,
+    val call: Int = CALL_AUDIO_AUTO,
+) {
+    fun forChannel(channel: AudioChannel): Int = when (channel) {
+        AudioChannel.MEDIA -> media
+        AudioChannel.NAVIGATION -> navigation
+        AudioChannel.PHONE -> call
+        AudioChannel.ASSISTANT -> 0
+    }
+}
+
+/** Stream 0 means Android's usage route for media/guidance, but the actual voice-call stream. */
+internal fun usesUsageBasedAudioRouting(channel: AudioChannel, override: Int): Boolean = when (channel) {
+    AudioChannel.PHONE -> override == CALL_AUDIO_AUTO
+    AudioChannel.MEDIA, AudioChannel.NAVIGATION -> override == 0
+    AudioChannel.ASSISTANT -> true
+}
+
 /**
  * Maps CarPlay stream metadata to Android audio routing values.
  *

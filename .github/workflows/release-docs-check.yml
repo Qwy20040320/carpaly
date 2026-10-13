@@ -1,0 +1,142 @@
+name: Release documentation checks
+on:
+  pull_request:
+    paths:
+      - README.md
+      - CHANGELOG.md
+      - config/android-version-ledger.json
+      - config/public-markdown-allowlist.json
+      - config/release-documentation.json
+      - config/release-intent.json
+      - docs/RELEASE_AUTOMATION.md
+      - docs/OTA_INTEGRATION_REPORT.md
+      - docs/OTA_VEHICLE_TEST_PLAN.md
+      - docs/UPSTREAM_RELEASE_PARITY.md
+      - scripts/sync_release_docs.py
+      - scripts/validate_release_metadata.py
+      - scripts/test_release_docs_sync.py
+      - scripts/release_signing_preflight.py
+      - scripts/test_release_signing_preflight.py
+      - scripts/build_site.py
+      - scripts/ota_manifest.py
+      - scripts/build_ota_manifests.py
+      - scripts/export_ota_public_key.py
+      - scripts/test_ota_manifest.py
+      - scripts/test_build_site.py
+      - scripts/test_ota_public_key.py
+      - scripts/check_pages_workflow.py
+      - scripts/check_release_automation.py
+      - scripts/release_intent.py
+      - scripts/test_release_intent.py
+      - scripts/release_review_gate.py
+      - scripts/test_release_review_gate.py
+      - scripts/dispatch_release_followups.py
+      - scripts/test_release_followups.py
+      - requirements-ota.txt
+      - config/ota-policy.json
+      - common/src/main/res/raw/ota_manifest_public_keys.json
+      - .github/workflows/*.yml
+      - .github/scripts/publish-authenticated-apk-release.sh
+  push:
+    branches: [main, 'feature/**']
+    paths:
+      - README.md
+      - CHANGELOG.md
+      - config/android-version-ledger.json
+      - config/public-markdown-allowlist.json
+      - config/release-documentation.json
+      - config/release-intent.json
+      - docs/RELEASE_AUTOMATION.md
+      - docs/OTA_INTEGRATION_REPORT.md
+      - docs/OTA_VEHICLE_TEST_PLAN.md
+      - docs/UPSTREAM_RELEASE_PARITY.md
+      - scripts/sync_release_docs.py
+      - scripts/validate_release_metadata.py
+      - scripts/test_release_docs_sync.py
+      - scripts/release_signing_preflight.py
+      - scripts/test_release_signing_preflight.py
+      - scripts/build_site.py
+      - scripts/ota_manifest.py
+      - scripts/build_ota_manifests.py
+      - scripts/export_ota_public_key.py
+      - scripts/test_ota_manifest.py
+      - scripts/test_build_site.py
+      - scripts/test_ota_public_key.py
+      - scripts/check_pages_workflow.py
+      - scripts/check_release_automation.py
+      - scripts/release_intent.py
+      - scripts/test_release_intent.py
+      - scripts/release_review_gate.py
+      - scripts/test_release_review_gate.py
+      - scripts/dispatch_release_followups.py
+      - scripts/test_release_followups.py
+      - requirements-ota.txt
+      - config/ota-policy.json
+      - common/src/main/res/raw/ota_manifest_public_keys.json
+      - .github/workflows/*.yml
+      - .github/scripts/publish-authenticated-apk-release.sh
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout v7
+        with:
+          persist-credentials: false
+      - name: Parse workflow YAML syntax
+        run: >-
+          ruby -e 'require "yaml"; ARGV.each { |path| YAML.parse_file(path) }'
+          .github/workflows/android.yml
+          .github/workflows/release-docs-check.yml
+          .github/workflows/release-docs-sync.yml
+          .github/workflows/pages.yml
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # actions/setup-go v7
+        with:
+          go-version: '1.25.x'
+      - name: Lint GitHub Actions workflows
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          "$(go env GOPATH)/bin/actionlint" .github/workflows/*.yml
+      - name: Validate release metadata and managed markers
+        run: python3 scripts/validate_release_metadata.py
+      - name: Install the pinned OTA test dependency
+        run: python3 -m pip install --disable-pip-version-check -r requirements-ota.txt
+      - name: Run offline release documentation and signing preflight tests
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: >-
+          python3 -m unittest
+          scripts.test_release_docs_sync
+          scripts.test_release_signing_preflight
+          scripts.test_release_pipeline
+          scripts.test_ota_manifest
+          scripts.test_build_site
+          scripts.test_ota_public_key
+          scripts.test_release_intent
+          scripts.test_release_review_gate
+          scripts.test_release_followups
+      - name: Compile synchronization and preflight scripts
+        run: >-
+          python3 -m py_compile
+          scripts/sync_release_docs.py
+          scripts/validate_release_metadata.py
+          scripts/release_signing_preflight.py
+          scripts/build_site.py
+          scripts/ota_manifest.py
+          scripts/build_ota_manifests.py
+          scripts/export_ota_public_key.py
+          scripts/check_pages_workflow.py
+          scripts/check_release_automation.py
+          scripts/release_intent.py
+          scripts/release_review_gate.py
+          scripts/dispatch_release_followups.py
+      - name: Check immutable action pins
+        run: python3 scripts/check_workflow_action_pins.py
+      - name: Check Pages and OTA workflow security boundary
+        run: python3 scripts/check_pages_workflow.py
