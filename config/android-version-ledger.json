@@ -1,13 +1,32 @@
 {
   "schemaVersion": 1,
   "applicationId": "com.shihab.diplay.hudtest",
-  "releaseCertificateSha256": "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90",
+  "releaseCertificateSha256": "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e",
+  "legacyReleaseCertificateSha256": "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90",
+  "signingEpochs": [
+    {
+      "id": "legacy-v1.1.4-through-v1.1.52",
+      "minimumVersionCode": 36,
+      "maximumVersionCode": 40,
+      "certificateSha256": "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90",
+      "upgradePolicy": "legacy-signer-only"
+    },
+    {
+      "id": "fresh-install-v1.1.53-plus",
+      "minimumVersionCode": 41,
+      "maximumVersionCode": null,
+      "certificateSha256": "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e",
+      "upgradePolicy": "fresh-install-required"
+    }
+  ],
   "highestObservedVersionCode": 38,
   "deliveryPolicy": {
     "buildType": "release",
     "apkFileNamePattern": "CarPaly-XingyueL-v{versionName}.apk",
     "applicationId": "com.shihab.diplay.hudtest",
-    "releaseCertificateSha256": "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90",
+    "releaseCertificateSha256": "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e",
+    "legacyReleaseCertificateSha256": "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90",
+    "upgradePolicy": "fresh-install-required",
     "debugApkUserDeliverable": false,
     "overwriteDeliveredArtifact": false
   },
@@ -16,19 +35,22 @@
       "tag": "v1.1.4",
       "versionName": "1.1.4",
       "versionCode": 36,
+      "signerCertificateSha256": "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90",
       "status": "published"
     },
     {
       "tag": "v1.1.5",
       "versionName": "1.1.5",
       "versionCode": 37,
+      "signerCertificateSha256": "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90",
       "status": "published"
     }
   ],
   "current": {
     "versionName": "1.1.53",
     "versionCode": 41,
-    "channel": "test"
+    "channel": "test",
+    "signingEpochId": "fresh-install-v1.1.53-plus"
   },
   "allocations": [
     {
@@ -36,21 +58,25 @@
       "versionCode": 39,
       "channel": "test",
       "status": "delivered",
-      "artifactSha256": "222801dbc5e96b668c22a078da38d2b4ed184724c0b088c35d7d04c32752754a"
+      "artifactSha256": "222801dbc5e96b668c22a078da38d2b4ed184724c0b088c35d7d04c32752754a",
+      "signerCertificateSha256": "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90"
     },
     {
       "versionName": "1.1.52",
       "versionCode": 40,
       "channel": "test",
       "status": "delivered",
-      "artifactSha256": "f5bea98180dadad4fecab77031f7373dc423b59c420bc9b085372b524c7e8c64"
+      "artifactSha256": "f5bea98180dadad4fecab77031f7373dc423b59c420bc9b085372b524c7e8c64",
+      "signerCertificateSha256": "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90"
     },
     {
       "versionName": "1.1.53",
       "versionCode": 41,
       "channel": "test",
-      "status": "reserved",
-      "artifactSha256": null
+      "status": "delivered",
+      "artifactSha256": "01212c62442b80f61d9fb9238f868d4f476bf460ededabb99ee038367dc9ed27",
+      "signerCertificateSha256": "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e",
+      "upgradePolicy": "fresh-install-required"
     }
   ]
 }

@@ -35,10 +35,10 @@ val gitCommit = providers.exec {
     commandLine("git", "rev-parse", "--short=12", "HEAD")
 }.standardOutput.asText.map { it.trim() }
 
-// This is the signing identity already present in the published v1.1.4 APK. Do not change it
-// to accommodate a different local or CI keystore: that would break the installed upgrade chain.
+// v1.1.53 starts a new signing epoch at the user's explicit request. It cannot update
+// v1.1.52 or earlier in place; the old signer remains recorded in the version ledger.
 val CARPALY_RELEASE_CERT_SHA256 =
-    "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90"
+    "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e"
 
 fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
     .digest(bytes)
@@ -46,7 +46,7 @@ fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
 
 val verifyCarPalyReleaseSigning by tasks.registering {
     group = "verification"
-    description = "Require the original v1.1.4 Release signing identity before any Release build."
+    description = "Require the ledger-pinned v1.1.53+ Release signing identity before any Release build."
     notCompatibleWithConfigurationCache("Reads protected signing inputs only when a Release build is requested.")
     doLast {
         fun requiredSecret(name: String): String = providers.environmentVariable(name).orNull
@@ -72,15 +72,15 @@ val verifyCarPalyReleaseSigning by tasks.registering {
             }
             val actualFingerprint = sha256(certificate.encoded)
             check(actualFingerprint == CARPALY_RELEASE_CERT_SHA256) {
-                "Release keystore does not match the v1.1.4 signing certificate"
+                "Release keystore does not match the active version-ledger signing certificate"
             }
             val configuredFingerprint = providers.environmentVariable("RELEASE_SIGNING_CERT_SHA256").orNull
                 ?.filter(Char::isLetterOrDigit)
                 ?.lowercase()
             check(configuredFingerprint == null || configuredFingerprint == CARPALY_RELEASE_CERT_SHA256) {
-                "Configured Release certificate pin does not match the fixed v1.1.4 signing identity"
+                "Configured Release certificate pin does not match the active version-ledger signing identity"
             }
-            logger.lifecycle("SIGNING_CERTIFICATE_MATCH=PASS (fixed v1.1.4 certificate)")
+            logger.lifecycle("SIGNING_CERTIFICATE_MATCH=PASS (active version-ledger certificate)")
         } catch (_: Exception) {
             error("Release signing identity could not be verified; no Release APK may be produced")
         } finally {
@@ -178,6 +178,7 @@ android {
             storePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").getOrElse("")
             keyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").getOrElse("")
             keyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").getOrElse("")
+            storeType = "PKCS12"
         }
         create("distributionDebug") {
             storeFile = distributionDebugKeystore ?: file("missing-distribution-debug-keystore.jks")

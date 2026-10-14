@@ -1,6 +1,7 @@
 # CarPaly（中文项目状态）
 
-> GitHub 当前版本记录（2026-10-12）：`v1.1.4`（code 36）和旧格式 `v1.1.5`（code 37）为历史预发布；code 38 仅在本地历史构建中观察。`v1.1.51 / code 39` 已是 GitHub 正式 Release，APK 资产 SHA-256 为 `222801dbc5e96b668c22a078da38d2b4ed184724c0b088c35d7d04c32752754a`；GitHub 将其标为正式版，但手写说明仍称预发布测试版，说明冲突已记录且未被自动改写。`v1.1.52 / code 40` 是本地曾交付的候选，保持现有 APK 不变。`v1.1.53 / code 41` 是新的本地开发候选，版本已预留，但原 Release 签名凭据在当前环境不可用，尚无可交付 APK、公开标签或 Release。后续版本按台账递增至 `v1.1.6`；高级车辆功能与实车状态均为 `NOT_TESTED`。所有用户 APK 必须采用固定 Release 签名和 `CarPaly-XingyueL-v{versionName}.apk` 命名，不交付 Debug/Test/Upgrade-Test 包。详见[主项目说明](README.md)。
+> GitHub 当前版本记录（2026-10-13）：`v1.1.4`（code 36）和旧格式 `v1.1.5`（code 37）为历史预发布；code 38 仅在本地历史构建中观察。`v1.1.51 / code 39` 是 GitHub Release，APK SHA-256 为 `222801dbc5e96b668c22a078da38d2b4ed184724c0b088c35d7d04c32752754a`；其人工说明中的预发布措辞冲突已记录且未自动改写。`v1.1.52 / code 40` 已有 GitHub Release 记录，频道以仓库 Release 页面为准，原 APK 保持不变。`v1.1.53 / code 41` 的本地 Release APK 已生成并通过结构、版本、签名、哈希和认证资源匹配检查，SHA-256 为 `01212c62442b80f61d9fb9238f868d4f476bf460ededabb99ee038367dc9ed27`。该 APK 使用新签名证书 `d9b329…7429139e`，只能全新安装，不能覆盖更新 v1.1.52 或更早版本；尚未公开发布或进行实车验证。高级车辆功能与实车状态均为 `NOT_TESTED`。所有用户 APK 必须采用版本台账指定的 Release 签名和 `CarPaly-XingyueL-v{versionName}.apk` 命名，不交付 Debug/Test/Upgrade-Test 包。详见[主项目说明](README.md)。
+最终版本规划为 `v1.1.6`，具体版本号仍以不可变台账中的实际分配为准。
 
 > 本文件后续内容保留自 DiPlay 上游 v0.2.15 中文说明，用作源码历史和上游功能参考；其中的 BYD 车型说明、安装包链接、功能范围及实车记录不代表 CarPaly 当前版本。
 

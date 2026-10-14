@@ -12,6 +12,8 @@ from scripts.android_versioning import (
     parse_gradle_version,
     parse_version_tuple,
     require_current_delivery_recorded,
+    signer_for_version,
+    validate_ledger,
 )
 
 
@@ -67,6 +69,32 @@ class AndroidVersioningTests(unittest.TestCase):
         }
         self.assertEqual(("1.1.4", 36), history["v1.1.4"])
         self.assertEqual(("1.1.5", 37), history["v1.1.5"])
+
+    def test_signing_epochs_keep_legacy_apks_immutable_and_mark_new_epoch_fresh_install_only(self):
+        ledger = json.loads((Path(__file__).resolve().parents[1] / "config/android-version-ledger.json")
+                            .read_text(encoding="utf-8"))
+        legacy = ledger["legacyReleaseCertificateSha256"]
+        current = ledger["releaseCertificateSha256"]
+        self.assertEqual(legacy, signer_for_version(ledger, "1.1.52", 40))
+        self.assertEqual(current, signer_for_version(ledger, "1.1.53", 41))
+        self.assertIsNone(signer_for_version(ledger, "1.1.54", 42))
+        current_allocation = next(item for item in ledger["allocations"] if item["versionName"] == "1.1.53")
+        self.assertEqual("fresh-install-required", current_allocation["upgradePolicy"])
+        validate_ledger(ledger)
+
+    def test_signing_epoch_mismatch_fails_closed(self):
+        ledger = json.loads((Path(__file__).resolve().parents[1] / "config/android-version-ledger.json")
+                            .read_text(encoding="utf-8"))
+        ledger["allocations"][-1]["signerCertificateSha256"] = ledger["legacyReleaseCertificateSha256"]
+        with self.assertRaisesRegex(ValueError, "inconsistent signer epoch"):
+            validate_ledger(ledger)
+
+    def test_overlapping_signing_epochs_fail_closed(self):
+        ledger = json.loads((Path(__file__).resolve().parents[1] / "config/android-version-ledger.json")
+                            .read_text(encoding="utf-8"))
+        ledger["signingEpochs"][0]["maximumVersionCode"] = 41
+        with self.assertRaisesRegex(ValueError, "overlap"):
+            validate_ledger(ledger)
 
     def test_next_version_is_blocked_until_current_release_artifact_is_recorded(self):
         ledger = {

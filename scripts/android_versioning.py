@@ -13,7 +13,8 @@ from pathlib import Path
 
 
 APPLICATION_ID = "com.shihab.diplay.hudtest"
-RELEASE_CERT_SHA256 = "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90"
+LEGACY_RELEASE_CERT_SHA256 = "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90"
+FINGERPRINT_PATTERN = re.compile(r"^[a-f0-9]{64}$")
 GRADLE_PATH = Path("mobile/build.gradle.kts")
 LEDGER_PATH = Path("config/android-version-ledger.json")
 VERSION_FIELDS = {
@@ -60,6 +61,37 @@ def write_ledger(root: Path, ledger: dict) -> None:
 def parse_version_tuple(name: str) -> tuple[int, int, int] | None:
     match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", name)
     return tuple(map(int, match.groups())) if match else None
+
+
+def signing_epoch_for_version(ledger: dict, version_code: int) -> dict | None:
+    matches = [
+        epoch for epoch in ledger.get("signingEpochs", [])
+        if isinstance(epoch.get("minimumVersionCode"), int)
+        and version_code >= epoch["minimumVersionCode"]
+        and (epoch.get("maximumVersionCode") is None
+             or (isinstance(epoch.get("maximumVersionCode"), int)
+                 and version_code <= epoch["maximumVersionCode"]))
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def signer_for_version(ledger: dict, version_name: str, version_code: int) -> str | None:
+    """Return the certificate assigned to a specific version-code epoch."""
+    epoch = signing_epoch_for_version(ledger, version_code)
+    if epoch is None:
+        return None
+    allocation = next((
+        item for item in ledger.get("allocations", [])
+        if item.get("versionName") == version_name and item.get("versionCode") == version_code
+    ), None)
+    historical = next((
+        item for item in ledger.get("verifiedHistoricalDeliveries", [])
+        if item.get("versionName") == version_name and item.get("versionCode") == version_code
+    ), None)
+    record = allocation or historical
+    if record is None or record.get("signerCertificateSha256", "").lower() != epoch["certificateSha256"].lower():
+        return None
+    return epoch["certificateSha256"].lower()
 
 
 def next_test_name(current_name: str) -> str:
@@ -116,16 +148,55 @@ def validate_ledger(ledger: dict) -> None:
     ):
         raise ValueError("The current version assignment is absent from the immutable allocation ledger")
     policy = ledger.get("deliveryPolicy", {})
+    current_certificate = str(ledger.get("releaseCertificateSha256", "")).lower()
+    legacy_certificate = str(ledger.get("legacyReleaseCertificateSha256", "")).lower()
+    epochs = ledger.get("signingEpochs", [])
+    if not FINGERPRINT_PATTERN.fullmatch(current_certificate):
+        raise ValueError("Version ledger must pin a valid current Release certificate SHA-256")
+    if legacy_certificate != LEGACY_RELEASE_CERT_SHA256:
+        raise ValueError("The immutable pre-v1.1.53 signer record was changed")
+    historical = ledger.get("verifiedHistoricalDeliveries", [])
+    if not isinstance(epochs, list) or not epochs:
+        raise ValueError("Version ledger must define non-empty Release signing epochs")
+    ordered_epochs = sorted(epochs, key=lambda item: item.get("minimumVersionCode", -1))
+    previous_maximum: int | None = None
+    for epoch in ordered_epochs:
+        minimum = epoch.get("minimumVersionCode")
+        maximum = epoch.get("maximumVersionCode")
+        fingerprint = str(epoch.get("certificateSha256", "")).lower()
+        if (not isinstance(minimum, int) or minimum < 1
+                or (maximum is not None and (not isinstance(maximum, int) or maximum < minimum))
+                or not FINGERPRINT_PATTERN.fullmatch(fingerprint)):
+            raise ValueError("Release signing epoch metadata is invalid")
+        if previous_maximum is None and epoch is not ordered_epochs[0]:
+            raise ValueError("An unbounded signing epoch cannot precede another epoch")
+        if previous_maximum is not None and minimum <= previous_maximum:
+            raise ValueError("Release signing epochs overlap")
+        previous_maximum = maximum
+    current = ledger.get("current", {})
+    active_epoch = signing_epoch_for_version(ledger, int(current.get("versionCode", 0)))
+    if (active_epoch is None
+            or current_certificate != str(active_epoch.get("certificateSha256", "")).lower()
+            or current.get("signingEpochId") != active_epoch.get("id")):
+        raise ValueError("Current version does not map to exactly one pinned signing epoch")
+    for record in [*historical, *allocations]:
+        epoch = signing_epoch_for_version(ledger, int(record["versionCode"]))
+        if (epoch is None
+                or record.get("signerCertificateSha256", "").lower()
+                != str(epoch.get("certificateSha256", "")).lower()):
+            raise ValueError("A historical or allocated version has an inconsistent signer epoch")
+
     if (
         policy.get("buildType") != "release"
         or policy.get("apkFileNamePattern") != "CarPaly-XingyueL-v{versionName}.apk"
         or policy.get("applicationId") != APPLICATION_ID
-        or policy.get("releaseCertificateSha256", "").lower() != RELEASE_CERT_SHA256
+        or policy.get("releaseCertificateSha256", "").lower() != current_certificate
+        or policy.get("legacyReleaseCertificateSha256", "").lower() != legacy_certificate
+        or policy.get("upgradePolicy") != "fresh-install-required"
         or policy.get("debugApkUserDeliverable") is not False
         or policy.get("overwriteDeliveredArtifact") is not False
     ):
         raise ValueError("Version ledger does not enforce the permanent Release APK delivery policy")
-    historical = ledger.get("verifiedHistoricalDeliveries", [])
     historical_names = [item["versionName"] for item in historical]
     historical_codes = [item["versionCode"] for item in historical]
     if len(historical_names) != len(set(historical_names)) or len(historical_codes) != len(set(historical_codes)):
@@ -169,14 +240,15 @@ def check_project(root: Path) -> AndroidVersion:
         raise ValueError("CarPaly applicationId changed; upgrade continuity is not verified")
     if (version.version_name, version.version_code) != (current["versionName"], current["versionCode"]):
         raise ValueError("Gradle versionName/versionCode differs from the reserved version ledger")
-    if ledger.get("releaseCertificateSha256", "").lower() != RELEASE_CERT_SHA256:
-        raise ValueError("Version ledger signer does not match the fixed v1.1.4 Release identity")
+    expected_signer = signer_for_version(ledger, version.version_name, version.version_code)
+    if current.get("signingEpochId") is None or expected_signer != ledger.get("releaseCertificateSha256", "").lower():
+        raise ValueError("Current version signer does not match its explicit signing epoch")
     if re.search(r"(?m)^\s*applicationIdSuffix\s*=", source) or re.search(
         r"(?m)^\s*versionNameSuffix\s*=", source
     ):
         raise ValueError("Unexpected applicationId/versionName suffix can break upgrade identity")
-    if RELEASE_CERT_SHA256 not in source:
-        raise ValueError("Gradle Release signer pin is missing")
+    if expected_signer not in source:
+        raise ValueError("Gradle Release signer pin does not match the current signing epoch")
 
     if current["channel"] == "test":
         parsed = parse_version_tuple(version.version_name)

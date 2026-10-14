@@ -18,17 +18,21 @@
   "candidate": {
     "status": "local_candidate",
     "versionName": "1.1.53",
-    "summaryZh": "本地开发候选，版本号已预留；原 Release 签名凭据当前不可用，尚未生成可交付 APK，也没有 GitHub 标签或公开 Release。不得据此宣称实车 CarPlay、音频或显示问题已修复。",
-    "summaryEn": "Local development candidate with a reserved version allocation; the original Release signing credentials are unavailable in this context, so no deliverable APK has been produced. No GitHub tag or public Release exists. No in-vehicle CarPlay, audio, or display fix is claimed.",
+    "summaryZh": "本地 v1.1.53/code 41 Release APK 已通过 APK 结构、包名/版本、签名、SHA-256 与认证资源匹配检查。签名证书 SHA-256 为 d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e，APK SHA-256 为 01212c62442b80f61d9fb9238f868d4f476bf460ededabb99ee038367dc9ed27。该新签名与 v1.1.52 不同，不能覆盖旧安装，仅适用于全新安装；尚未实车测试，也没有 GitHub 标签或公开 Release。不得据此宣称实车 CarPlay、音频或显示问题已修复。",
+    "summaryEn": "The local v1.1.53/code 41 Release APK passed APK structure, package/version, signature, SHA-256, and authentication-asset matching checks. Signer certificate SHA-256: d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e. APK SHA-256: 01212c62442b80f61d9fb9238f868d4f476bf460ededabb99ee038367dc9ed27. This signer differs from v1.1.52 and cannot update that install in place; it is suitable only for a fresh install. No vehicle test, GitHub tag, or public Release exists. No in-vehicle CarPlay, audio, or display fix is claimed.",
     "vehicleStatus": "NOT_TESTED",
     "releaseClaims": [],
     "releaseNotesZh": [
-      "本地开发候选版本，尚未生成可交付 APK，也未发布。",
+      "本地 Release APK 已生成并通过结构、版本、签名、哈希与认证资源匹配检查；APK SHA-256：01212c62442b80f61d9fb9238f868d4f476bf460ededabb99ee038367dc9ed27。",
+      "本版本切换到新的 Android Release 签名，不能覆盖安装 v1.1.52 或更早旧签名版本；不要为测试而卸载现有版本。",
+      "仅限尚未安装 CarPaly 的测试设备全新安装；本 APK 尚未实际安装验收、未完成实车测试，也没有公开发布。",
       "不得据此宣称音乐自动暂停、导航无声或顶部状态栏遮挡问题已修复。",
       "HUD、仪表、燃油及其他未经实际验证的车辆功能保持 NOT_TESTED。"
     ],
     "releaseNotesEn": [
-      "Local development candidate; no deliverable APK has been produced and it is not released.",
+      "The local Release APK passed structure, version, signature, hash, and authentication-asset matching checks. APK SHA-256: 01212c62442b80f61d9fb9238f868d4f476bf460ededabb99ee038367dc9ed27.",
+      "This build uses a new Android Release signer and cannot update v1.1.52 or earlier legacy-signed installs in place. Do not uninstall an existing copy just to test it.",
+      "For fresh installation only on a device without CarPaly. The APK has not been installation-tested, vehicle-tested, or publicly released.",
       "Do not claim that media auto-pause, silent navigation prompts, or OEM status-bar overlap is fixed.",
       "HUD, instrument cluster, fuel data, and other unverified vehicle features remain NOT_TESTED."
     ]

@@ -14,6 +14,7 @@ from typing import Any
 from unittest.mock import patch
 
 from scripts import sync_release_docs as sync
+from scripts.android_versioning import signer_for_version
 from scripts.validate_release_metadata import validate_metadata
 
 
@@ -21,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 METADATA = json.loads((ROOT / "config/release-documentation.json").read_text(encoding="utf-8"))
 LEDGER = json.loads((ROOT / "config/android-version-ledger.json").read_text(encoding="utf-8"))
 REPO = "Qwy20040320/carpaly"
-SIGNER = LEDGER["releaseCertificateSha256"]
+SIGNER = signer_for_version(LEDGER, "1.1.51", 39)
 APK_SHA = "a" * 64
 COMMIT = "b" * 40
 SECRET = "token-value-must-not-be-logged"

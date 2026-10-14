@@ -54,7 +54,7 @@ if ($LASTEXITCODE -ne 0) { throw 'The configured Python executable could not run
 & $pythonPath (Join-Path $projectRoot 'scripts\android_versioning.py') check
 if ($LASTEXITCODE -ne 0) { throw 'Version ledger validation failed; no APK was built.' }
 
-$artifacts = Join-Path $projectRoot 'artifacts'
+$artifacts = Join-Path $projectRoot "artifacts\v$versionName"
 $fileName = "CarPaly-XingyueL-v$versionName.apk"
 $destination = Join-Path $artifacts $fileName
 $report = Join-Path $artifacts "$fileName.verification.json"
@@ -97,6 +97,7 @@ try {
     Write-Output "VERSION_CODE=$versionCode"
     Write-Output "SHA256=$hash"
     Write-Output "SIGNER_SHA256=$($ledger.releaseCertificateSha256)"
+    Write-Output 'UPGRADE_POLICY=FRESH_INSTALL_REQUIRED'
     Write-Output "REPORT=$report"
 }
 finally {

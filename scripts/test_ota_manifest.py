@@ -99,10 +99,7 @@ class SignedManifestTests(unittest.TestCase):
             "minimumSupportedVersionCode": 36,
             "maximumApkBytes": 52_428_800,
         }
-        cls.ledger = {
-            "applicationId": "com.shihab.diplay.hudtest",
-            "releaseCertificateSha256": SIGNER,
-        }
+        cls.ledger = json.loads(ota_manifest.LEDGER_PATH.read_text(encoding="utf-8"))
 
     def test_signed_envelope_round_trips_and_detects_tampering(self):
         payload = {"schemaVersion": 1, "manifestKeyId": KEY_ID, "channel": "stable", "versionCode": 40}

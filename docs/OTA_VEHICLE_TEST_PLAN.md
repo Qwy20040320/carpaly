@@ -9,7 +9,7 @@ This checklist is for a stationary 2024 Geely Xingyue L Tianji head unit. Do not
 - [ ] Record installed CarPaly version/versionCode and its signer certificate SHA-256 without collecting private keys.
 - [ ] Confirm the update APK came from the CarPaly GitHub Release and compare the published SHA-256.
 - [ ] Confirm current and candidate `applicationId` are `com.shihab.diplay.hudtest` and candidate versionCode is greater.
-- [ ] Confirm the installed and candidate APK use the fixed Release signer `4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90`.
+- [ ] Confirm each APK uses the signer assigned to its versionCode in `config/android-version-ledger.json`; v1.1.53/code 41 uses a different signer than v1.1.52/code 40 and cannot update it in place.
 - [ ] Confirm the production OTA manifest trust key has been shipped in the installed app and its key id is active. Until then, update checking is expected to fail closed.
 - [ ] Stop CarPlay before installer launch. Do not test update installation during music, navigation, phone, Siri, or reversing-camera use.
 

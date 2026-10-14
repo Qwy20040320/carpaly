@@ -21,7 +21,7 @@ $apk = (Resolve-Path -LiteralPath $ApkPath).Path
 if (-not $ReportPath) { $ReportPath = "$apk.verification.json" }
 
 $expectedPackage = 'com.shihab.diplay.hudtest'
-$expectedSigner = '4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90'
+$expectedSigner = [string] $ledger.releaseCertificateSha256
 $expectedName = [string] $ledger.current.versionName
 $expectedCode = [int] $ledger.current.versionCode
 $baselineCode = [int] $ledger.highestObservedVersionCode
@@ -46,9 +46,19 @@ if ($expectedCode -le $baselineCode -or
     $gradle -notmatch ('(?m)^\s*versionName\s*=\s*"' + [regex]::Escape($expectedName) + '"\s*$')) {
     throw 'Gradle version metadata is not the reserved, strictly increasing user version.'
 }
-if ($ledger.releaseCertificateSha256 -ne $expectedSigner -or $gradle -notmatch [regex]::Escape($expectedSigner)) {
-    throw 'The permanent Release signer pin is absent or inconsistent.'
+if ($ledger.deliveryPolicy.releaseCertificateSha256 -ne $expectedSigner -or
+    $gradle -notmatch [regex]::Escape($expectedSigner)) {
+    throw 'The active version-epoch Release signer pin is absent or inconsistent.'
 }
+$allocationMatches = @($ledger.allocations | Where-Object {
+    $_.versionName -eq $expectedName -and $_.versionCode -eq $expectedCode
+})
+if ($allocationMatches.Count -ne 1 -or
+    $allocationMatches[0].signerCertificateSha256 -ne $expectedSigner -or
+    $allocationMatches[0].upgradePolicy -ne 'fresh-install-required') {
+    throw 'The current version has no unique, matching fresh-install signing allocation.'
+}
+$allocation = $allocationMatches[0]
 if (-not $AuthenticationAssetsRoot) {
     throw 'DIPLAY_AUTH_ASSETS_DIR is required to compare packaged runtime authentication files.'
 }
@@ -140,8 +150,6 @@ try {
     $checks['USER_DATA_PRESERVATION'] = 'NOT_TESTED'
 
     $apkSha256 = (Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant()
-    $allocation = @($ledger.allocations | Where-Object { $_.versionName -eq $versionName -and $_.versionCode -eq $versionCode }) | Select-Object -First 1
-    if (-not $allocation) { throw 'APK version does not have a unique allocation in the version ledger.' }
     if ($allocation.artifactSha256 -and $allocation.artifactSha256 -ne $apkSha256) {
         throw 'This version already has a delivered APK with different bytes; allocate a new version instead.'
     }

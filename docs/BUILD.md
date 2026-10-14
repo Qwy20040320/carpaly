@@ -112,7 +112,7 @@ That workflow also checks and builds the `home` and `maphost` applications.
 
 ## Build a CarPaly user APK
 
-CarPaly intentionally has no standalone authenticated Debug or Upgrade-Test packaging task. To install on a vehicle, prepare an external directory containing exactly `offline-mfi/identity.pk8` and `offline-mfi/certificate.p7b`; keep it outside Git. Supply the original Release keystore inputs securely:
+CarPaly intentionally has no standalone authenticated Debug or Upgrade-Test packaging task. To build an authenticated Release candidate, prepare an external directory containing exactly `offline-mfi/identity.pk8` and `offline-mfi/certificate.p7b`; keep it outside Git. Supply a PKCS12 Release keystore whose certificate matches the active version's `signerCertificateSha256` in the version ledger:
 
 | Variable | Value |
 | --- | --- |
@@ -122,13 +122,13 @@ CarPaly intentionally has no standalone authenticated Debug or Upgrade-Test pack
 | `ANDROID_KEY_ALIAS` | Signing key alias |
 | `ANDROID_KEY_PASSWORD` | Signing key password |
 
-Keep the keystore and passwords outside Git. Run the canonical build script, which invokes `:mobile:assembleRelease`, verifies all inputs and the fixed signer, and refuses to overwrite existing artifacts:
+Keep the keystore and passwords outside Git. Run the canonical build script, which invokes `:mobile:assembleRelease`, verifies all inputs and the ledger-pinned signer, and refuses to overwrite existing artifacts:
 
 ```sh
 powershell -ExecutionPolicy Bypass -File .\scripts\build-release-apk.ps1
 ```
 
-The user delivery is `artifacts/CarPaly-XingyueL-v{versionName}.apk`; the unrenamed Gradle output remains an intermediate file. The APK embeds the authorized runtime identity, which recipients can extract, but never includes the Android signing keystore.
+The local candidate output is `artifacts/v{versionName}/CarPaly-XingyueL-v{versionName}.apk`; the unrenamed Gradle output remains an intermediate file. The APK embeds the explicitly selected runtime identity, which recipients can extract, but never includes the Android signing keystore. v1.1.53/code 41 uses a new signing epoch and cannot update v1.1.52 or earlier in place; do not uninstall an older install until the user has decided how to preserve its data.
 See [the project notices](THIRD_PARTY_NOTICES.md) for the experimental identity used in public releases.
 
 The public source archive matches the release tag.
@@ -144,5 +144,5 @@ The retired `build-beta.py` helper is no longer part of the build procedure.
 | A required SDK or NDK package is absent | Install the listed package with SDK Manager. |
 | Java or Gradle JDK version is incorrect | Set the terminal JDK and Android Studio Gradle JDK to Java 25. |
 | CarPaly Release build reports missing authentication files | Check that `DIPLAY_AUTH_ASSETS_DIR` points to a parent containing `offline-mfi/identity.pk8` and `offline-mfi/certificate.p7b`. |
-| CarPaly Release signer is unavailable or mismatched | Stop with `BLOCKED`; restore the original v1.1.4 signing credentials through the authorized secure context. Never fall back to Debug signing or install over an existing copy after changing its key. |
-| Android rejects an app update | Use the same application ID and signing key as the installed app. |
+| CarPaly Release signer is unavailable or mismatched | Stop with `BLOCKED`; recover only the key assigned to the version's signer epoch. Never fall back to Debug signing. |
+| Android rejects a v1.1.53 update to v1.1.52 or older | The v1.1.53 signer changed, so Android cannot install it as an in-place update. Keep the old app and its data unless the user explicitly chooses a fresh-install migration after data review. |
