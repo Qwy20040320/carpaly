@@ -9,7 +9,8 @@
 - `versionCode=38`: observed in a local historical build and treated as the high-water mark.
 - `v1.1.51`: `versionCode=39`, published GitHub Release; APK SHA-256 `222801dbc5e96b668c22a078da38d2b4ed184724c0b088c35d7d04c32752754a`, signed by the legacy certificate.
 - `v1.1.52`: `versionCode=40`, delivered as a local candidate; APK SHA-256 `f5bea98180dadad4fecab77031f7373dc423b59c420bc9b085372b524c7e8c64`, signed by the legacy certificate. Keep this APK unchanged.
-- `v1.1.53`: reserved as `versionCode=41`, using the explicitly authorized new signing epoch. This is **fresh-install-only** and cannot update a v1.1.52 or earlier installation in place.
+- `v1.1.53`: `versionCode=41`, delivered APK SHA-256 `01212c62442b80f61d9fb9238f868d4f476bf460ededabb99ee038367dc9ed27` in the new signing epoch; GitHub Release exists. This is **fresh-install-only** relative to v1.1.52 or earlier.
+- `v1.1.54`: reserved locally as `versionCode=42` in the same new signing epoch. No validated user APK or vehicle test exists yet. It may update v1.1.53 only after an actual APK passes signature, package, version and installation checks.
 - Future allocations follow the immutable ledger and complete code high-water mark. The later `v1.1.6` allocation must use a version code above every prior observed or delivered code.
 
 ## Signing epochs and installation compatibility

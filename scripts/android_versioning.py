@@ -185,6 +185,12 @@ def validate_ledger(ledger: dict) -> None:
                 or record.get("signerCertificateSha256", "").lower()
                 != str(epoch.get("certificateSha256", "")).lower()):
             raise ValueError("A historical or allocated version has an inconsistent signer epoch")
+    for record in allocations:
+        code = record["versionCode"]
+        if code >= 41 and record.get("upgradePolicy") != (
+            "fresh-install-required" if code == 41 else "same-signer-upgrade-only"
+        ):
+            raise ValueError("An allocated version has an inconsistent upgrade policy")
 
     if (
         policy.get("buildType") != "release"
@@ -192,7 +198,9 @@ def validate_ledger(ledger: dict) -> None:
         or policy.get("applicationId") != APPLICATION_ID
         or policy.get("releaseCertificateSha256", "").lower() != current_certificate
         or policy.get("legacyReleaseCertificateSha256", "").lower() != legacy_certificate
-        or policy.get("upgradePolicy") != "fresh-install-required"
+        or policy.get("upgradePolicy") != (
+            "fresh-install-required" if current["versionCode"] == 41 else "same-signer-upgrade-only"
+        )
         or policy.get("debugApkUserDeliverable") is not False
         or policy.get("overwriteDeliveredArtifact") is not False
     ):
@@ -321,19 +329,26 @@ def allocate(root: Path, channel: str) -> AndroidVersion:
         + [item["versionCode"] for item in ledger["allocations"]]
     )
     version = AndroidVersion(APPLICATION_ID, version_name, highest + 1)
-    update_gradle_version(root, version.version_name, version.version_code)
+    epoch = signing_epoch_for_version(ledger, version.version_code)
+    if epoch is None or epoch["certificateSha256"].lower() != ledger["releaseCertificateSha256"].lower():
+        raise ValueError("No pinned Release signer epoch covers the next version")
     allocation = {
         "versionName": version.version_name,
         "versionCode": version.version_code,
         "channel": channel,
         "status": "reserved",
         "artifactSha256": None,
+        "signerCertificateSha256": ledger["releaseCertificateSha256"],
+        "upgradePolicy": "same-signer-upgrade-only",
     }
+    update_gradle_version(root, version.version_name, version.version_code)
     ledger["current"] = {
         "versionName": version.version_name,
         "versionCode": version.version_code,
         "channel": channel,
+        "signingEpochId": epoch["id"],
     }
+    ledger["deliveryPolicy"]["upgradePolicy"] = "same-signer-upgrade-only"
     ledger["allocations"].append(allocation)
     write_ledger(root, ledger)
     return version

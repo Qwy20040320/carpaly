@@ -26,7 +26,7 @@
     "applicationId": "com.shihab.diplay.hudtest",
     "releaseCertificateSha256": "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e",
     "legacyReleaseCertificateSha256": "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90",
-    "upgradePolicy": "fresh-install-required",
+    "upgradePolicy": "same-signer-upgrade-only",
     "debugApkUserDeliverable": false,
     "overwriteDeliveredArtifact": false
   },
@@ -47,8 +47,8 @@
     }
   ],
   "current": {
-    "versionName": "1.1.53",
-    "versionCode": 41,
+    "versionName": "1.1.54",
+    "versionCode": 42,
     "channel": "test",
     "signingEpochId": "fresh-install-v1.1.53-plus"
   },
@@ -77,6 +77,15 @@
       "artifactSha256": "01212c62442b80f61d9fb9238f868d4f476bf460ededabb99ee038367dc9ed27",
       "signerCertificateSha256": "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e",
       "upgradePolicy": "fresh-install-required"
+    },
+    {
+      "versionName": "1.1.54",
+      "versionCode": 42,
+      "channel": "test",
+      "status": "reserved",
+      "artifactSha256": null,
+      "signerCertificateSha256": "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e",
+      "upgradePolicy": "same-signer-upgrade-only"
     }
   ]
 }

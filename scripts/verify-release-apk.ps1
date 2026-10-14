@@ -53,10 +53,11 @@ if ($ledger.deliveryPolicy.releaseCertificateSha256 -ne $expectedSigner -or
 $allocationMatches = @($ledger.allocations | Where-Object {
     $_.versionName -eq $expectedName -and $_.versionCode -eq $expectedCode
 })
+$expectedUpgradePolicy = if ($expectedCode -eq 41) { 'fresh-install-required' } else { 'same-signer-upgrade-only' }
 if ($allocationMatches.Count -ne 1 -or
     $allocationMatches[0].signerCertificateSha256 -ne $expectedSigner -or
-    $allocationMatches[0].upgradePolicy -ne 'fresh-install-required') {
-    throw 'The current version has no unique, matching fresh-install signing allocation.'
+    $allocationMatches[0].upgradePolicy -ne $expectedUpgradePolicy) {
+    throw 'The current version has no unique, matching signing and upgrade allocation.'
 }
 $allocation = $allocationMatches[0]
 if (-not $AuthenticationAssetsRoot) {

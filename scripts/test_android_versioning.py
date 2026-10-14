@@ -77,9 +77,11 @@ class AndroidVersioningTests(unittest.TestCase):
         current = ledger["releaseCertificateSha256"]
         self.assertEqual(legacy, signer_for_version(ledger, "1.1.52", 40))
         self.assertEqual(current, signer_for_version(ledger, "1.1.53", 41))
-        self.assertIsNone(signer_for_version(ledger, "1.1.54", 42))
-        current_allocation = next(item for item in ledger["allocations"] if item["versionName"] == "1.1.53")
-        self.assertEqual("fresh-install-required", current_allocation["upgradePolicy"])
+        self.assertEqual(current, signer_for_version(ledger, "1.1.54", 42))
+        previous_allocation = next(item for item in ledger["allocations"] if item["versionName"] == "1.1.53")
+        self.assertEqual("fresh-install-required", previous_allocation["upgradePolicy"])
+        current_allocation = next(item for item in ledger["allocations"] if item["versionName"] == "1.1.54")
+        self.assertEqual("same-signer-upgrade-only", current_allocation["upgradePolicy"])
         validate_ledger(ledger)
 
     def test_signing_epoch_mismatch_fails_closed(self):
@@ -87,6 +89,13 @@ class AndroidVersioningTests(unittest.TestCase):
                             .read_text(encoding="utf-8"))
         ledger["allocations"][-1]["signerCertificateSha256"] = ledger["legacyReleaseCertificateSha256"]
         with self.assertRaisesRegex(ValueError, "inconsistent signer epoch"):
+            validate_ledger(ledger)
+
+    def test_new_epoch_upgrade_policy_cannot_be_mislabelled(self):
+        ledger = json.loads((Path(__file__).resolve().parents[1] / "config/android-version-ledger.json")
+                            .read_text(encoding="utf-8"))
+        ledger["allocations"][-1]["upgradePolicy"] = "fresh-install-required"
+        with self.assertRaisesRegex(ValueError, "inconsistent upgrade policy"):
             validate_ledger(ledger)
 
     def test_overlapping_signing_epochs_fail_closed(self):
@@ -170,6 +179,40 @@ class AndroidVersioningTests(unittest.TestCase):
                 allocate(root, "test")
             self.assertEqual(before_gradle, gradle_path.read_bytes())
             self.assertEqual(before_ledger, ledger_path.read_bytes())
+
+    def test_allocator_preserves_signing_epoch_for_next_release_candidate(self):
+        project = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory(prefix="carpaly-next-signer-") as temporary:
+            root = Path(temporary)
+            for relative in ("mobile/build.gradle.kts", "config/android-version-ledger.json"):
+                destination = root / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(project / relative, destination)
+            ledger_path = root / "config/android-version-ledger.json"
+            ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+            ledger["current"] = {
+                "versionName": "1.1.53", "versionCode": 41, "channel": "test",
+                "signingEpochId": "fresh-install-v1.1.53-plus",
+            }
+            ledger["deliveryPolicy"]["upgradePolicy"] = "fresh-install-required"
+            ledger["allocations"] = [item for item in ledger["allocations"] if item["versionCode"] <= 41]
+            ledger_path.write_text(json.dumps(ledger, indent=2) + "\n", encoding="utf-8")
+            gradle_path = root / "mobile/build.gradle.kts"
+            gradle_source = gradle_path.read_text(encoding="utf-8")
+            gradle_path.write_text(gradle_source.replace('versionCode = 42', 'versionCode = 41')
+                                   .replace('versionName = "1.1.54"', 'versionName = "1.1.53"'), encoding="utf-8")
+            subprocess.run(["git", "init", "--quiet"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.name", "CarPaly Test"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.email", "carpaly-test@example.invalid"], cwd=root, check=True)
+            subprocess.run(["git", "add", "mobile/build.gradle.kts", "config/android-version-ledger.json"], cwd=root, check=True)
+            subprocess.run(["git", "commit", "--quiet", "-m", "fixture"], cwd=root, check=True)
+            version = allocate(root, "test")
+            self.assertEqual(("1.1.54", 42), (version.version_name, version.version_code))
+            ledger = json.loads((root / "config/android-version-ledger.json").read_text(encoding="utf-8"))
+            self.assertEqual("same-signer-upgrade-only", ledger["allocations"][-1]["upgradePolicy"])
+            self.assertEqual(ledger["releaseCertificateSha256"], ledger["allocations"][-1]["signerCertificateSha256"])
+            self.assertEqual("fresh-install-v1.1.53-plus", ledger["current"]["signingEpochId"])
+            self.assertEqual(version, check_project(root))
 
 
 if __name__ == "__main__":

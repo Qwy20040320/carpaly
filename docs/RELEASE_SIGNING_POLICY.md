@@ -6,7 +6,8 @@ The user explicitly authorized a new Android signing identity for CarPaly v1.1.5
 
 - v1.1.4 through v1.1.52 retain the original certificate SHA-256 `4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90`.
 - v1.1.53 (versionCode 41) and later use the new candidate certificate SHA-256 `d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e`.
-- Android will reject an in-place update between these signer identities. The v1.1.53 candidate is **FRESH_INSTALL_REQUIRED** and cannot preserve installed v1.1.52 application data through normal APK update. Do not uninstall the existing app unless the user has separately decided how to preserve any needed data.
+- Android will reject an in-place update between these signer identities. v1.1.53 is **FRESH_INSTALL_REQUIRED** relative to v1.1.52 and cannot preserve installed v1.1.52 application data through normal APK update. Do not uninstall the existing app unless the user has separately decided how to preserve any needed data.
+- v1.1.54/code 42 is reserved in the new signing epoch. It has a same-signer upgrade policy relative to v1.1.53, but that is not an installation PASS until a real signed APK and device update are checked.
 - The immutable per-version signer and installation policy are recorded in `config/android-version-ledger.json`. Never change historical APKs, signing identities, version allocations, or hashes to hide this transition.
 
 The v1.1.53 private key and its DPAPI-protected password are local-only under the ignored `.private/release-signing-v1.1.53/` directory. They must not enter Git, logs, source archives, public Actions artifacts, or APK files. The public certificate fingerprint is not a secret. The private key needs an owner-controlled, encrypted offline backup before it is considered disaster-recoverable; the DPAPI password file only decrypts in the Windows account/profile that created it.

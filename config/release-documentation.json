@@ -17,22 +17,22 @@
   },
   "candidate": {
     "status": "local_candidate",
-    "versionName": "1.1.53",
-    "summaryZh": "本地 v1.1.53/code 41 Release APK 已通过 APK 结构、包名/版本、签名、SHA-256 与认证资源匹配检查。签名证书 SHA-256 为 d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e，APK SHA-256 为 01212c62442b80f61d9fb9238f868d4f476bf460ededabb99ee038367dc9ed27。该新签名与 v1.1.52 不同，不能覆盖旧安装，仅适用于全新安装；尚未实车测试，也没有 GitHub 标签或公开 Release。不得据此宣称实车 CarPlay、音频或显示问题已修复。",
-    "summaryEn": "The local v1.1.53/code 41 Release APK passed APK structure, package/version, signature, SHA-256, and authentication-asset matching checks. Signer certificate SHA-256: d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e. APK SHA-256: 01212c62442b80f61d9fb9238f868d4f476bf460ededabb99ee038367dc9ed27. This signer differs from v1.1.52 and cannot update that install in place; it is suitable only for a fresh install. No vehicle test, GitHub tag, or public Release exists. No in-vehicle CarPlay, audio, or display fix is claimed.",
+    "versionName": "1.1.54",
+    "summaryZh": "v1.1.54/code 42 已预留为本地开发候选，尚未生成或发布 APK，实车功能 NOT_TESTED。已公开的 v1.1.53 APK 被发现包含可提取的认证资源；在凭据处置和安全方案完成前，不得将同一资源打入新版本。v1.1.54 沿用 v1.1.53 的 Android 签名时代，理论上的同签名升级条件仍需实际 APK 与安装验证。",
+    "summaryEn": "v1.1.54/code 42 is reserved for local development. No APK has been generated or published, and vehicle functions remain NOT_TESTED. The public v1.1.53 APK was found to contain extractable authentication assets; those assets must not be packaged again before credential remediation and a safe design. v1.1.54 remains in the v1.1.53 Android signing epoch, but upgrade compatibility still requires an actual verified APK and installation test.",
     "vehicleStatus": "NOT_TESTED",
     "releaseClaims": [],
     "releaseNotesZh": [
-      "本地 Release APK 已生成并通过结构、版本、签名、哈希与认证资源匹配检查；APK SHA-256：01212c62442b80f61d9fb9238f868d4f476bf460ededabb99ee038367dc9ed27。",
-      "本版本切换到新的 Android Release 签名，不能覆盖安装 v1.1.52 或更早旧签名版本；不要为测试而卸载现有版本。",
-      "仅限尚未安装 CarPaly 的测试设备全新安装；本 APK 尚未实际安装验收、未完成实车测试，也没有公开发布。",
+      "v1.1.54/code 42 仅为本地开发候选，尚未生成可交付 APK，也没有公开发布。",
+      "目标是沿用 v1.1.53 的 Android 签名身份；与 v1.1.52 或更早旧签名版本不能直接覆盖升级，不要为测试而卸载现有版本。",
+      "已公开的 v1.1.53 APK 包含可提取的认证资源；在安全处置完成前不打包相同资源。",
       "不得据此宣称音乐自动暂停、导航无声或顶部状态栏遮挡问题已修复。",
       "HUD、仪表、燃油及其他未经实际验证的车辆功能保持 NOT_TESTED。"
     ],
     "releaseNotesEn": [
-      "The local Release APK passed structure, version, signature, hash, and authentication-asset matching checks. APK SHA-256: 01212c62442b80f61d9fb9238f868d4f476bf460ededabb99ee038367dc9ed27.",
-      "This build uses a new Android Release signer and cannot update v1.1.52 or earlier legacy-signed installs in place. Do not uninstall an existing copy just to test it.",
-      "For fresh installation only on a device without CarPaly. The APK has not been installation-tested, vehicle-tested, or publicly released.",
+      "v1.1.54/code 42 is a local development candidate only; no deliverable APK has been built or published.",
+      "It is intended to retain the v1.1.53 Android signing identity, but cannot update v1.1.52 or earlier legacy-signed installs in place. Do not uninstall an existing copy just to test it.",
+      "The public v1.1.53 APK contains extractable authentication assets; these assets will not be repackaged before security remediation.",
       "Do not claim that media auto-pause, silent navigation prompts, or OEM status-bar overlap is fixed.",
       "HUD, instrument cluster, fuel data, and other unverified vehicle features remain NOT_TESTED."
     ]
