@@ -210,6 +210,7 @@ class CarPlayController(
     private val availabilityPollGeneration = AtomicInteger(0)
     private var permissionPollGeneration = 0
     private var reenumerationAttempts = 0
+    @Volatile private var wiredDeviceName: String? = null
     private var lastReportedStatus: CarPlayStatus? = null
     private var mfiResetLogged = false
 
@@ -1773,17 +1774,27 @@ class CarPlayController(
                 when (phase) {
                     Phase.REENUMERATION, Phase.IPHONE -> {
                         val configuration = IphoneCarPlayConfiguration.find(result.device)
+                        val retryStaleMode = WiredConfigurationAction.retryModeOnSameNode(
+                            configurationFound = configuration != null,
+                            carPlayMode = configuration?.let(IphoneCarPlayConfiguration::isCarPlayMode) == true,
+                            previousSessionOnNode = WiredSessionMemory.startedOn(result.device.deviceName),
+                            transitionsTried = reenumerationAttempts,
+                        )
                         connectionDiagnostic(
                             "USB configuration ready=${configuration != null} " +
                                 "configurationId=${configuration?.id ?: "none"} " +
                                 "reenumerationAttempts=$reenumerationAttempts " +
+                                "staleCarPlayMode=$retryStaleMode " +
                                 "action=${when {
+                                    retryStaleMode -> "request-transition"
                                     configuration != null -> "reuse-descriptors"
                                     reenumerationAttempts < MAXIMUM_REENUMERATION_ATTEMPTS -> "request-transition"
                                     else -> "reject-missing-configuration"
                                 }}",
                         )
-                        if (configuration != null) {
+                        if (retryStaleMode) {
+                            beginReenumeration(result.device, fallbackToCurrentConfiguration = true)
+                        } else if (configuration != null) {
                             openDataPaths(result.device)
                         } else if (reenumerationAttempts < MAXIMUM_REENUMERATION_ATTEMPTS) {
                             beginReenumeration(result.device)
@@ -1832,7 +1843,7 @@ class CarPlayController(
         mainHandler.postDelayed(check, PERMISSION_POLL_INTERVAL_MILLIS)
     }
 
-    private fun beginReenumeration(device: UsbDevice) {
+    private fun beginReenumeration(device: UsbDevice, fallbackToCurrentConfiguration: Boolean = false) {
         phase = Phase.REENUMERATION
         reenumerationAttempts += 1
         connectionDiagnostic("USB transition requested count=$reenumerationAttempts")
@@ -1841,7 +1852,10 @@ class CarPlayController(
             when (transition) {
                 IphoneUsbHost.TransitionResult.ReenumerationRequested ->
                     onStatus(CarPlayStatus.WaitingForReenumeration)
-                is IphoneUsbHost.TransitionResult.Failed -> fail(transition.error)
+                is IphoneUsbHost.TransitionResult.Failed -> if (fallbackToCurrentConfiguration) {
+                    connectionDiagnostic("USB mode request refused; falling back to the existing configuration")
+                    openDataPaths(device)
+                } else fail(transition.error)
             }
         }
     }
@@ -1874,6 +1888,7 @@ class CarPlayController(
 
     private fun openDataPaths(device: UsbDevice) {
         phase = Phase.DATAPATHS
+        wiredDeviceName = device.deviceName
         debugLog("wired opening iPhone USB data paths")
         onStatus(CarPlayStatus.SelectingConfiguration)
         onStatus(CarPlayStatus.OpeningDataPaths)
@@ -2064,7 +2079,10 @@ class CarPlayController(
                 locationProvider = locationProvider,
                 vehicleStatusProvider = vehicleStatusProvider,
                 onIncoming = ::onRouteFrame,
-                onProgress = { message -> debugLog("wired $message") },
+                onProgress = { message ->
+                    if (message.startsWith("iap2 tx=0x4301")) wiredDeviceName?.let(WiredSessionMemory::started)
+                    debugLog("wired $message")
+                },
             )
             onStatus(
                 when (result.terminal) {
@@ -2276,11 +2294,14 @@ class CarPlayController(
                 "Timed out after ${RFCOMM_CONNECT_TIMEOUT_MILLIS}ms connecting RFCOMM to $address",
             )
         }
-        when (val failure = result.get()) {
-            null -> Unit
-            is IOException -> throw failure
-            else -> throw IOException("Could not connect RFCOMM to $address", failure)
+        val failure = result.get() ?: return
+        val category = com.shilapi.xcertplay.transport.BluetoothSocketFailure.category(failure)
+        connectionDiagnostic("Bluetooth RFCOMM failureCategory=$category failureClass=${failure.javaClass.simpleName}")
+        if (com.shilapi.xcertplay.transport.BluetoothSocketFailure.missingSocketManager(failure)) {
+            throw IOException("Android Bluetooth service cannot open RFCOMM sockets for apps", failure)
         }
+        if (failure is IOException) throw failure
+        throw IOException("Could not connect RFCOMM", failure)
     }
 
     /** Reads cached service metadata only; it does not start/cancel discovery or require SCAN. */
