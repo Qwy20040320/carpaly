@@ -17,6 +17,9 @@ on:
       - scripts/test_release_docs_sync.py
       - scripts/release_signing_preflight.py
       - scripts/test_release_signing_preflight.py
+      - scripts/check_release_signer_pin.py
+      - scripts/test_release_signer_pin.py
+      - scripts/test_release_pipeline.py
       - scripts/build_site.py
       - scripts/ota_manifest.py
       - scripts/build_ota_manifests.py
@@ -36,7 +39,7 @@ on:
       - config/ota-policy.json
       - common/src/main/res/raw/ota_manifest_public_keys.json
       - .github/workflows/*.yml
-      - .github/scripts/publish-authenticated-apk-release.sh
+      - .github/scripts/prepare-release-draft.sh
   push:
     branches: [main, 'feature/**']
     paths:
@@ -55,6 +58,9 @@ on:
       - scripts/test_release_docs_sync.py
       - scripts/release_signing_preflight.py
       - scripts/test_release_signing_preflight.py
+      - scripts/check_release_signer_pin.py
+      - scripts/test_release_signer_pin.py
+      - scripts/test_release_pipeline.py
       - scripts/build_site.py
       - scripts/ota_manifest.py
       - scripts/build_ota_manifests.py
@@ -74,7 +80,7 @@ on:
       - config/ota-policy.json
       - common/src/main/res/raw/ota_manifest_public_keys.json
       - .github/workflows/*.yml
-      - .github/scripts/publish-authenticated-apk-release.sh
+      - .github/scripts/prepare-release-draft.sh
   workflow_dispatch:
 permissions:
   contents: read
@@ -114,6 +120,7 @@ jobs:
           python3 -m unittest
           scripts.test_release_docs_sync
           scripts.test_release_signing_preflight
+          scripts.test_release_signer_pin
           scripts.test_release_pipeline
           scripts.test_ota_manifest
           scripts.test_build_site
@@ -127,6 +134,7 @@ jobs:
           scripts/sync_release_docs.py
           scripts/validate_release_metadata.py
           scripts/release_signing_preflight.py
+          scripts/check_release_signer_pin.py
           scripts/build_site.py
           scripts/ota_manifest.py
           scripts/build_ota_manifests.py

@@ -37,10 +37,10 @@ jobs:
         env:
           PYTHONPYCACHEPREFIX: ${{ runner.temp }}/carpaly-python-cache
         run: |
-          bash -n .github/scripts/publish-authenticated-apk-release.sh
+          bash -n .github/scripts/prepare-release-draft.sh
           python3 -m py_compile scripts/package_source_archive.py
           python3 -m py_compile scripts/ci_rebuild.py scripts/verify_ci_rebuild_apk.py scripts/test_ci_rebuild.py scripts/test_verify_ci_rebuild_apk.py
-          python3 -m py_compile scripts/release_intent.py scripts/release_review_gate.py scripts/dispatch_release_followups.py scripts/check_release_automation.py scripts/preserve_ota_feeds.py scripts/ota_publisher_policy.py scripts/validate_ota_release_target.py scripts/ota_key_material.py scripts/ota_key_preflight.py scripts/verify_ota_environment.py
+          python3 -m py_compile scripts/release_intent.py scripts/release_review_gate.py scripts/check_release_signer_pin.py scripts/test_release_signer_pin.py scripts/dispatch_release_followups.py scripts/check_release_automation.py scripts/preserve_ota_feeds.py scripts/ota_publisher_policy.py scripts/validate_ota_release_target.py scripts/ota_key_material.py scripts/ota_key_preflight.py scripts/verify_ota_environment.py
           python3 -m pip install --disable-pip-version-check -r requirements-ota.txt
           python3 scripts/check_workflow_action_pins.py
           python3 scripts/ci_rebuild.py --manifest config/ci-rebuild-sources.json check-manifest --verify-sources --repo .
@@ -52,6 +52,7 @@ jobs:
             scripts.test_android_versioning \
             scripts.test_release_docs_sync \
             scripts.test_release_signing_preflight \
+            scripts.test_release_signer_pin \
             scripts.test_release_intent \
             scripts.test_release_review_gate \
             scripts.test_release_followups \
@@ -176,13 +177,42 @@ jobs:
               exit 1
             fi
           done
-  release_authorization:
-    name: Verify human merge and active main protection for an enabled release intent
+  release_signer_pin:
+    name: Check configured signer pin before any protected credential job
     needs: [check, release_intent]
     if: >-
       always() &&
       needs.check.result == 'success' &&
       needs.release_intent.result == 'success' &&
+      needs.release_intent.outputs.should_publish == 'true' &&
+      github.repository == 'Qwy20040320/carpaly' &&
+      github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: mfi-public-release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify public Environment pin against reviewed policy without Secrets
+        env:
+          RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}
+        run: >-
+          python3 scripts/check_release_signer_pin.py
+          --policy config/android-version-ledger.json
+          --actual "$RELEASE_SIGNING_CERT_SHA256"
+
+  release_authorization:
+    name: Verify human merge and active main protection for an enabled release intent
+    needs: [check, release_intent, release_signer_pin]
+    if: >-
+      always() &&
+      needs.check.result == 'success' &&
+      needs.release_intent.result == 'success' &&
+      needs.release_signer_pin.result == 'success' &&
       needs.release_intent.outputs.should_publish == 'true' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/main'
@@ -285,24 +315,27 @@ jobs:
         run: rm -rf -- "$RUNNER_TEMP/carpaly-signer-preflight"
 
   authenticated_release:
-    name: Build and publish an explicitly authorized authenticated Release APK
-    needs: [check, release_intent, release_authorization]
+    name: Build and verify an explicitly authorized Release candidate (no binary publication)
+    needs: [check, release_intent, release_authorization, release_signer_pin]
     if: >-
       always() &&
       needs.check.result == 'success' &&
       needs.release_intent.result == 'success' &&
+      needs.release_signer_pin.result == 'success' &&
       github.repository == 'Qwy20040320/carpaly' &&
       github.event_name == 'push' && github.ref == 'refs/heads/main' &&
       needs.release_intent.outputs.should_publish == 'true' &&
       needs.release_authorization.result == 'success'
+    outputs:
+      signer_sha256: ${{ steps.apk.outputs.signer_sha256 }}
     runs-on: ubuntu-latest
-    # Only an enabled, CI-verified release intent on the current protected main can publish.
+    # Only an enabled, CI-verified release intent on the current protected main can access signing material.
     environment: mfi-public-release
     concurrency:
       group: carpaly-authenticated-release
       cancel-in-progress: false
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout v7
         with:
@@ -310,6 +343,13 @@ jobs:
           persist-credentials: false
       - name: Enforce Release version high-water mark before credentials are used
         run: python3 scripts/android_versioning.py check
+      - name: Check Environment signer pin before mapping any Secret
+        env:
+          RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}
+        run: >-
+          python3 scripts/check_release_signer_pin.py
+          --policy config/android-version-ledger.json
+          --actual "$RELEASE_SIGNING_CERT_SHA256"
       # The publisher creates a tag only after CI and exact protected-main authorization pass.
       - name: Confirm release tag is contained in main
         env:
@@ -341,7 +381,17 @@ jobs:
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # gradle/actions setup-gradle v6
         with:
           cache-disabled: true
-      - name: Provision protected MFi inputs
+      - name: Provision and verify formal Release signer
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}
+        run: >-
+          python3 scripts/release_signing_preflight.py
+          --keystore-path "$RUNNER_TEMP/carpaly-signing/carpaly-release.p12"
+      - name: Provision protected MFi inputs after signer verification
         env:
           MFI_IDENTITY_PK8_BASE64: ${{ secrets.MFI_IDENTITY_PK8_BASE64 }}
           MFI_CERTIFICATE_P7B_BASE64: ${{ secrets.MFI_CERTIFICATE_P7B_BASE64 }}
@@ -358,16 +408,6 @@ jobs:
           chmod 600 "$auth_dir/offline-mfi/identity.pk8" "$auth_dir/offline-mfi/certificate.p7b"
           test -s "$auth_dir/offline-mfi/identity.pk8"
           test -s "$auth_dir/offline-mfi/certificate.p7b"
-      - name: Provision and verify formal Release signer
-        env:
-          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
-          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-          RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}
-        run: >-
-          python3 scripts/release_signing_preflight.py
-          --keystore-path "$RUNNER_TEMP/carpaly-signing/carpaly-release.p12"
       - name: Build authenticated Release APK
         env:
           DIPLAY_AUTH_ASSETS_DIR: ${{ runner.temp }}/carpaly-auth-assets
@@ -436,87 +476,67 @@ jobs:
             echo "sha256=$actual_sha"
             echo "size=$size"
             echo "version_code=$version_code"
+          echo "signer_sha256=$signer_sha"
           } >> "$GITHUB_OUTPUT"
-      - name: Package commit-pinned source and release checksums
-        id: package
-        env:
-          RELEASE_TAG: ${{ needs.release_intent.outputs.release_tag }}
-          RELEASE_SOURCE_REF: ${{ github.sha }}
-          APK_PATH: ${{ steps.apk.outputs.apk_path }}
-          APK_NAME: ${{ steps.apk.outputs.apk_name }}
-          APK_SHA256: ${{ steps.apk.outputs.sha256 }}
-          RUNNER_TEMP: ${{ runner.temp }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          release_dir="$RUNNER_TEMP/carpaly-release"
-          source_name="${APK_NAME%.apk}-source.zip"
-          source_path="$release_dir/$source_name"
-          python3 scripts/package_source_archive.py --ref "$RELEASE_SOURCE_REF" --output "$source_path"
-          source_sha="$(sha256sum "$source_path" | awk '{ print $1 }')"
-          source_size="$(stat -c '%s' "$source_path")"
-          sums_path="$release_dir/SHA256SUMS.txt"
-          (
-            cd "$release_dir"
-            sha256sum "$APK_NAME" "$source_name" > SHA256SUMS.txt
-            sha256sum --check SHA256SUMS.txt
-          )
-          sums_sha="$(sha256sum "$sums_path" | awk '{ print $1 }')"
-          sums_size="$(stat -c '%s' "$sums_path")"
-          printf 'Source ZIP: %s (%s bytes, SHA-256 %s)\n' "$source_name" "$source_size" "$source_sha"
-          printf 'SHA256SUMS.txt: %s bytes, SHA-256 %s\n' "$sums_size" "$sums_sha"
-          {
-            echo "source_path=$source_path"
-            echo "source_name=$source_name"
-            echo "source_sha256=$source_sha"
-            echo "source_size=$source_size"
-            echo "sums_path=$sums_path"
-            echo "sums_sha256=$sums_sha"
-            echo "sums_size=$sums_size"
-          } >> "$GITHUB_OUTPUT"
-      - name: Publish and verify authenticated Release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ needs.release_intent.outputs.release_tag }}
-          RELEASE_COMMIT: ${{ github.sha }}
-          AUTO_CREATE_TAG: ${{ needs.release_intent.outputs.should_publish }}
-          RELEASE_PRERELEASE: ${{ needs.release_intent.outputs.prerelease }}
-          RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}
-          APK_PATH: ${{ steps.apk.outputs.apk_path }}
-          APK_NAME: ${{ steps.apk.outputs.apk_name }}
-          APK_SHA256: ${{ steps.apk.outputs.sha256 }}
-          APK_SIZE: ${{ steps.apk.outputs.size }}
-          APK_VERSION_CODE: ${{ steps.apk.outputs.version_code }}
-          SOURCE_ZIP_PATH: ${{ steps.package.outputs.source_path }}
-          SOURCE_ZIP_NAME: ${{ steps.package.outputs.source_name }}
-          SOURCE_ZIP_SHA256: ${{ steps.package.outputs.source_sha256 }}
-          SOURCE_ZIP_SIZE: ${{ steps.package.outputs.source_size }}
-          SHA256SUMS_PATH: ${{ steps.package.outputs.sums_path }}
-          SHA256SUMS_SHA256: ${{ steps.package.outputs.sums_sha256 }}
-          SHA256SUMS_SIZE: ${{ steps.package.outputs.sums_size }}
-        run: bash .github/scripts/publish-authenticated-apk-release.sh
       - name: Remove local release credentials from runner
         if: always()
         shell: bash
         run: |
           set -euo pipefail
           rm -rf -- "$RUNNER_TEMP/carpaly-auth-assets" "$RUNNER_TEMP/carpaly-release" \
-            "$RUNNER_TEMP/carpaly-release-remote" "$RUNNER_TEMP/carpaly-release-published" \
             "$RUNNER_TEMP/carpaly-signing" "$RUNNER_TEMP/carpaly-python-cache"
 
+  prepare_release_draft:
+    name: Prepare metadata-only Release draft for manual review
+    needs: [check, release_intent, release_authorization, authenticated_release]
+    if: >-
+      always() &&
+      needs.check.result == 'success' &&
+      needs.release_intent.result == 'success' &&
+      needs.release_authorization.result == 'success' &&
+      needs.authenticated_release.result == 'success' &&
+      needs.release_intent.outputs.should_publish == 'true' &&
+      github.repository == 'Qwy20040320/carpaly' &&
+      github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: carpaly-release-draft-${{ needs.release_intent.outputs.release_tag }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Create or reuse a metadata-only draft; never publish or upload binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.release_intent.outputs.release_tag }}
+          RELEASE_COMMIT: ${{ github.sha }}
+          RELEASE_VERSION_CODE: ${{ needs.release_intent.outputs.version_code }}
+          RELEASE_SIGNING_CERT_SHA256: ${{ needs.authenticated_release.outputs.signer_sha256 }}
+          RELEASE_PRERELEASE: ${{ needs.release_intent.outputs.prerelease }}
+          AUTO_CREATE_TAG: ${{ needs.release_intent.outputs.should_publish }}
+        shell: bash
+        run: bash .github/scripts/prepare-release-draft.sh
+
   publication_follow_up:
-    name: Dispatch public site and release-document synchronization
-    needs: authenticated_release
-    if: needs.authenticated_release.result == 'success'
+    name: Reconcile public pages and docs from published Releases only
+    needs: [authenticated_release, prepare_release_draft]
+    if: >-
+      needs.authenticated_release.result == 'success' &&
+      needs.prepare_release_draft.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
       actions: write
       contents: read
     steps:
-      - name: Dispatch and verify Pages and release-document workflows
+      - name: Dispatch and verify public metadata workflows
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

@@ -482,7 +482,7 @@ class WorkflowContractTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/android.yml").read_text(encoding="utf-8")
         self.assertNotIn("publish_authenticated_release", workflow)
         self.assertIn("default: false", workflow)
-        self.assertIn("needs: [check, release_intent, release_authorization]", workflow)
+        self.assertIn("needs: [check, release_intent, release_authorization, release_signer_pin]", workflow)
         self.assertIn("needs.check.result == 'success'", workflow)
         self.assertIn("needs.release_intent.outputs.should_publish == 'true'", workflow)
         self.assertIn("needs.release_authorization.result == 'success'", workflow)
@@ -497,8 +497,8 @@ class WorkflowContractTests(unittest.TestCase):
 
     def test_full_ci_runs_for_prs_while_release_intent_remains_main_only(self):
         workflow = (ROOT / ".github/workflows/android.yml").read_text(encoding="utf-8")
-        gate = workflow.split("  release_intent:", 1)[1].split("  release_authorization:", 1)[0]
-        release_job = workflow.split("  authenticated_release:", 1)[1].split("  publication_follow_up:", 1)[0]
+        check = workflow.split("  check:", 1)[1].split("  release_intent:", 1)[0]
+        gate = workflow.split("  release_intent:", 1)[1].split("  release_signer_pin:", 1)[0]
         release_job = workflow.split("  authenticated_release:", 1)[1].split("  publication_follow_up:", 1)[0]
         intent_source = (ROOT / "scripts/release_intent.py").read_text(encoding="utf-8")
         self.assertIn("name: Run full CI and gate an explicit release intent", gate)
