@@ -221,7 +221,17 @@ jobs:
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # gradle/actions setup-gradle v6
         with:
           cache-disabled: true
-      - name: Provision protected runtime authentication inputs
+      - name: Preflight protected Release signer
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}
+        run: >-
+          python3 scripts/release_signing_preflight.py
+          --keystore-path "$RUNNER_TEMP/carpaly-signing/carpaly-release.p12"
+      - name: Provision protected runtime authentication inputs after signer verification
         env:
           MFI_IDENTITY_PK8_BASE64: ${{ secrets.MFI_IDENTITY_PK8_BASE64 }}
           MFI_CERTIFICATE_P7B_BASE64: ${{ secrets.MFI_CERTIFICATE_P7B_BASE64 }}
@@ -238,16 +248,6 @@ jobs:
           chmod 600 "$auth_dir/identity.pk8" "$auth_dir/certificate.p7b"
           test -s "$auth_dir/identity.pk8"
           test -s "$auth_dir/certificate.p7b"
-      - name: Preflight protected Release signer
-        env:
-          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
-          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-          RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}
-        run: >-
-          python3 scripts/release_signing_preflight.py
-          --keystore-path "$RUNNER_TEMP/carpaly-signing/carpaly-release.p12"
       - name: Run tests, lint, and Release build on the pinned source
         working-directory: source
         env:
@@ -307,3 +307,37 @@ jobs:
           rm -rf -- "$GITHUB_WORKSPACE/source/mobile/build" "$GITHUB_WORKSPACE/source/home/build"
           rm -rf -- "$GITHUB_WORKSPACE/source/shared/build" "$GITHUB_WORKSPACE/source/common/build"
           rm -rf -- "$GITHUB_WORKSPACE/source/maphost/build" "$GITHUB_WORKSPACE/build-report"
+
+  prepare_historical_draft:
+    name: Prepare or reuse a metadata-only historical Release draft
+    needs: [resolve_source, signed_candidate]
+    if: >-
+      needs.resolve_source.result == 'success' &&
+      needs.signed_candidate.result == 'success' &&
+      ((github.event_name == 'workflow_dispatch' && inputs.build_type == 'release' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'push' && github.ref_type == 'tag'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: carpaly-release-draft-${{ needs.resolve_source.outputs.version_name }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout v7
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Prepare metadata only after exact source and signer verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: v${{ needs.resolve_source.outputs.version_name }}
+          RELEASE_COMMIT: ${{ needs.resolve_source.outputs.source_commit }}
+          RELEASE_VERSION_CODE: ${{ needs.resolve_source.outputs.version_code }}
+          RELEASE_SIGNING_CERT_SHA256: ${{ needs.resolve_source.outputs.expected_signer_sha256 }}
+          RELEASE_PRERELEASE: 'true'
+          AUTO_CREATE_TAG: 'false'
+        shell: bash
+        run: bash .github/scripts/prepare-release-draft.sh

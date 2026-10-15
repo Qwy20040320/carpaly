@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = (
     ROOT / ".github/workflows/android.yml",
     ROOT / ".github/workflows/carpaly-android-build.yml",
+    ROOT / ".github/workflows/build-android-tv.yml",
 )
 TRUSTED_ACTIONS = {
     "actions/checkout",

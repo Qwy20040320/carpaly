@@ -22,7 +22,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
 ARCHIVER_PATH = ROOT / "scripts/package_source_archive.py"
-PUBLISHER_PATH = ROOT / ".github/scripts/publish-authenticated-apk-release.sh"
+PUBLISHER_PATH = ROOT / ".github/scripts/prepare-release-draft.sh"
 FAKE_GH = r'''#!/usr/bin/env python3
 import hashlib
 import json
@@ -71,6 +71,8 @@ if args[0] == "api":
             fail("simulated release list access failure")
         print(json.dumps(state.get("releases", [])))
     elif "/releases/" in endpoint and endpoint.endswith("/assets?per_page=100"):
+        if state.get("fail_asset_list"):
+            fail("simulated release assets access failure")
         print(json.dumps(state.get("assets", [])))
     elif "/releases/tags/" in endpoint:
         if state.get("release") is None:
@@ -207,8 +209,10 @@ class SourceArchiveTests(unittest.TestCase):
     def test_release_authentication_and_signer_secrets_are_isolated_by_step(self):
         workflow = (ROOT / ".github/workflows/android.yml").read_text(encoding="utf-8")
         release_job = workflow.split("  authenticated_release:", 1)[1]
-        auth_step = release_job.split("- name: Provision and verify formal Release signer", 1)[0]
         signer_step = release_job.split("- name: Provision and verify formal Release signer", 1)[1].split(
+            "- name: Provision protected MFi inputs after signer verification", 1
+        )[0]
+        auth_step = release_job.split("- name: Provision protected MFi inputs after signer verification", 1)[1].split(
             "- name: Build authenticated Release APK", 1
         )[0]
         self.assertIn("MFI_IDENTITY_PK8_BASE64", auth_step)
@@ -289,81 +293,49 @@ class SourceArchiveTests(unittest.TestCase):
                 self.assertIsNone(archive.testzip())
 
 
-@unittest.skipUnless(shutil.which("bash"), "publisher integration tests run on Linux CI with Bash")
+@unittest.skipUnless(shutil.which("bash"), "Release draft integration tests run on Linux CI with Bash")
 class PublisherTests(unittest.TestCase):
     tag = "v1.1.51"
-    version = "1.1.51"
-    apk_name = f"CarPaly-XingyueL-v{version}.apk"
-    source_name = f"CarPaly-XingyueL-v{version}-source.zip"
-    sums_name = "SHA256SUMS.txt"
+    commit = "a" * 40
+    signer = "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90"
 
-    def prepare(self, *, initial_release=None, initial_assets=None, corrupt_download=False, fail_upload_name=None):
+    def prepare(self, *, initial_release=None, initial_assets=None, tag_missing=False, tag_commit=None):
         folder = tempfile.TemporaryDirectory()
         root = Path(folder.name)
-        artifacts = root / "artifacts"
-        artifacts.mkdir()
-        apk = artifacts / self.apk_name
-        apk.write_bytes(b"source-only release APK fixture\x00\x01")
-        source = artifacts / self.source_name
-        with ZipFile(source, "w", ZIP_DEFLATED) as archive:
-            archive.writestr("CarPaly/README.md", "test fixture")
-            archive.writestr("CarPaly/LICENSE", "GPL-3.0")
-        apk_sha = sha256(apk.read_bytes())
-        source_sha = sha256(source.read_bytes())
-        sums = artifacts / self.sums_name
-        sums.write_text(f"{apk_sha}  {self.apk_name}\n{source_sha}  {self.source_name}\n", encoding="ascii")
         state_path = root / "state.json"
-        state = {
+        state_path.write_text(json.dumps({
             "release": initial_release,
             "releases": [initial_release] if initial_release else [],
             "assets": initial_assets or [],
             "uploads": 0,
             "patches": 0,
             "creates": 0,
-            "downloads": 0,
-            "corrupt_download": corrupt_download,
-            "fail_upload_name": fail_upload_name,
-            "tag_missing": False,
+            "tag_missing": tag_missing,
             "tag_created": False,
-            "tag_commit": "a" * 40,
-        }
-        state_path.write_text(json.dumps(state), encoding="utf-8")
-        remote = root / "remote"
+            "tag_commit": tag_commit or self.commit,
+            "fail_release_list": False,
+            "fail_asset_list": False,
+        }), encoding="utf-8")
         fake_bin = root / "bin"
         fake_bin.mkdir()
-        gh = fake_bin / "gh"
-        gh.write_text(FAKE_GH, encoding="utf-8", newline="\n")
-        gh.chmod(0o755)
-        fake_git = fake_bin / "git"
-        fake_git.write_text(FAKE_GIT, encoding="utf-8", newline="\n")
-        fake_git.chmod(0o755)
+        for name, payload in (("gh", FAKE_GH), ("git", FAKE_GIT)):
+            executable = fake_bin / name
+            executable.write_text(payload, encoding="utf-8", newline="\n")
+            executable.chmod(0o755)
         env = os.environ.copy()
         env.update({
             "PATH": str(fake_bin) + os.pathsep + env.get("PATH", ""),
             "FAKE_GH_STATE": str(state_path),
-            "FAKE_GH_REMOTE": str(remote),
-            "GH_TOKEN": "test-token-not-a-credential",
+            "GH_TOKEN": "unit-test-token-not-a-credential",
             "GH_REPO": "Qwy20040320/carpaly",
             "RELEASE_TAG": self.tag,
-            "APK_PATH": str(apk),
-            "APK_NAME": self.apk_name,
-            "APK_SHA256": apk_sha,
-            "APK_SIZE": str(apk.stat().st_size),
-            "APK_VERSION_CODE": "39",
-            "RELEASE_COMMIT": "a" * 40,
-            "AUTO_CREATE_TAG": "false",
+            "RELEASE_COMMIT": self.commit,
+            "RELEASE_VERSION_CODE": "39",
+            "RELEASE_SIGNING_CERT_SHA256": self.signer,
             "RELEASE_PRERELEASE": "true",
-            "RELEASE_SIGNING_CERT_SHA256": "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90",
-            "SOURCE_ZIP_PATH": str(source),
-            "SOURCE_ZIP_NAME": self.source_name,
-            "SOURCE_ZIP_SHA256": source_sha,
-            "SOURCE_ZIP_SIZE": str(source.stat().st_size),
-            "SHA256SUMS_PATH": str(sums),
-            "SHA256SUMS_SHA256": sha256(sums.read_bytes()),
-            "SHA256SUMS_SIZE": str(sums.stat().st_size),
-            "RUNNER_TEMP": str(root / "runner"),
+            "AUTO_CREATE_TAG": "true",
         })
-        return folder, env, state_path, apk, source, sums
+        return folder, env, state_path
 
     def run_publisher(self, env):
         return subprocess.run(
@@ -374,180 +346,200 @@ class PublisherTests(unittest.TestCase):
             text=True,
         )
 
-    def read_state(self, path):
+    @staticmethod
+    def read_state(path):
         return json.loads(path.read_text(encoding="utf-8"))
 
-    def test_success_publishes_only_three_matching_assets_after_remote_verification(self):
-        folder, env, state_path, _, _, _ = self.prepare()
+    def test_new_release_is_created_as_metadata_only_draft(self):
+        folder, env, state_path = self.prepare(tag_missing=True)
         with folder:
             result = self.run_publisher(env)
             self.assertEqual(result.returncode, 0, result.stderr)
             state = self.read_state(state_path)
-            self.assertFalse(state["release"]["draft"])
+            self.assertTrue(state["release"]["draft"])
             self.assertTrue(state["release"]["prerelease"])
-            self.assertEqual(state["patches"], 1)
-            self.assertEqual(state["patch_fields"], [["draft=false", "prerelease=true"]])
-            self.assertIn("<!-- CARPALY:RELEASE_NOTES:START -->", state["release"]["body"])
-            self.assertIn("Tag source commit: " + "a" * 40, state["release"]["body"])
-            self.assertEqual(state["downloads"], 2)
-            self.assertEqual({asset["name"] for asset in state["assets"]}, {self.apk_name, self.source_name, self.sums_name})
-            self.assertEqual(len(state["assets"]), 3)
+            self.assertEqual(state["uploads"], 0)
+            self.assertEqual(state["patches"], 0)
+            self.assertEqual(state["creates"], 1)
+            self.assertEqual(state["assets"], [])
+            self.assertIn("No APK", state["release"]["body"])
+            self.assertIn("extractable authentication identity", state["release"]["body"])
+            self.assertIn("RELEASE_DRAFT_STATUS=CREATED", result.stdout)
 
-    def test_checksum_mismatch_fails_before_any_github_api_call(self):
-        folder, env, state_path, _, _, _ = self.prepare()
+    def test_repeated_run_reuses_existing_draft_without_mutation(self):
+        folder, env, state_path = self.prepare(tag_missing=True)
         with folder:
-            env["APK_SHA256"] = "0" * 64
+            first = self.run_publisher(env)
+            self.assertEqual(first.returncode, 0, first.stderr)
+            before = self.read_state(state_path)
+            second = self.run_publisher(env)
+            self.assertEqual(second.returncode, 0, second.stderr)
+            after = self.read_state(state_path)
+            self.assertEqual(after["creates"], 1)
+            self.assertEqual(after["uploads"], 0)
+            self.assertEqual(after["patches"], 0)
+            self.assertTrue(after["release"]["draft"])
+            self.assertEqual(after["release"]["body"], before["release"]["body"])
+            self.assertIn("RELEASE_DRAFT_STATUS=REUSED", second.stdout)
+
+    def test_published_release_is_left_completely_unchanged(self):
+        release = {"id": 77, "tag_name": self.tag, "draft": False, "prerelease": False,
+                   "name": "Hand-authored published title", "body": "Published notes"}
+        asset = {"name": "old-authenticated.apk", "size": 100, "digest": "sha256:" + "0" * 64, "state": "uploaded"}
+        folder, env, state_path = self.prepare(initial_release=release, initial_assets=[asset])
+        with folder:
             result = self.run_publisher(env)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("SHA256SUMS.txt does not list", result.stderr)
-            self.assertEqual(self.read_state(state_path).get("api_calls", []), [])
-
-    def test_release_list_api_failure_does_not_attempt_release_creation(self):
-        folder, env, state_path, *_ = self.prepare()
-        with folder:
+            self.assertEqual(result.returncode, 0, result.stderr)
             state = self.read_state(state_path)
-            state["fail_release_list"] = True
-            state_path.write_text(json.dumps(state), encoding="utf-8")
+            self.assertEqual(state["creates"], 0)
+            self.assertEqual(state["uploads"], 0)
+            self.assertEqual(state["patches"], 0)
+            self.assertEqual(state["release"], release)
+            self.assertEqual(state["assets"], [asset])
+            self.assertIn("PUBLISHED_IMMUTABLE", result.stdout)
+
+    def test_draft_with_any_existing_attachment_fails_without_removing_it(self):
+        release = {"id": 77, "tag_name": self.tag, "draft": True, "prerelease": True,
+                   "name": "Existing draft", "body": "<!-- carpaly-release-draft-v1: metadata-only; reviewed-assets-required -->\nKeep me"}
+        asset = {"name": "candidate.apk", "size": 100, "digest": "sha256:" + "0" * 64, "state": "uploaded"}
+        folder, env, state_path = self.prepare(initial_release=release, initial_assets=[asset])
+        with folder:
             result = self.run_publisher(env)
             self.assertNotEqual(result.returncode, 0)
             state = self.read_state(state_path)
             self.assertEqual(state["creates"], 0)
             self.assertEqual(state["uploads"], 0)
+            self.assertEqual(state["patches"], 0)
+            self.assertEqual(state["assets"], [asset])
+            self.assertEqual(state["release"], release)
 
-    def test_conflicting_existing_asset_is_preserved_without_upload_or_patch(self):
-        wrong_sha = "0" * 64
-        release = {"id": 4242, "tag_name": self.tag, "draft": True, "prerelease": True,
-                   "body": "Android versionCode: 39\n"}
-        asset = {"name": self.apk_name, "size": 32, "digest": "sha256:" + wrong_sha, "state": "uploaded"}
-        folder, env, state_path, _, _, _ = self.prepare(initial_release=release, initial_assets=[asset])
+    def test_unrecognized_draft_is_not_reused_or_mutated(self):
+        release = {"id": 77, "tag_name": self.tag, "draft": True, "prerelease": True,
+                   "name": "Hand-authored draft", "body": "Human notes not reviewed by this helper"}
+        folder, env, state_path = self.prepare(initial_release=release)
         with folder:
             result = self.run_publisher(env)
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("refusing replacement", result.stderr)
+            self.assertIn("not created by the metadata-only preparer", result.stderr)
             state = self.read_state(state_path)
+            self.assertEqual(state["release"], release)
+            self.assertEqual(state["creates"], 0)
+            self.assertEqual(state["patches"], 0)
             self.assertEqual(state["uploads"], 0)
-            self.assertEqual(state["patches"], 0)
 
-    def test_upload_failure_leaves_release_draft(self):
-        folder, env, state_path, _, _, _ = self.prepare(fail_upload_name=self.source_name)
+    def test_existing_draft_with_wrong_channel_is_not_reused_or_mutated(self):
+        release = {"id": 77, "tag_name": self.tag, "draft": True, "prerelease": False,
+                   "name": "Existing stable draft", "body": "Keep me"}
+        folder, env, state_path = self.prepare(initial_release=release)
         with folder:
             result = self.run_publisher(env)
             self.assertNotEqual(result.returncode, 0)
+            self.assertIn("channel does not match", result.stderr)
             state = self.read_state(state_path)
-            self.assertTrue(state["release"]["draft"])
+            self.assertEqual(state["release"], release)
+            self.assertEqual(state["creates"], 0)
             self.assertEqual(state["patches"], 0)
-
-    def test_downloaded_asset_mismatch_leaves_release_draft(self):
-        folder, env, state_path, _, _, _ = self.prepare(corrupt_download=True)
-        with folder:
-            result = self.run_publisher(env)
-            self.assertNotEqual(result.returncode, 0)
-            state = self.read_state(state_path)
-            self.assertTrue(state["release"]["draft"])
-            self.assertEqual(state["patches"], 0)
-
-    def test_public_release_missing_asset_is_not_mutated(self):
-        release = {"id": 4242, "tag_name": self.tag, "draft": False, "prerelease": True,
-                   "body": "Android versionCode: 39\n"}
-        folder, env, state_path, apk, _, _ = self.prepare(initial_release=release)
-        state = self.read_state(state_path)
-        state["assets"] = [{"name": self.apk_name, "size": apk.stat().st_size,
-                            "digest": "sha256:" + sha256(apk.read_bytes()), "state": "uploaded"}]
-        state_path.write_text(json.dumps(state), encoding="utf-8")
-        with folder:
-            result = self.run_publisher(env)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("missing an asset", result.stderr)
-            state = self.read_state(state_path)
             self.assertEqual(state["uploads"], 0)
-            self.assertEqual(state["patches"], 0)
 
-    def test_existing_draft_handwritten_notes_and_title_are_preserved(self):
-        original_body = "Android versionCode: 39\\nMaintainer-authored release notes.\\n"
-        release = {"id": 4242, "tag_name": self.tag, "draft": True, "prerelease": True,
-                   "name": "Hand-written title", "body": original_body}
-        folder, env, state_path, _, _, _ = self.prepare(initial_release=release)
+    def test_asset_inventory_api_failure_fails_closed(self):
+        release = {"id": 77, "tag_name": self.tag, "draft": True, "prerelease": True,
+                   "name": "Existing draft", "body": "Keep me"}
+        folder, env, state_path = self.prepare(initial_release=release)
         with folder:
-            result = self.run_publisher(env)
-            self.assertEqual(result.returncode, 0, result.stderr)
             state = self.read_state(state_path)
-            self.assertEqual(state["release"]["name"], "Hand-written title")
-            self.assertEqual(state["release"]["body"], original_body)
-            self.assertEqual(state["patch_fields"], [["draft=false", "prerelease=true"]])
-
-    def test_existing_published_release_is_read_only_when_assets_match(self):
-        original_body = "Android versionCode: 39\\nPublished hand-written notes.\\n"
-        release = {"id": 4242, "tag_name": self.tag, "draft": False, "prerelease": False,
-                   "name": "Formal title", "body": original_body}
-        folder, env, state_path, apk, source, sums = self.prepare(initial_release=release)
-        remote = state_path.parent / "remote"
-        remote.mkdir()
-        assets = []
-        for file in (apk, source, sums):
-            content = file.read_bytes()
-            (remote / file.name).write_bytes(content)
-            assets.append({"name": file.name, "size": len(content), "digest": "sha256:" + sha256(content), "state": "uploaded"})
-        state = self.read_state(state_path)
-        state["assets"] = assets
-        state_path.write_text(json.dumps(state), encoding="utf-8")
-        env["RELEASE_PRERELEASE"] = "false"
-        with folder:
+            state["fail_asset_list"] = True
+            state_path.write_text(json.dumps(state), encoding="utf-8")
             result = self.run_publisher(env)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            state = self.read_state(state_path)
-            self.assertEqual(state["patches"], 0)
-            self.assertEqual(state["release"]["name"], "Formal title")
-            self.assertEqual(state["release"]["body"], original_body)
-            self.assertFalse(state["release"]["prerelease"])
+            self.assertNotEqual(result.returncode, 0)
+            after = self.read_state(state_path)
+            self.assertEqual(after["release"], release)
+            self.assertEqual(after["creates"], 0)
+            self.assertEqual(after["patches"], 0)
+            self.assertEqual(after["uploads"], 0)
 
-    def test_auto_release_creates_tag_only_with_verified_draft_assets_ready(self):
-        folder, env, state_path, *_ = self.prepare()
-        state = self.read_state(state_path)
-        state["tag_missing"] = True
-        state_path.write_text(json.dumps(state), encoding="utf-8")
-        env["AUTO_CREATE_TAG"] = "true"
-        with folder:
-            result = self.run_publisher(env)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            state = self.read_state(state_path)
-            self.assertTrue(state["tag_created"])
-            self.assertEqual(state["tag_commit"], "a" * 40)
-            self.assertFalse(state["release"]["draft"])
-            self.assertTrue(state["release"]["prerelease"])
-
-    def test_manual_release_refuses_to_create_a_missing_tag(self):
-        folder, env, state_path, *_ = self.prepare()
-        state = self.read_state(state_path)
-        state["tag_missing"] = True
-        state_path.write_text(json.dumps(state), encoding="utf-8")
+    def test_source_commit_mismatch_fails_before_release_mutation(self):
+        folder, env, state_path = self.prepare(tag_commit="b" * 40)
         with folder:
             result = self.run_publisher(env)
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("manual tag-based publication requires", result.stderr)
+            self.assertIn("does not point to the verified source commit", result.stderr)
             self.assertEqual(self.read_state(state_path)["creates"], 0)
 
-    def test_auto_release_can_create_a_stable_release_with_stable_notes(self):
-        folder, env, state_path, *_ = self.prepare()
-        env["RELEASE_PRERELEASE"] = "false"
-        with folder:
-            result = self.run_publisher(env)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            state = self.read_state(state_path)
-            self.assertFalse(state["release"]["prerelease"])
-            self.assertIn("GitHub channel: stable", state["release"]["body"])
-            self.assertNotIn("Public Preview", state["release"]["name"])
-
-    def test_existing_tag_for_another_commit_blocks_before_release_api_mutation(self):
-        folder, env, state_path, *_ = self.prepare()
-        state = self.read_state(state_path)
-        state["tag_commit"] = "b" * 40
-        state_path.write_text(json.dumps(state), encoding="utf-8")
+    def test_missing_tag_without_explicit_intent_is_not_created(self):
+        folder, env, state_path = self.prepare(tag_missing=True)
+        env["AUTO_CREATE_TAG"] = "false"
         with folder:
             result = self.run_publisher(env)
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("different source commit", result.stderr)
+            self.assertIn("not authorized to create it", result.stderr)
             self.assertEqual(self.read_state(state_path)["creates"], 0)
 
+    def test_invalid_signer_or_tag_fails_before_github_api(self):
+        for variable, value in (("RELEASE_SIGNING_CERT_SHA256", "0" * 63), ("RELEASE_TAG", "v1.1.51/evil")):
+            with self.subTest(variable=variable):
+                folder, env, state_path = self.prepare()
+                env[variable] = value
+                with folder:
+                    result = self.run_publisher(env)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertEqual(self.read_state(state_path).get("api_calls", []), [])
+
+    def test_workflow_and_helper_contain_no_public_binary_upload_or_publish_transition(self):
+        helper = PUBLISHER_PATH.read_text(encoding="utf-8")
+        workflow = (ROOT / ".github/workflows/android.yml").read_text(encoding="utf-8")
+        self.assertNotIn("gh release upload", helper)
+        self.assertNotIn("draft=false", helper)
+        self.assertNotIn("--method PATCH", helper)
+        self.assertIn("api --paginate \"repos/$GH_REPO/releases/$release_id/assets?per_page=100\"", helper)
+        self.assertIn("carpaly-release-draft-v1: metadata-only", helper)
+        release_job = workflow.split("  authenticated_release:", 1)[1].split("  prepare_release_draft:", 1)[0]
+        self.assertNotIn("gh release upload", release_job)
+        self.assertNotIn("actions/upload-artifact", release_job)
+        draft_job = workflow.split("  prepare_release_draft:", 1)[1]
+        self.assertIn("contents: write", draft_job)
+        self.assertNotIn("environment:", draft_job)
+        self.assertNotIn("secrets.", draft_job)
+
+
+class ReleaseWorkflowSafetyTests(unittest.TestCase):
+    def test_main_signer_pin_is_checked_before_any_secret_mapping(self):
+        workflow = (ROOT / ".github/workflows/android.yml").read_text(encoding="utf-8")
+        release_job = workflow.split("  authenticated_release:", 1)[1].split("  prepare_release_draft:", 1)[0]
+        pin = release_job.index("scripts/check_release_signer_pin.py")
+        auth_secret = release_job.index("MFI_IDENTITY_PK8_BASE64:")
+        signing_secret = release_job.index("RELEASE_KEYSTORE_BASE64:")
+        self.assertLess(pin, auth_secret)
+        self.assertLess(pin, signing_secret)
+        signer_preflight = release_job.index("scripts/release_signing_preflight.py")
+        mfi_mapping = release_job.index("MFI_IDENTITY_PK8_BASE64: ${{ secrets.")
+        self.assertLess(signer_preflight, mfi_mapping)
+        self.assertIn("permissions:\n      contents: read", release_job)
+
+    def test_pr_and_push_ci_do_not_reference_production_signing_secrets(self):
+        workflow = (ROOT / ".github/workflows/android.yml").read_text(encoding="utf-8")
+        check_job = workflow.split("  check:", 1)[1].split("  release_intent:", 1)[0]
+        intent_job = workflow.split("  release_intent:", 1)[1].split("  release_authorization:", 1)[0]
+        self.assertNotIn("secrets.", check_job)
+        self.assertNotIn("secrets.", intent_job)
+
+    def test_historical_candidate_only_uploads_sanitized_report_and_pin_precedes_secrets(self):
+        workflow = (ROOT / ".github/workflows/carpaly-android-build.yml").read_text(encoding="utf-8")
+        candidate = workflow.split("  signed_candidate:", 1)[1].split("  prepare_historical_draft:", 1)[0]
+        self.assertLess(candidate.index("Check Environment signer pin before mapping any Secret"),
+                        candidate.index("Provision protected runtime authentication inputs"))
+        self.assertLess(candidate.index("scripts/release_signing_preflight.py"),
+                        candidate.index("Provision protected runtime authentication inputs"))
+        self.assertIn("build-report/rebuild.json", candidate)
+        artifact_step = candidate.split("- name: Upload safe build report only", 1)[1].split(
+            "- name: Remove temporary signing", 1
+        )[0]
+        self.assertNotIn("outputs/apk", artifact_step)
+        self.assertNotIn(".apk", artifact_step)
+
+    def test_debug_user_installable_apk_is_not_uploaded_as_an_artifact(self):
+        workflow = (ROOT / ".github/workflows/build-android-tv.yml").read_text(encoding="utf-8")
+        self.assertNotIn("actions/upload-artifact", workflow)
+        self.assertNotIn("outputs/apk/debug/*.apk", workflow)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
