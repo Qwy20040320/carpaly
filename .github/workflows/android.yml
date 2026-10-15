@@ -39,9 +39,11 @@ jobs:
         run: |
           bash -n .github/scripts/publish-authenticated-apk-release.sh
           python3 -m py_compile scripts/package_source_archive.py
+          python3 -m py_compile scripts/ci_rebuild.py scripts/verify_ci_rebuild_apk.py scripts/test_ci_rebuild.py scripts/test_verify_ci_rebuild_apk.py
           python3 -m py_compile scripts/release_intent.py scripts/release_review_gate.py scripts/dispatch_release_followups.py scripts/check_release_automation.py scripts/preserve_ota_feeds.py scripts/ota_publisher_policy.py scripts/validate_ota_release_target.py scripts/ota_key_material.py scripts/ota_key_preflight.py scripts/verify_ota_environment.py
           python3 -m pip install --disable-pip-version-check -r requirements-ota.txt
           python3 scripts/check_workflow_action_pins.py
+          python3 scripts/ci_rebuild.py --manifest config/ci-rebuild-sources.json check-manifest --verify-sources --repo .
           python3 scripts/check_pages_workflow.py
           python3 scripts/check_release_automation.py
           python3 scripts/validate_release_metadata.py
@@ -59,7 +61,9 @@ jobs:
             scripts.test_preserve_ota_feeds \
             scripts.test_ota_publisher_policy \
             scripts.test_ota_environment \
-            scripts.test_ota_key_preflight
+            scripts.test_ota_key_preflight \
+            scripts.test_ci_rebuild \
+            scripts.test_verify_ci_rebuild_apk
           python3 scripts/android_versioning.py check
           python3 scripts/check_project_docs.py
           python3 scripts/release_intent.py \

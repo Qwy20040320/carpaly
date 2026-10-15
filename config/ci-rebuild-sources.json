@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "packageName": "com.shihab.diplay.hudtest",
+  "versions": [
+    {
+      "versionName": "1.1.54",
+      "versionCode": 42,
+      "sourceStatus": "verified",
+      "sourceCommit": "e3eca1dc5145cd293815d8f176d5c3812169271a",
+      "originalApkFileName": "CarPaly-XingyueL-v1.1.54.apk",
+      "originalApkSha256": "f244fff2765881b7f7a1b66b1ed44202ca3356730e11636b210b5267da514d3c",
+      "signerCertificateSha256": "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e",
+      "distributionStatus": "blocked-auth-private-key-in-apk"
+    },
+    {
+      "versionName": "1.1.55",
+      "versionCode": 43,
+      "sourceStatus": "source-unverified",
+      "sourceCommit": null,
+      "originalApkFileName": "CarPaly-XingyueL-v1.1.55.apk",
+      "originalApkSha256": "3e62340c45b576a5e83638c4b9e152b86ce78b650a48fc65bedff61e37ed23e1",
+      "signerCertificateSha256": "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e",
+      "distributionStatus": "blocked-auth-private-key-in-apk"
+    },
+    {
+      "versionName": "1.1.56",
+      "versionCode": 44,
+      "sourceStatus": "verified",
+      "sourceCommit": "6b206c9e6944255a159424522017dca984423e67",
+      "originalApkFileName": "CarPaly-XingyueL-v1.1.56.apk",
+      "originalApkSha256": "835bb4ac5a7d7d57442fa2b949b8500a349cd0fb7911a6210e4e2a1d0ad8b99e",
+      "signerCertificateSha256": "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e",
+      "distributionStatus": "blocked-auth-private-key-in-apk"
+    }
+  ]
+}

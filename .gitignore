@@ -28,6 +28,7 @@ captures/
 !/README.zh-CN.md
 !/SECURITY.md
 !/docs/BUILD.md
+!/docs/CI_SECRETS_SETUP.md
 !/docs/COMPATIBILITY.md
 !/docs/GEELY_BRANDING_POLICY.md
 !/docs/GEELY_XINGYUE_L.md

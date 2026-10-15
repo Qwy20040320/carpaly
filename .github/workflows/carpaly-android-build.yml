@@ -1,0 +1,309 @@
+name: CarPaly historical Android builds
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: Version from config/ci-rebuild-sources.json
+        required: true
+        type: string
+      build_type:
+        description: Verify without signing, or build a signed private candidate
+        required: true
+        type: choice
+        options: [verify, release]
+        default: verify
+
+permissions:
+  contents: read
+
+concurrency:
+  group: carpaly-history-${{ github.event_name }}-${{ github.ref }}-${{ inputs.version_name || 'main-ci' }}-${{ inputs.build_type || 'verify' }}
+  cancel-in-progress: false
+
+jobs:
+  manifest_check:
+    name: Validate reviewed historical source map
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate source commits and metadata without secrets
+        run: |
+          set -euo pipefail
+          python3 scripts/ci_rebuild.py --manifest config/ci-rebuild-sources.json check-manifest --verify-sources --repo .
+          python3 -m unittest scripts.test_ci_rebuild
+          python3 -m unittest scripts.test_verify_ci_rebuild_apk
+
+  resolve_source:
+    name: Resolve exact historical source
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_type == 'tag')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      version_name: ${{ steps.resolve.outputs.version_name }}
+      version_code: ${{ steps.resolve.outputs.version_code }}
+      source_commit: ${{ steps.resolve.outputs.source_commit }}
+      original_apk_sha256: ${{ steps.resolve.outputs.original_apk_sha256 }}
+      expected_signer_sha256: ${{ steps.resolve.outputs.expected_signer_sha256 }}
+      package_name: ${{ steps.resolve.outputs.package_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Resolve version to an immutable source commit
+        id: resolve
+        shell: bash
+        env:
+          BUILD_TYPE: ${{ inputs.build_type || 'release' }}
+          INPUT_VERSION: ${{ inputs.version_name || github.ref_name }}
+        run: |
+          set -euo pipefail
+          python3 scripts/ci_rebuild.py \
+            --manifest config/ci-rebuild-sources.json resolve \
+            --version "$INPUT_VERSION" \
+            --event-name "$GITHUB_EVENT_NAME" \
+            --ref "$GITHUB_REF" \
+            --current-commit "$GITHUB_SHA" \
+            --tag-name "$GITHUB_REF_NAME" \
+            --tag-sha "$GITHUB_SHA" \
+            --build-type "$BUILD_TYPE" \
+            --output "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout v7
+        with:
+          ref: ${{ steps.resolve.outputs.source_commit }}
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify source checkout against Gradle and its own ledger
+        run: >-
+          python3 scripts/ci_rebuild.py
+          --manifest config/ci-rebuild-sources.json verify-source
+          --version "${{ steps.resolve.outputs.version_name }}"
+          --source-commit "${{ steps.resolve.outputs.source_commit }}"
+          --repo source
+      - name: Require enabled exact-main intent for tag-triggered signing
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin main --no-tags
+          main_sha="$(git rev-parse refs/remotes/origin/main)"
+          python3 scripts/ci_rebuild.py \
+            --manifest config/ci-rebuild-sources.json verify-tag-intent \
+            --version "${{ steps.resolve.outputs.version_name }}" \
+            --tag-name "$GITHUB_REF_NAME" \
+            --tag-sha "$GITHUB_SHA" \
+            --main-sha "$main_sha" \
+            --repo source
+
+  historical_verify:
+    name: Historical source tests and internal Debug checks
+    needs: resolve_source
+    if: github.event_name == 'workflow_dispatch' && inputs.build_type == 'verify'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout v7
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout v7
+        with:
+          ref: ${{ needs.resolve_source.outputs.source_commit }}
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify source checkout before build
+        run: >-
+          python3 scripts/ci_rebuild.py
+          --manifest config/ci-rebuild-sources.json verify-source
+          --version "${{ needs.resolve_source.outputs.version_name }}"
+          --source-commit "${{ needs.resolve_source.outputs.source_commit }}"
+          --repo source
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # actions/setup-java v6
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # android-actions/setup-android v4
+        with:
+          packages: platform-tools platforms;android-37.0 build-tools;36.0.0 ndk;28.2.13676358
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # gradle/actions setup-gradle v6
+        with:
+          cache-disabled: true
+      - name: Run repository CI tasks on the selected historical source
+        working-directory: source
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew clean \
+            :shared:testDebugUnitTest :common:testDebugUnitTest :home:testDebugUnitTest \
+            :mobile:lintDebug :home:lintDebug :maphost:lintDebug \
+            :mobile:assembleDebug :home:assembleDebug :maphost:assembleDebug \
+            --no-daemon --no-configuration-cache --console=plain
+      - name: Upload test reports only
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # actions/upload-artifact v7
+        with:
+          name: CarPaly-${{ needs.resolve_source.outputs.version_name }}-verify-reports-${{ github.run_id }}
+          path: |
+            source/shared/build/test-results/**/*.xml
+            source/common/build/test-results/**/*.xml
+            source/home/build/test-results/**/*.xml
+          if-no-files-found: warn
+          retention-days: 7
+
+  signed_candidate:
+    name: Build and verify a non-publishable signed Release candidate
+    needs: resolve_source
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.build_type == 'release' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'push' && github.ref_type == 'tag')
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    environment: mfi-public-release
+    concurrency:
+      group: carpaly-signed-candidate-${{ needs.resolve_source.outputs.version_name }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout v7
+        with:
+          ref: ${{ needs.resolve_source.outputs.source_commit }}
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Revalidate selected source without credential access
+        run: >-
+          python3 scripts/ci_rebuild.py
+          --manifest config/ci-rebuild-sources.json verify-source
+          --version "${{ needs.resolve_source.outputs.version_name }}"
+          --source-commit "${{ needs.resolve_source.outputs.source_commit }}"
+          --repo source
+      - name: Check Environment signer pin before mapping any Secret
+        env:
+          EXPECTED_SIGNER: ${{ needs.resolve_source.outputs.expected_signer_sha256 }}
+          RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}
+        run: >-
+          python3 scripts/ci_rebuild.py
+          --manifest config/ci-rebuild-sources.json check-signer-pin
+          --expected "$EXPECTED_SIGNER"
+          --actual "$RELEASE_SIGNING_CERT_SHA256"
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # actions/setup-java v6
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # android-actions/setup-android v4
+        with:
+          packages: platform-tools platforms;android-37.0 build-tools;36.0.0 ndk;28.2.13676358
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # gradle/actions setup-gradle v6
+        with:
+          cache-disabled: true
+      - name: Provision protected runtime authentication inputs
+        env:
+          MFI_IDENTITY_PK8_BASE64: ${{ secrets.MFI_IDENTITY_PK8_BASE64 }}
+          MFI_CERTIFICATE_P7B_BASE64: ${{ secrets.MFI_CERTIFICATE_P7B_BASE64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          : "${MFI_IDENTITY_PK8_BASE64:?MFI_IDENTITY_PK8_BASE64 is not configured}"
+          : "${MFI_CERTIFICATE_P7B_BASE64:?MFI_CERTIFICATE_P7B_BASE64 is not configured}"
+          auth_dir="$RUNNER_TEMP/carpaly-auth-assets/offline-mfi"
+          mkdir -p "$auth_dir"
+          printf '%s' "$MFI_IDENTITY_PK8_BASE64" | base64 --decode > "$auth_dir/identity.pk8"
+          printf '%s' "$MFI_CERTIFICATE_P7B_BASE64" | base64 --decode > "$auth_dir/certificate.p7b"
+          chmod 600 "$auth_dir/identity.pk8" "$auth_dir/certificate.p7b"
+          test -s "$auth_dir/identity.pk8"
+          test -s "$auth_dir/certificate.p7b"
+      - name: Preflight protected Release signer
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          RELEASE_SIGNING_CERT_SHA256: ${{ vars.RELEASE_SIGNING_CERT_SHA256 }}
+        run: >-
+          python3 scripts/release_signing_preflight.py
+          --keystore-path "$RUNNER_TEMP/carpaly-signing/carpaly-release.p12"
+      - name: Run tests, lint, and Release build on the pinned source
+        working-directory: source
+        env:
+          DIPLAY_AUTH_ASSETS_DIR: ${{ runner.temp }}/carpaly-auth-assets
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/carpaly-signing/carpaly-release.p12
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew clean \
+            :shared:testDebugUnitTest :common:testDebugUnitTest :home:testDebugUnitTest \
+            :mobile:lintDebug :home:lintDebug :maphost:lintDebug \
+            :mobile:assembleDebug :home:assembleDebug :maphost:assembleDebug \
+            :mobile:lintRelease :mobile:verifyStandaloneAuthentication :mobile:assembleRelease \
+            --no-daemon --no-configuration-cache --console=plain
+      - name: Verify Release APK and write credential-free report
+        env:
+          EXPECTED_VERSION_NAME: ${{ needs.resolve_source.outputs.version_name }}
+          EXPECTED_VERSION_CODE: ${{ needs.resolve_source.outputs.version_code }}
+          EXPECTED_PACKAGE: ${{ needs.resolve_source.outputs.package_name }}
+          EXPECTED_SIGNER: ${{ needs.resolve_source.outputs.expected_signer_sha256 }}
+          SOURCE_COMMIT: ${{ needs.resolve_source.outputs.source_commit }}
+          ORIGINAL_APK_SHA256: ${{ needs.resolve_source.outputs.original_apk_sha256 }}
+          APK_PATH: ${{ github.workspace }}/source/mobile/build/outputs/apk/release/mobile-release.apk
+          REPORT_PATH: ${{ github.workspace }}/build-report/rebuild.json
+        run: |
+          set -euo pipefail
+          build_tools="$ANDROID_HOME/build-tools/36.0.0"
+          python3 scripts/verify_ci_rebuild_apk.py \
+            --apk "$APK_PATH" \
+            --apksigner "$build_tools/apksigner" \
+            --aapt "$build_tools/aapt" \
+            --report "$REPORT_PATH" \
+            --version-name "$EXPECTED_VERSION_NAME" \
+            --version-code "$EXPECTED_VERSION_CODE" \
+            --package "$EXPECTED_PACKAGE" \
+            --expected-signer "$EXPECTED_SIGNER" \
+            --source-commit "$SOURCE_COMMIT" \
+            --original-apk-sha256 "$ORIGINAL_APK_SHA256" \
+            --output-name "CarPaly-XingyueL-v$EXPECTED_VERSION_NAME.apk"
+      - name: Upload safe build report only (APK remains unpersisted)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # actions/upload-artifact v7
+        with:
+          name: CarPaly-${{ needs.resolve_source.outputs.version_name }}-signed-report-${{ github.run_id }}
+          path: build-report/rebuild.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove temporary signing and authentication material
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          rm -rf -- "$RUNNER_TEMP/carpaly-auth-assets" "$RUNNER_TEMP/carpaly-signing"
+          rm -rf -- "$GITHUB_WORKSPACE/source/.gradle" "$GITHUB_WORKSPACE/source/build"
+          rm -rf -- "$GITHUB_WORKSPACE/source/mobile/build" "$GITHUB_WORKSPACE/source/home/build"
+          rm -rf -- "$GITHUB_WORKSPACE/source/shared/build" "$GITHUB_WORKSPACE/source/common/build"
+          rm -rf -- "$GITHUB_WORKSPACE/source/maphost/build" "$GITHUB_WORKSPACE/build-report"
