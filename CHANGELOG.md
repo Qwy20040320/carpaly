@@ -1,13 +1,13 @@
 <!-- CARPALY:CHANGELOG:START -->
 # CarPaly release history (automatically synchronized)
 
-Latest formal Release: [v1.1.52](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.52) (2026-10-13). APK metadata proof: `NOT_VERIFIED`.
-Release state wording conflict: GitHub marks this as formal while the hand-written notes still say pre-release; original notes are preserved.
+Latest formal Release: [v1.1.53](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.53) (2026-10-14). APK `CarPaly-XingyueL-v1.1.53.apk` matched the GitHub digest, application id, version, and pinned signer.
 
 ## Published Releases
 
 | Tag | Channel | Published | APK assets | Source commit |
 | --- | --- | --- | --- | --- |
+| [v1.1.53](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.53) | Formal | 2026-10-14 | `CarPaly-XingyueL-v1.1.53.apk` | `64703e7dced85b81963a85b8b3ff12a7efc56448` |
 | [v1.1.52](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.52) | Formal | 2026-10-13 | `CarPaly-XingyueL-v1.1.52.apk` | `64703e7dced85b81963a85b8b3ff12a7efc56448` |
 | [v1.1.51](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.51) | Formal | 2026-10-11 | `CarPaly-XingyueL-v1.1.51.apk` | `ef8bec6e0d20060ceb436c36eb2d495f63c831bd` |
 | [v1.1.5](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.5) | Pre-release | 2026-10-11 | `CarPaly-XingyueL1.1.5-Upgrade-Test-build20261011.apk` | `ef8bec6e0d20060ceb436c36eb2d495f63c831bd` |
@@ -15,8 +15,8 @@ Release state wording conflict: GitHub marks this as formal while the hand-writt
 
 ## Local Candidate (Not Published)
 
-`v1.1.53` / versionCode `41` — local-only metadata; no GitHub tag, Release, or download link.
-本地 v1.1.53/code 41 Release APK 已通过 APK 结构、包名/版本、签名、SHA-256 与认证资源匹配检查。签名证书 SHA-256 为 d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e，APK SHA-256 为 01212c62442b80f61d9fb9238f868d4f476bf460ededabb99ee038367dc9ed27。该新签名与 v1.1.52 不同，不能覆盖旧安装，仅适用于全新安装；尚未实车测试，也没有 GitHub 标签或公开 Release。不得据此宣称实车 CarPlay、音频或显示问题已修复。
+`v1.1.55` / versionCode `43` — local-only metadata; no GitHub tag, Release, or download link.
+v1.1.55/code 43 是本地 Release 候选，基于已构建的 V1.1.54 源码基线。本轮分析 V1.1.54 车机日志后，仅将 OPUS 输出能力声明改为依赖 Android 解码器探测；音乐自动暂停与顶部状态栏问题未能由本轮日志确认根因。V1.1.55 尚未实车回归，不能据此宣称 CarPlay 功能已修复或通过。
 
 Vehicle validation is separate from software release status. See the root README; user feedback is labeled and unverified features remain NOT_TESTED.
 <!-- CARPALY:CHANGELOG:END -->

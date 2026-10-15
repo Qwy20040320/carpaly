@@ -11,6 +11,14 @@ $ledgerPath = Join-Path $projectRoot 'config\android-version-ledger.json'
 $ledger = Get-Content -LiteralPath $ledgerPath -Raw | ConvertFrom-Json
 $versionName = [string] $ledger.current.versionName
 $versionCode = [int] $ledger.current.versionCode
+$allocation = @($ledger.allocations | Where-Object {
+    $_.versionName -eq $versionName -and $_.versionCode -eq $versionCode
+})
+if ($allocation.Count -ne 1 -or
+    $allocation[0].signerCertificateSha256 -ne $ledger.releaseCertificateSha256) {
+    throw 'The current version has no unique allocation matching the active Release signer.'
+}
+$upgradePolicy = ([string] $allocation[0].upgradePolicy).ToUpperInvariant().Replace('-', '_')
 if ($ledger.current.channel -notin @('test', 'release')) {
     throw 'Current ledger assignment is not a CarPaly user version.'
 }
@@ -97,7 +105,7 @@ try {
     Write-Output "VERSION_CODE=$versionCode"
     Write-Output "SHA256=$hash"
     Write-Output "SIGNER_SHA256=$($ledger.releaseCertificateSha256)"
-    Write-Output 'UPGRADE_POLICY=FRESH_INSTALL_REQUIRED'
+    Write-Output "UPGRADE_POLICY=$upgradePolicy"
     Write-Output "REPORT=$report"
 }
 finally {

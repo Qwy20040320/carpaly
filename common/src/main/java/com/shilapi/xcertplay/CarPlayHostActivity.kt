@@ -3572,6 +3572,15 @@ class CarPlayHostActivity : ComponentActivity() {
             "Decoder capability query failed error=${error.javaClass.simpleName}")
     }
 
+    private fun audioDecoderAvailable(mime: String): Boolean = try {
+        MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any { codec ->
+            !codec.isEncoder && codec.supportedTypes.any { type -> type.equals(mime, ignoreCase = true) }
+        }
+    } catch (error: Exception) {
+        appendLog("Audio decoder capability query failed mime=$mime error=${error.javaClass.simpleName}")
+        false
+    }
+
     private fun createAirPlayConfig(size: DisplaySize): AirPlayConfig {
         // The home settings page can change the name while this host stays alive.
         if (!menuOpen) oemLabel = AirPlayPersistence.loadOemLabel(this)
@@ -3740,6 +3749,8 @@ class CarPlayHostActivity : ComponentActivity() {
         appendLog(effectiveSummary)
         val carBluetoothAudio = AirPlayPersistence.loadCarBluetoothAudio(this)
         if (carBluetoothAudio) logCarBluetoothAudio()
+        val audioOutputOpus = audioDecoderAvailable(MediaFormat.MIMETYPE_AUDIO_OPUS)
+        appendLog("Audio codec capability outputOpusDecoder=$audioOutputOpus source=MediaCodecList")
         return AirPlayConfig(
             deviceName = "DiPlay",
             deviceId = DiPlayBootstrap.deviceId(airPlayIdentity),
@@ -3757,6 +3768,7 @@ class CarPlayHostActivity : ComponentActivity() {
             videoInCar = com.shilapi.xcertplay.hud.BydOutputSettings.videoWhileParkedActive(this),
             mainBufferedAudio = AirPlayPersistence.loadMainBufferedAudio(this),
             disableAudioOutput = carBluetoothAudio,
+            audioOutputOpus = audioOutputOpus,
         )
     }
 

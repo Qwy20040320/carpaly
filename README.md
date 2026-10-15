@@ -27,13 +27,13 @@ Stable/Beta OTA 客户端与签名清单生成器正在开发。生产验签公�
 <!-- CARPALY:RELEASES:START -->
 ### GitHub 发布状态（自动同步）
 
-GitHub 最新正式 Release：[v1.1.52](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.52)，发布于 2026-10-13。该 Release 暂无可验证 APK 下载附件。 APK 验证状态：`NOT_VERIFIED`。
-**说明状态冲突：** GitHub 将该 Release 标记为正式版，但人工说明仍写有预发布措辞；自动同步保留原说明，不擅自改写。
+GitHub 最新正式 Release：[v1.1.53](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.53)，发布于 2026-10-14。[下载 APK](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.53/CarPaly-XingyueL-v1.1.53.apk) 已核对包名 `1.1.53` / versionCode `41`、签名指纹及 GitHub 资产 SHA-256 `01212c62442b80f61d9fb9238f868d4f476bf460ededabb99ee038367dc9ed27`。
 
 最近已发布的版本：
 
 | 标签 | 类型 | 日期 | APK 附件 | 源码提交 |
 | --- | --- | --- | --- | --- |
+| [v1.1.53](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.53) | 正式 | 2026-10-14 | [CarPaly-XingyueL-v1.1.53.apk](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.53/CarPaly-XingyueL-v1.1.53.apk) | `64703e7dced8` |
 | [v1.1.52](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.52) | 正式 | 2026-10-13 | [CarPaly-XingyueL-v1.1.52.apk](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.52/CarPaly-XingyueL-v1.1.52.apk) | `64703e7dced8` |
 | [v1.1.51](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.51) | 正式 | 2026-10-11 | [CarPaly-XingyueL-v1.1.51.apk](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.51/CarPaly-XingyueL-v1.1.51.apk) | `ef8bec6e0d20` |
 | [v1.1.5](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.5) | 预发布 | 2026-10-11 | [CarPaly-XingyueL1.1.5-Upgrade-Test-build20261011.apk](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.5/CarPaly-XingyueL1.1.5-Upgrade-Test-build20261011.apk) | `ef8bec6e0d20` |
@@ -43,7 +43,7 @@ GitHub 最新正式 Release：[v1.1.52](https://github.com/Qwy20040320/carpaly/r
 ### 当前候选版本
 
 <!-- CARPALY:CANDIDATE:START -->
-**本地候选：v1.1.53 / versionCode 41。** 尚无公开标签或 Release；不提供公开下载链接。本地 v1.1.53/code 41 Release APK 已通过 APK 结构、包名/版本、签名、SHA-256 与认证资源匹配检查。签名证书 SHA-256 为 d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e，APK SHA-256 为 01212c62442b80f61d9fb9238f868d4f476bf460ededabb99ee038367dc9ed27。该新签名与 v1.1.52 不同，不能覆盖旧安装，仅适用于全新安装；尚未实车测试，也没有 GitHub 标签或公开 Release。不得据此宣称实车 CarPlay、音频或显示问题已修复。
+**本地候选：v1.1.55 / versionCode 43。** 尚无公开标签或 Release；不提供公开下载链接。v1.1.55/code 43 是本地 Release 候选，基于已构建的 V1.1.54 源码基线。本轮分析 V1.1.54 车机日志后，仅将 OPUS 输出能力声明改为依赖 Android 解码器探测；音乐自动暂停与顶部状态栏问题未能由本轮日志确认根因。V1.1.55 尚未实车回归，不能据此宣称 CarPlay 功能已修复或通过。
 <!-- CARPALY:CANDIDATE:END -->
 
 后续版本规划为 `v1.1.6`，尚未分配或发布，最终版本号以版本台账为准。
@@ -165,8 +165,9 @@ CarPaly 是 [shihabal3amri/DiPlay](https://github.com/shihabal3amri/DiPlay) 的�
 ## APK 下载与安装
 
 <!-- CARPALY:DOWNLOADS:START -->
-- **最新正式 Release：** [v1.1.52](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.52)；APK 未通过验证记录核对，不提供直链。
-- **本地候选：** v1.1.53 / versionCode 41，尚未公开发布，不提供下载链接。
+- **最新正式 APK：** [CarPaly-XingyueL-v1.1.53.apk](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.53/CarPaly-XingyueL-v1.1.53.apk)；版本 `1.1.53` / versionCode `41`，GitHub 资产 SHA-256 `01212c62442b80f61d9fb9238f868d4f476bf460ededabb99ee038367dc9ed27`。
+- **Release 页面：** [v1.1.53](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.53)。
+- **本地候选：** v1.1.55 / versionCode 43，尚未公开发布，不提供下载链接。
 - 预发布及历史附件仅在各自 Release 页面标示，不代表当前正式推荐版本。
 <!-- CARPALY:DOWNLOADS:END -->
 - **暂无覆盖全部车型、连接模式和功能的实车验证正式版本。**已有单车连接/音乐反馈，导航语音和顶部状态栏问题仍待解决。
@@ -304,11 +305,9 @@ The tested APK version is not recorded for this report; do not infer full-model 
 - The read-only diagnostic center, opt-in bounded logs, filtering, redaction, and user-triggered ZIP export are implemented and covered by software tests.
 - Reverse-camera/360 takeover and Geely-specific HUD integration are not implemented.
 <!-- CARPALY:ENGLISH_RELEASES:START -->
-Latest formal Release: [v1.1.52](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.52); no verified APK link is available.
+Latest formal Release: [v1.1.53](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.53) (2026-10-14); [download APK](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.53/CarPaly-XingyueL-v1.1.53.apk) — package/version metadata, pinned signer, and uploaded asset digest verified.
 
-Release metadata conflict: GitHub marks the latest item as formal, but its hand-written notes still describe a pre-release; the notes are preserved.
-
-Local candidate: `v1.1.53` / versionCode `41`; it has no public tag or Release and no public download URL.
+Local candidate: `v1.1.55` / versionCode `43`; it has no public tag or Release and no public download URL.
 
 Vehicle notes below are user-reported only; no unverified feature is presented as independently tested.
 <!-- CARPALY:ENGLISH_RELEASES:END -->
@@ -316,7 +315,7 @@ Vehicle notes below are user-reported only; no unverified feature is presented a
 ### Download and setup
 
 <!-- CARPALY:ENGLISH_DOWNLOADS:START -->
-See the [latest formal Release](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.52); no APK is linked until its verification record matches. Local candidate `v1.1.53` / code `41` is not public.
+Download the [latest formal APK](https://github.com/Qwy20040320/carpaly/releases/download/v1.1.53/CarPaly-XingyueL-v1.1.53.apk) (`1.1.53`, code `41`; SHA-256 `01212c62442b80f61d9fb9238f868d4f476bf460ededabb99ee038367dc9ed27`) or view the [v1.1.53 Release](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.53). Local candidate `v1.1.55` / code `43` is not public.
 <!-- CARPALY:ENGLISH_DOWNLOADS:END -->
 
 Do not uninstall an existing install or clear app data to work around signer/version issues. This is not a claim of complete vehicle validation. The project requires Android API 25 or later. For source builds, use JDK 25, Gradle Wrapper 9.5, Android SDK Platform 37, and NDK 28.2.13676358, then run:

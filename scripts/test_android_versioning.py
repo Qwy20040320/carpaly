@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -199,8 +200,18 @@ class AndroidVersioningTests(unittest.TestCase):
             ledger_path.write_text(json.dumps(ledger, indent=2) + "\n", encoding="utf-8")
             gradle_path = root / "mobile/build.gradle.kts"
             gradle_source = gradle_path.read_text(encoding="utf-8")
-            gradle_path.write_text(gradle_source.replace('versionCode = 42', 'versionCode = 41')
-                                   .replace('versionName = "1.1.54"', 'versionName = "1.1.53"'), encoding="utf-8")
+            gradle_source, code_count = re.subn(
+                r"(?m)^(\s*versionCode\s*=\s*)\d+(\s*)$",
+                r"\g<1>41\g<2>",
+                gradle_source,
+            )
+            gradle_source, name_count = re.subn(
+                r'(?m)^(\s*versionName\s*=\s*)"[^"]+"(\s*)$',
+                r'\g<1>"1.1.53"\g<2>',
+                gradle_source,
+            )
+            self.assertEqual((1, 1), (code_count, name_count))
+            gradle_path.write_text(gradle_source, encoding="utf-8")
             subprocess.run(["git", "init", "--quiet"], cwd=root, check=True)
             subprocess.run(["git", "config", "user.name", "CarPaly Test"], cwd=root, check=True)
             subprocess.run(["git", "config", "user.email", "carpaly-test@example.invalid"], cwd=root, check=True)

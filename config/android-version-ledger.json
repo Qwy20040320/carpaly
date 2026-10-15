@@ -47,8 +47,8 @@
     }
   ],
   "current": {
-    "versionName": "1.1.54",
-    "versionCode": 42,
+    "versionName": "1.1.55",
+    "versionCode": 43,
     "channel": "test",
     "signingEpochId": "fresh-install-v1.1.53-plus"
   },
@@ -81,6 +81,15 @@
     {
       "versionName": "1.1.54",
       "versionCode": 42,
+      "channel": "test",
+      "status": "delivered",
+      "artifactSha256": "f244fff2765881b7f7a1b66b1ed44202ca3356730e11636b210b5267da514d3c",
+      "signerCertificateSha256": "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e",
+      "upgradePolicy": "same-signer-upgrade-only"
+    },
+    {
+      "versionName": "1.1.55",
+      "versionCode": 43,
       "channel": "test",
       "status": "reserved",
       "artifactSha256": null,

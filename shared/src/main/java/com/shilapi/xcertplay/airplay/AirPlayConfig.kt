@@ -67,6 +67,8 @@ data class AirPlayConfig(
     val microphone: Boolean = false,
     /** Whether a usable platform or bundled encoder allows Opus microphone input formats. */
     val microphoneOpus: Boolean = true,
+    /** Whether Android reports an Opus decoder before Opus is advertised for phone-to-car audio. */
+    val audioOutputOpus: Boolean = false,
     val manufacturer: String = "xcertplay",
     val model: String = "xcertplay",
     val oemLabel: String = "xcertplay",
