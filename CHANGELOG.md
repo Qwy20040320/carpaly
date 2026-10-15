@@ -1,24 +1,35 @@
 <!-- CARPALY:CHANGELOG:START -->
 # CarPaly release history (automatically synchronized)
 
-Latest formal Release: [v1.1.51](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.51) (2026-10-11). APK `CarPaly-XingyueL-v1.1.51.apk` matched the GitHub digest, application id, version, and pinned signer.
+Latest formal Release: [v1.1.56](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.56) (2026-10-15). APK metadata proof: `NOT_VERIFIED`.
 Release state wording conflict: GitHub marks this as formal while the hand-written notes still say pre-release; original notes are preserved.
 
 ## Published Releases
 
 | Tag | Channel | Published | APK assets | Source commit |
 | --- | --- | --- | --- | --- |
+| [v1.1.56](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.56) | Formal | 2026-10-15 | `CarPaly-XingyueL-v1.1.56.apk` | `6b206c9e6944255a159424522017dca984423e67` |
+| [v1.1.54](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.54) | Formal | 2026-10-15 | `CarPaly-XingyueL-v1.1.54.apk` | `e3eca1dc5145cd293815d8f176d5c3812169271a` |
+| [v1.1.53](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.53) | Formal | 2026-10-14 | `CarPaly-XingyueL-v1.1.53.apk` | `64703e7dced85b81963a85b8b3ff12a7efc56448` |
+| [v1.1.52](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.52) | Formal | 2026-10-13 | `CarPaly-XingyueL-v1.1.52.apk` | `64703e7dced85b81963a85b8b3ff12a7efc56448` |
 | [v1.1.51](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.51) | Formal | 2026-10-11 | `CarPaly-XingyueL-v1.1.51.apk` | `ef8bec6e0d20060ceb436c36eb2d495f63c831bd` |
 | [v1.1.5](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.5) | Pre-release | 2026-10-11 | `CarPaly-XingyueL1.1.5-Upgrade-Test-build20261011.apk` | `ef8bec6e0d20060ceb436c36eb2d495f63c831bd` |
 | [v1.1.4](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.4) | Pre-release | 2026-10-11 | `CarPaly-XingyueL1.1.4.apk` | `ef8bec6e0d20060ceb436c36eb2d495f63c831bd` |
 
-## Local Candidate (Not Published)
+## Recorded Candidate Allocation (GitHub Release Exists)
 
-`v1.1.52` / versionCode `40` — local-only metadata; no GitHub tag, Release, or download link.
-本地候选版本；尚无 GitHub 标签或公开 Release。当前资料没有证明本候选修复了任何实车 CarPlay、音频或车机显示故障。
+`v1.1.52` / versionCode `40` — GitHub reports a published Formal Release; APK verification status: `NOT_VERIFIED`. Release notes contain conflicting pre-release wording and were not changed.
+Vehicle validation remains separate from publication status; do not infer feature validation from the Release.
 
 Vehicle validation is separate from software release status. See the root README; user feedback is labeled and unverified features remain NOT_TESTED.
 <!-- CARPALY:CHANGELOG:END -->
+
+# CarPaly local release tooling (unreleased)
+
+- Add a Windows PowerShell release orchestrator for read-only status, fail-closed preflight, Release build validation, safe branch synchronization, and protected Draft inspection.
+- Select the Android Release signer from immutable version-code epochs; retain legacy APK records without rewriting prior binaries.
+- Keep public release assets metadata-only in local workflows; no APK upload, Release publication, OTA activation, or production-secret changes are performed by the desktop script.
+- The current local Gradle version is below the verified public version-code high-water mark and is blocked from a new Release until a reviewed version/source reconciliation.
 
 # DiPlay 0.2.15 — 2026-10-08
 

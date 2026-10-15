@@ -16,10 +16,10 @@
     ]
   },
   "candidate": {
-    "status": "local_candidate",
+    "status": "ledger_allocation",
     "versionName": "1.1.52",
-    "summaryZh": "本地候选版本；尚无 GitHub 标签或公开 Release。当前资料没有证明本候选修复了任何实车 CarPlay、音频或车机显示故障。",
-    "summaryEn": "Local candidate only; no GitHub tag or public Release exists. Available evidence does not establish that this candidate fixes any in-vehicle CarPlay, audio, or head-unit display issue.",
+    "summaryZh": "版本台账记录的候选分配；公开发布状态以 GitHub Releases API 为准。当前资料没有证明本版本修复了任何实车 CarPlay、音频或车机显示故障。",
+    "summaryEn": "A candidate allocation in the version ledger; public status is determined by the GitHub Releases API. Available evidence does not establish that this version fixes any in-vehicle CarPlay, audio, or head-unit display issue.",
     "vehicleStatus": "NOT_TESTED",
     "releaseClaims": [],
     "releaseNotesZh": [

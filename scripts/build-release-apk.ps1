@@ -1,6 +1,8 @@
 param(
     [string] $AndroidSdkPath = $(if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { 'D:\AndroidSdk' }),
-    [string] $PythonExecutable = $env:CARPALY_PYTHON
+    [string] $PythonExecutable = $env:CARPALY_PYTHON,
+    [string] $OutputDir,
+    [switch] $CandidateOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -54,7 +56,17 @@ if ($LASTEXITCODE -ne 0) { throw 'The configured Python executable could not run
 & $pythonPath (Join-Path $projectRoot 'scripts\android_versioning.py') check
 if ($LASTEXITCODE -ne 0) { throw 'Version ledger validation failed; no APK was built.' }
 
-$artifacts = Join-Path $projectRoot 'artifacts'
+$artifacts = if ($OutputDir) {
+    [IO.Path]::GetFullPath($OutputDir)
+} else {
+    Join-Path $projectRoot 'artifacts'
+}
+if ($CandidateOnly) {
+    $privateRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot '.private'))
+    if (-not $artifacts.StartsWith($privateRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'CandidateOnly output must remain inside the ignored .private directory.'
+    }
+}
 $fileName = "CarPaly-XingyueL-v$versionName.apk"
 $destination = Join-Path $artifacts $fileName
 $report = Join-Path $artifacts "$fileName.verification.json"
@@ -69,7 +81,9 @@ if ($LASTEXITCODE -ne 0) { throw 'Release build or pinned signing verification f
 
 $builtApk = Join-Path $projectRoot 'mobile\build\outputs\apk\release\mobile-release.apk'
 if (-not (Test-Path -LiteralPath $builtApk -PathType Leaf)) { throw 'The expected Release APK output is missing.' }
-if (-not (Test-Path -LiteralPath $artifacts -PathType Container)) { New-Item -ItemType Directory -Path $artifacts | Out-Null }
+    if (-not (Test-Path -LiteralPath $artifacts -PathType Container)) {
+        New-Item -ItemType Directory -Path $artifacts -Force | Out-Null
+    }
 
 $preflightReport = Join-Path $env:TEMP ("carpaly-release-$([guid]::NewGuid().ToString('N')).json")
 try {
@@ -81,13 +95,15 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Post-build Release APK verification failed; no user-deliverable APK was copied.' }
 
     Copy-Item -LiteralPath $builtApk -Destination $destination
-    & (Join-Path $PSScriptRoot 'verify-release-apk.ps1') `
-        -ApkPath $destination `
-        -AuthenticationAssetsRoot $env:DIPLAY_AUTH_ASSETS_DIR `
-        -AndroidSdkPath $AndroidSdkPath `
-        -ReportPath $report `
-        -RequireCanonicalFileName `
-        -RecordDelivery
+    $finalVerifyArgs = @(
+        '-ApkPath', $destination,
+        '-AuthenticationAssetsRoot', $env:DIPLAY_AUTH_ASSETS_DIR,
+        '-AndroidSdkPath', $AndroidSdkPath,
+        '-ReportPath', $report,
+        '-RequireCanonicalFileName'
+    )
+    if (-not $CandidateOnly) { $finalVerifyArgs += '-RecordDelivery' }
+    & (Join-Path $PSScriptRoot 'verify-release-apk.ps1') @finalVerifyArgs
     if ($LASTEXITCODE -ne 0) { throw 'Final Release APK verification failed; do not install or distribute this file.' }
 
     $hash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -96,7 +112,8 @@ try {
     Write-Output "VERSION=$versionName"
     Write-Output "VERSION_CODE=$versionCode"
     Write-Output "SHA256=$hash"
-    Write-Output "SIGNER_SHA256=$($ledger.releaseCertificateSha256)"
+    $verified = Get-Content -LiteralPath $report -Raw | ConvertFrom-Json
+    Write-Output "SIGNER_SHA256=$($verified.signerCertificateSha256)"
     Write-Output "REPORT=$report"
 }
 finally {

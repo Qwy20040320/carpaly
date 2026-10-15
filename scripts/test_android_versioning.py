@@ -120,6 +120,10 @@ class AndroidVersioningTests(unittest.TestCase):
             shutil.copyfile(project / gradle_path.relative_to(root), gradle_path)
 
             ledger = json.loads((project / ledger_path.relative_to(root)).read_text(encoding="utf-8"))
+            ledger["highestObservedVersionCode"] = 38
+            ledger["verifiedHistoricalDeliveries"] = [
+                item for item in ledger["verifiedHistoricalDeliveries"] if item["versionCode"] <= 38
+            ]
             current = ledger["current"]
             allocation = next(
                 item
