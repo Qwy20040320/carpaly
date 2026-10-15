@@ -71,9 +71,10 @@ def next_test_name(current_name: str) -> str:
 
 def historical_versions(root: Path, current: AndroidVersion) -> list[AndroidVersion]:
     versions: list[AndroidVersion] = []
-    commits = git(root, "log", "--format=%H", "HEAD", "--", str(GRADLE_PATH)).splitlines()
+    git_gradle_path = GRADLE_PATH.as_posix()
+    commits = git(root, "log", "--format=%H", "HEAD", "--", git_gradle_path).splitlines()
     for commit in commits:
-        source = git(root, "show", f"{commit}:{GRADLE_PATH}", check=False)
+        source = git(root, "show", f"{commit}:{git_gradle_path}", check=False)
         if not source:
             continue
         try:
@@ -87,7 +88,7 @@ def historical_versions(root: Path, current: AndroidVersion) -> list[AndroidVers
     for tag in git(root, "tag", "--list", "v1.*").splitlines():
         if not re.fullmatch(r"v1\.\d+\.\d+", tag):
             continue
-        source = git(root, "show", f"{tag}:{GRADLE_PATH}", check=False)
+        source = git(root, "show", f"{tag}:{git_gradle_path}", check=False)
         if not source:
             continue
         try:
@@ -158,7 +159,7 @@ def require_current_delivery_recorded(ledger: dict) -> None:
         )
 
 
-def check_project(root: Path) -> AndroidVersion:
+def check_project(root: Path, *, enforce_historical_high_water: bool = True) -> AndroidVersion:
     source = (root / GRADLE_PATH).read_text(encoding="utf-8")
     version = parse_gradle_version(source)
     ledger = read_ledger(root)
@@ -201,11 +202,20 @@ def check_project(root: Path) -> AndroidVersion:
         + [item["versionCode"] for item in ledger.get("verifiedHistoricalDeliveries", [])]
         + allocated_codes
     )
-    if version.version_code <= highest_previous:
+    if enforce_historical_high_water and version.version_code <= highest_previous:
         raise ValueError(
             f"versionCode {version.version_code} must exceed all previous known values ({highest_previous})"
         )
     return version
+
+
+def check_ci_project(root: Path) -> AndroidVersion:
+    """Check branch metadata consistency without treating rebuild-only tags as a new allocation.
+
+    Release builds and version allocation must continue to use ``check_project`` so a stale
+    source version cannot be delivered or used to allocate another version.
+    """
+    return check_project(root, enforce_historical_high_water=False)
 
 
 def update_gradle_version(root: Path, version_name: str, version_code: int) -> None:
@@ -269,17 +279,20 @@ def allocate(root: Path, channel: str) -> AndroidVersion:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("check", "next-test", "final-release"))
+    parser.add_argument("command", choices=("check", "check-ci", "next-test", "final-release"))
     parser.add_argument("--project-root", type=Path, default=Path(__file__).resolve().parents[1])
     args = parser.parse_args()
     root = args.project_root.resolve()
 
     try:
-        if args.command == "check":
-            version = check_project(root)
+        if args.command in ("check", "check-ci"):
+            version = check_project(
+                root, enforce_historical_high_water=args.command == "check"
+            )
             print(
                 f"VERSIONING_STATUS=PASS versionName={version.version_name} "
-                f"versionCode={version.version_code} applicationId={version.application_id}"
+                f"versionCode={version.version_code} applicationId={version.application_id} "
+                f"historicalHighWater={'enforced' if args.command == 'check' else 'release-gated'}"
             )
         else:
             channel = "test" if args.command == "next-test" else "release"

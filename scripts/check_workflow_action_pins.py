@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Require trusted, immutable Action references in the Android release workflow."""
+"""Require trusted, immutable Action references in CarPaly Android workflows."""
 
 from __future__ import annotations
 
@@ -8,7 +8,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKFLOW = ROOT / ".github/workflows/android.yml"
+WORKFLOWS = (
+    ROOT / ".github/workflows/android.yml",
+    ROOT / ".github/workflows/carpaly-android-build.yml",
+)
 TRUSTED_ACTIONS = {
     "actions/checkout",
     "actions/setup-go",
@@ -22,12 +25,18 @@ USES = re.compile(r"^\s*(?:-\s*)?uses:\s*([^\s#]+)", re.MULTILINE)
 
 
 def main() -> None:
-    contents = WORKFLOW.read_text(encoding="utf-8")
-    references = USES.findall(contents)
-    if not references:
-        raise SystemExit(f"No Actions found in {WORKFLOW.relative_to(ROOT)}")
-
+    references: list[str] = []
     failures: list[str] = []
+    for workflow in WORKFLOWS:
+        try:
+            contents = workflow.read_text(encoding="utf-8")
+        except OSError as exc:
+            failures.append(f"Workflow is missing or unreadable: {workflow.relative_to(ROOT)} ({exc})")
+            continue
+        references.extend(USES.findall(contents))
+    if not references:
+        raise SystemExit("No Actions found in the reviewed Android workflows")
+
     seen: set[str] = set()
     for reference in references:
         if reference.startswith("./"):
@@ -47,7 +56,7 @@ def main() -> None:
         failures.append(f"Reviewed Action inventory does not match workflow: {', '.join(sorted(unused))}")
     if failures:
         raise SystemExit("Android workflow Action pin check failed:\n" + "\n".join(failures))
-    print(f"Android workflow Action pins passed: {len(references)} immutable references.")
+    print(f"Android workflow Action pins passed: {len(references)} immutable references across {len(WORKFLOWS)} files.")
 
 
 if __name__ == "__main__":
