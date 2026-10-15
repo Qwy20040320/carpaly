@@ -1,5 +1,11 @@
 # Release documentation automation
 
+## Windows local orchestration
+
+`build-release.ps1` is the supported Windows entry point for status, preflight, local signed Release build/verification, reviewed source synchronization, and read-only validation of a publisher-created Draft. It uses the version ledger's signer epoch, keeps verbose logs redacted under ignored `.private/`, refuses to overwrite APKs, and stages explicit paths only. `-PrepareGitHub` waits for checks on the exact PR head; high-risk workflow/signing/ledger/Gradle changes remain Draft. Native Auto-merge is requested only when the live repository setting and the complete protected-main policy proof allow it. Local mode never enables settings, merges high-risk changes, creates/moves tags, creates/publishes Releases, uploads APKs, changes production Secrets, or activates OTA. See [local usage](LOCAL_RELEASE_GUIDE.md), [Auto-merge policy](GITHUB_AUTO_MERGE_GUIDE.md), and [architecture](RELEASE_AUTOMATION_ARCHITECTURE.md).
+
+`-PrepareDraft` is verification-only: the protected authenticated publisher must already have created the exact-source, zero-asset Draft. This guard prevents a second local Tag/Release creation path.
+
 This automation keeps the public README, changelog, Release Notes, and repository description aligned with verifiable GitHub release state. It is independent from Android builds and does not read the `mfi-public-release` Environment.
 
 ## Sources of truth

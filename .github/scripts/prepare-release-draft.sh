@@ -1,13 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-required=(GH_TOKEN GH_REPO RELEASE_TAG RELEASE_COMMIT RELEASE_VERSION_CODE RELEASE_SIGNING_CERT_SHA256 RELEASE_PRERELEASE AUTO_CREATE_TAG)
+required=(GH_REPO RELEASE_TAG RELEASE_COMMIT RELEASE_VERSION_CODE RELEASE_SIGNING_CERT_SHA256 RELEASE_PRERELEASE AUTO_CREATE_TAG)
 for variable in "${required[@]}"; do
   if ! printenv "$variable" >/dev/null; then
     echo "Required environment variable is missing: $variable" >&2
     exit 1
   fi
 done
+
+if ! printenv GH_TOKEN >/dev/null 2>&1; then
+  gh auth status >/dev/null 2>&1 || {
+    echo "GitHub CLI authentication is required; no token is printed or stored by this script." >&2
+    exit 1
+  }
+fi
 
 [[ "$GH_REPO" == "Qwy20040320/carpaly" ]] || {
   echo "Release drafts may only be prepared in the CarPaly repository." >&2
@@ -38,6 +45,24 @@ version="${RELEASE_TAG#v}"
   echo "AUTO_CREATE_TAG must be true or false." >&2
   exit 1
 }
+
+local_apk_sha="${RELEASE_APK_SHA256:-}"
+local_apk_name="${RELEASE_APK_FILE_NAME:-}"
+local_apk_bytes="${RELEASE_APK_BYTES:-}"
+if [[ -n "$local_apk_sha$local_apk_name$local_apk_bytes" ]]; then
+  [[ "$local_apk_sha" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "Local APK SHA-256 must be lowercase hexadecimal." >&2
+    exit 1
+  }
+  [[ "$local_apk_name" == "CarPaly-XingyueL-v${version}.apk" ]] || {
+    echo "Local APK filename does not match the requested version." >&2
+    exit 1
+  }
+  [[ "$local_apk_bytes" =~ ^[1-9][0-9]*$ ]] || {
+    echo "Local APK byte count must be a positive integer." >&2
+    exit 1
+  }
+fi
 
 api_version="2022-11-28"
 api() {
@@ -118,6 +143,13 @@ release_notes="$draft_marker
 - CarPlay, vehicle audio, Siri/microphone, HUD, and instrument-cluster behavior remain NOT_TESTED unless independently documented for this exact build.
 
 This draft is metadata-only. A maintainer must replace or amend these notes and attach only separately reviewed, distribution-safe assets before any manual publication."
+if [[ -n "$local_apk_sha" ]]; then
+  release_notes+="
+
+- Locally verified APK (not uploaded): $local_apk_name
+- Local APK size: $local_apk_bytes bytes
+- Local APK SHA-256: $local_apk_sha"
+fi
 
 release="$(load_release)"
 tag_target=""
@@ -157,6 +189,10 @@ if [[ -n "$release" ]]; then
     echo "Existing draft was not created by the metadata-only preparer; refusing to overwrite or reuse it." >&2
     exit 1
   }
+  if [[ -n "$local_apk_sha" ]] && ! jq -e --arg hash "$local_apk_sha" '(.body // "") | contains($hash)' <<<"$release" >/dev/null; then
+    echo "Existing Draft lacks this local APK hash; refusing to rewrite existing Release notes." >&2
+    exit 1
+  fi
   assets="$(load_assets "$(jq -er '.id' <<<"$release")")"
   [[ "$(jq 'length' <<<"$assets")" == 0 ]] || {
     echo "Existing draft has attachments; refusing to reuse or mutate it because public-distribution safety is unverified." >&2
@@ -209,6 +245,10 @@ jq -e --arg marker "$draft_marker" '(.body // "") | contains($marker)' <<<"$rele
   echo "Prepared Release lacks the metadata-only marker; refusing to report success." >&2
   exit 1
 }
+if [[ -n "$local_apk_sha" ]] && ! jq -e --arg hash "$local_apk_sha" '(.body // "") | contains($hash)' <<<"$release" >/dev/null; then
+  echo "Prepared Draft does not record the verified local APK hash." >&2
+  exit 1
+fi
 expected_prerelease="$RELEASE_PRERELEASE"
 [[ "$(jq -r '.tag_name // ""' <<<"$release")" == "$RELEASE_TAG" && \
    "$(jq -r '.prerelease' <<<"$release")" == "$expected_prerelease" ]] || {

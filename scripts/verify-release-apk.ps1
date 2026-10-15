@@ -21,9 +21,20 @@ $apk = (Resolve-Path -LiteralPath $ApkPath).Path
 if (-not $ReportPath) { $ReportPath = "$apk.verification.json" }
 
 $expectedPackage = 'com.shihab.diplay.hudtest'
-$expectedSigner = '4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90'
 $expectedName = [string] $ledger.current.versionName
 $expectedCode = [int] $ledger.current.versionCode
+$signingEpochs = @($ledger.signingEpochs)
+$matchingEpochs = @($signingEpochs | Where-Object {
+    [int] $_.minVersionCode -le $expectedCode -and
+    ($null -eq $_.maxVersionCode -or [int] $_.maxVersionCode -ge $expectedCode)
+})
+if ($matchingEpochs.Count -ne 1) {
+    throw 'Version code does not map to exactly one reviewed Release signing epoch.'
+}
+$expectedSigner = ([string] $matchingEpochs[0].certificateSha256).ToLowerInvariant()
+if ($expectedSigner -notmatch '^[0-9a-f]{64}$') {
+    throw 'The expected Release signer fingerprint is malformed.'
+}
 $baselineCode = [int] $ledger.highestObservedVersionCode
 $buildTools = Join-Path $AndroidSdkPath 'build-tools\36.0.0'
 $aapt = Join-Path $buildTools 'aapt.exe'
@@ -46,8 +57,8 @@ if ($expectedCode -le $baselineCode -or
     $gradle -notmatch ('(?m)^\s*versionName\s*=\s*"' + [regex]::Escape($expectedName) + '"\s*$')) {
     throw 'Gradle version metadata is not the reserved, strictly increasing user version.'
 }
-if ($ledger.releaseCertificateSha256 -ne $expectedSigner -or $gradle -notmatch [regex]::Escape($expectedSigner)) {
-    throw 'The permanent Release signer pin is absent or inconsistent.'
+if ($gradle -notmatch 'signerForVersionCode' -or $gradle -notmatch 'android-version-ledger\.json') {
+    throw 'Gradle does not select the Release signer from the reviewed version ledger.'
 }
 if (-not $AuthenticationAssetsRoot) {
     throw 'DIPLAY_AUTH_ASSETS_DIR is required to compare packaged runtime authentication files.'
@@ -91,7 +102,10 @@ try {
 
     $manifestOutput = & $aapt dump xmltree $apk AndroidManifest.xml 2>&1
     if ($LASTEXITCODE -ne 0) { throw 'AndroidManifest.xml could not be inspected.' }
-    if (($manifestOutput -join "`n") -match 'android:debuggable') {
+    $manifestText = $manifestOutput -join "`n"
+    $badgingDebuggable = $badging -match "(?m)^application-debuggable(?:\s|$)"
+    $manifestDebuggableTrue = $manifestText -match '(?im)android:debuggable[^\r\n]*=\s*(?:(?:\(type\s+0x12\))\s*)?(?:true|0xffffffff|0x1|1)(?:\s|$)'
+    if ($badgingDebuggable -or $manifestDebuggableTrue) {
         throw 'Debuggable APKs are not eligible as user-delivery packages.'
     }
     $checks['RELEASE_VARIANT_NOT_DEBUGGABLE'] = 'PASS'
@@ -142,6 +156,10 @@ try {
     $apkSha256 = (Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant()
     $allocation = @($ledger.allocations | Where-Object { $_.versionName -eq $versionName -and $_.versionCode -eq $versionCode }) | Select-Object -First 1
     if (-not $allocation) { throw 'APK version does not have a unique allocation in the version ledger.' }
+    if ($allocation.signerCertificateSha256 -and
+        ([string] $allocation.signerCertificateSha256).ToLowerInvariant() -ne $expectedSigner) {
+        throw 'Allocated version signer differs from its reviewed signing epoch.'
+    }
     if ($allocation.artifactSha256 -and $allocation.artifactSha256 -ne $apkSha256) {
         throw 'This version already has a delivered APK with different bytes; allocate a new version instead.'
     }

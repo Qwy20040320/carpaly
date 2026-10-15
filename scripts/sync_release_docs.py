@@ -308,8 +308,12 @@ def render_release_summary(records: Sequence[Mapping[str, Any]]) -> str:
         )
     for record in list(records)[:10]:
         release_type = "预发布" if record.get("prerelease") else "正式"
-        apk = record.get("apkAssets", [])
-        apk_text = ", ".join(f"[{asset['name']}]({asset['url']})" for asset in apk) if apk else "无 APK 附件"
+        verified_apk = record.get("verifiedApk")
+        apk_text = (
+            f"[{verified_apk['name']}]({verified_apk['url']})"
+            if verified_apk
+            else ("有 APK 附件（未验证，不提供链接）" if record.get("apkAssets") else "无 APK 附件")
+        )
         sha = record.get("tagSha")
         source = f"`{sha[:12]}`" if sha else "未知"
         tag_url = record.get("htmlUrl") or ""
@@ -322,13 +326,27 @@ def render_release_summary(records: Sequence[Mapping[str, Any]]) -> str:
 
 
 def render_candidate(
-    metadata: Mapping[str, Any], ledger: Mapping[str, Any], released_tags: set[str], known_tags: set[str]
+    metadata: Mapping[str, Any], ledger: Mapping[str, Any], released_tags: set[str], known_tags: set[str],
+    records: Sequence[Mapping[str, Any]] = (),
 ) -> str:
     candidate = metadata["candidate"]
     version = str(candidate["versionName"])
     tag = f"v{version}"
     current = ledger["current"]
     if tag in released_tags:
+        record = next((item for item in records if item.get("tag") == tag), None)
+        if record:
+            channel = "预发布" if record.get("prerelease") else "正式版"
+            verification = str(record.get("apkVerificationStatus", "NOT_VERIFIED"))
+            conflict = bool(record.get("releaseNoteStateConflict"))
+            note = "Release 正文仍含预发布措辞，状态不一致；自动同步不会改写人工正文。" if conflict else ""
+            download = "可验证 APK 下载尚未建立。" if not record.get("verifiedApk") else "APK 验证记录已匹配。"
+            return (
+                f"**v{version} 已由 GitHub 标记为已发布（{channel}）。** "
+                f"本地版本台账仍保留候选阶段记录；GitHub APK 验证状态为 `{verification}`，"
+                f"因此不在此处推导可验证下载链接。{note}{download} "
+                "后续版本按台账高水位递增；`v1.1.6` 是未来序列目标，不代表已分配或发布。"
+            )
         return (
             f"**{tag} 已存在 GitHub Release。** 请先补齐 `{METADATA_PATH.as_posix()}` 中的发布说明资料后再同步候选状态。"
         )
@@ -397,9 +415,21 @@ def render_downloads(records: Sequence[Mapping[str, Any]], metadata: Mapping[str
         lines.append("- 当前没有已发布的正式 Release APK。")
     candidate = metadata["candidate"]
     current = ledger["current"]
-    lines.append(
-        f"- **本地候选：** v{candidate['versionName']} / versionCode {current['versionCode']}，尚未公开发布，不提供下载链接。"
-    )
+    candidate_tag = f"v{candidate['versionName']}"
+    candidate_release = next((record for record in records if record.get("tag") == candidate_tag), None)
+    if candidate_release:
+        channel = "预发布" if candidate_release.get("prerelease") else "正式版"
+        proof = candidate_release.get("apkVerificationStatus", "NOT_VERIFIED")
+        lines.append(
+            f"- **候选台账版本 v{candidate['versionName']} 已在 GitHub 发布（{channel}）：** "
+            f"APK 验证状态 `{proof}`；未通过验证记录时不提供 APK 直链。"
+        )
+        if candidate_release.get("releaseNoteStateConflict"):
+            lines.append("- **发布元数据冲突：** GitHub 状态与人工 Release 正文的预发布措辞不一致；正文保持原样。")
+    else:
+        lines.append(
+            f"- **本地候选：** v{candidate['versionName']} / versionCode {current['versionCode']}，尚未公开发布，不提供下载链接。"
+        )
     lines.append("- 预发布及历史附件仅在各自 Release 页面标示，不代表当前正式推荐版本。")
     return "\n".join(lines)
 
@@ -419,6 +449,20 @@ def render_english_releases(records: Sequence[Mapping[str, Any]], metadata: Mapp
             summary = f"Latest formal Release: [{latest['tag']}]({latest['htmlUrl']}); no verified APK link is available."
     candidate = metadata["candidate"]
     current = ledger["current"]
+    candidate_release = next((record for record in records if record.get("tag") == f"v{candidate['versionName']}"), None)
+    if candidate_release:
+        channel = "pre-release" if candidate_release.get("prerelease") else "formal Release"
+        candidate_line = (
+            f"Ledger candidate `v{candidate['versionName']}` / code `{current['versionCode']}` is already published "
+            f"by GitHub as a {channel}; APK proof status is `{candidate_release.get('apkVerificationStatus', 'NOT_VERIFIED')}`."
+        )
+        if candidate_release.get("releaseNoteStateConflict"):
+            candidate_line += " GitHub state conflicts with pre-release wording in the hand-written notes; the notes are preserved."
+    else:
+        candidate_line = (
+            f"Local candidate: `v{candidate['versionName']}` / versionCode `{current['versionCode']}`; "
+            "it has no public tag or Release and no public download URL."
+        )
     return (
         f"{summary}\n\n"
         + (
@@ -427,8 +471,7 @@ def render_english_releases(records: Sequence[Mapping[str, Any]], metadata: Mapp
             else ""
         )
         +
-        f"Local candidate: `v{candidate['versionName']}` / versionCode `{current['versionCode']}`; "
-        "it has no public tag or Release and no public download URL.\n\n"
+        f"{candidate_line}\n\n"
         "Vehicle notes below are user-reported only; no unverified feature is presented as independently tested."
     )
 
@@ -446,7 +489,16 @@ def render_english_downloads(records: Sequence[Mapping[str, Any]], metadata: Map
     else:
         line = "No formal Release APK is currently available."
     current = ledger["current"]
-    return f"{line} Local candidate `v{metadata['candidate']['versionName']}` / code `{current['versionCode']}` is not public."
+    candidate = metadata["candidate"]
+    candidate_release = next((record for record in records if record.get("tag") == f"v{candidate['versionName']}"), None)
+    if candidate_release:
+        channel = "pre-release" if candidate_release.get("prerelease") else "formal Release"
+        state = f"Ledger candidate `v{candidate['versionName']}` / code `{current['versionCode']}` is already published as a {channel}."
+        if candidate_release.get("releaseNoteStateConflict"):
+            state += " Its hand-written notes conflict with GitHub channel metadata; the notes are preserved."
+    else:
+        state = f"Local candidate `v{candidate['versionName']}` / code `{current['versionCode']}` is not public."
+    return f"{line} {state}"
 
 
 def render_changelog(records: Sequence[Mapping[str, Any]], metadata: Mapping[str, Any], ledger: Mapping[str, Any]) -> str:
@@ -477,13 +529,31 @@ def render_changelog(records: Sequence[Mapping[str, Any]], metadata: Mapping[str
         lines.append("| — | — | — | none | — |")
     current = ledger["current"]
     candidate = metadata["candidate"]
+    candidate = metadata["candidate"]
+    current = ledger["current"]
+    candidate_release = next((record for record in records if record.get("tag") == f"v{candidate['versionName']}"), None)
+    if candidate_release:
+        section_title = "## Recorded Candidate Allocation (GitHub Release Exists)"
+        channel = "Pre-release" if candidate_release.get("prerelease") else "Formal Release"
+        section_body = (
+            f"`v{candidate['versionName']}` / versionCode `{current['versionCode']}` — GitHub reports a published {channel}; "
+            f"APK verification status: `{candidate_release.get('apkVerificationStatus', 'NOT_VERIFIED')}`."
+        )
+        if candidate_release.get("releaseNoteStateConflict"):
+            section_body += " Release notes contain conflicting pre-release wording and were not changed."
+    else:
+        section_title = "## Local Candidate (Not Published)"
+        section_body = (
+            f"`v{candidate['versionName']}` / versionCode `{current['versionCode']}` — local-only metadata; "
+            "no GitHub tag, Release, or download link."
+        )
     lines.extend(
         [
             "",
-            "## Local Candidate (Not Published)",
+            section_title,
             "",
-            f"`v{candidate['versionName']}` / versionCode `{current['versionCode']}` — local-only metadata; no GitHub tag, Release, or download link.",
-            candidate["summaryZh"],
+            section_body,
+            candidate["summaryZh"] if candidate_release is None else "Vehicle validation remains separate from publication status; do not infer feature validation from the Release.",
             "",
             "Vehicle validation is separate from software release status. See the root README; user feedback is labeled and unverified features remain NOT_TESTED.",
         ]
@@ -665,7 +735,7 @@ def render_blocks(
     markers = metadata["managedMarkers"]
     return {
         markers["readmeReleases"]: render_release_summary(records),
-        markers["readmeCandidate"]: render_candidate(metadata, ledger, released_tags, known_tags),
+        markers["readmeCandidate"]: render_candidate(metadata, ledger, released_tags, known_tags, records),
         markers["readmeVehicleFeedback"]: render_vehicle_feedback(metadata),
         markers["readmeDownloads"]: render_downloads(records, metadata, ledger),
         markers["readmeEnglishReleases"]: render_english_releases(records, metadata, ledger),

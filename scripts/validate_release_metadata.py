@@ -71,8 +71,8 @@ def validate_metadata(root: Path = ROOT) -> list[str]:
 
     candidate = metadata.get("candidate", {})
     current = ledger.get("current", {})
-    if candidate.get("status") != "local_candidate":
-        errors.append("candidate.status must remain local_candidate until an actual GitHub Release exists")
+    if candidate.get("status") != "ledger_allocation":
+        errors.append("candidate.status must identify the ledger allocation; public Release state comes from GitHub")
     if candidate.get("versionName") != current.get("versionName"):
         errors.append("candidate.versionName must match the current version ledger entry")
     allocation = next(
@@ -89,7 +89,7 @@ def validate_metadata(root: Path = ROOT) -> list[str]:
     elif allocation.get("status") != "delivered" or not SHA256.fullmatch(
         str(allocation.get("artifactSha256", "")).lower()
     ):
-        errors.append("local candidate must have an existing verified artifact record and SHA-256")
+        errors.append("ledger allocation must have delivered status and an artifact SHA-256")
     if current.get("channel") != "test":
         errors.append("this metadata candidate must not be marked as a stable release")
     if candidate.get("vehicleStatus") != "NOT_TESTED":

@@ -1,24 +1,32 @@
 # CarPaly Android version and delivery policy
 
-`config/android-version-ledger.json` is the machine-readable allocation and delivery-policy ledger. Never edit an allocated name/code pair to reuse it, replace an already delivered APK, or lower/reuse a `versionCode`. The ledger pins `applicationId=com.shihab.diplay.hudtest` and the v1.1.4 Release certificate SHA-256 `4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90`.
+`config/android-version-ledger.json` is the machine-readable source for immutable allocations, historic deliveries and signing epochs. Never reuse a `versionName`/`versionCode`, lower the high-water mark, replace a delivered APK, or retarget an existing tag.
 
-## Verified version history
+## Version and signer history
 
-- `v1.1.4`: public pre-release, `versionName=1.1.4`, `versionCode=36`.
-- `v1.1.5`: historical public pre-release asset, `versionName=1.1.5`, `versionCode=37`; its original asset name is retained as historical data and is not a naming template.
-- `versionCode=38`: observed in a local historical build and treated as the high-water mark even though that build is not a new user delivery.
-- `v1.1.51`: `versionCode=39`, published as the formal GitHub Release; APK SHA-256 `222801dbc5e96b668c22a078da38d2b4ed184724c0b088c35d7d04c32752754a` matches the verified GitHub asset record. The hand-authored Release body conflicts with the formal channel label and is preserved pending manual correction.
-- `v1.1.52`: `versionCode=40`, delivered as a local candidate APK recorded in the ledger; no public tag or Release exists. It remains a local candidate and makes no vehicle-fix claims.
-- Continue `v1.1.53`, `v1.1.54`, and onward by immutable ledger allocations. The later `v1.1.6` allocation must use a `versionCode` above every prior observed or delivered code.
+The package id is permanently `com.shihab.diplay.hudtest`. The signer is selected by `versionCode` from the ledger's contiguous, non-overlapping signing epochs:
 
-The ledger's `channel` records the allocation/development track; it is not the GitHub Release `prerelease` flag. For example, `v1.1.51` was allocated on the test track but GitHub currently marks its published Release as formal (`prerelease=false`). The GitHub Release API is the source of truth for the published channel, while the ledger preserves the immutable allocation history. Neither label means Debug build, Debug signer, or a separate Test/Upgrade-Test APK artifact. Every user-installable package is the Release variant signed by the fixed Release identity.
+| versionCode | SHA-256 certificate fingerprint | Status |
+| ---: | --- | --- |
+| 36–40 | `4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90` | Historical identity |
+| 41+ | `d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e` | Active identity, based on verified v1.1.53, v1.1.54 and v1.1.56 APKs |
 
-## Build and allocate
+The historical binaries are immutable. A certificate change means ordinary Android in-place upgrade is not established unless signing lineage support or a real target-device upgrade test proves it. Record `NOT_TESTED` otherwise. v1.1.55/code 43 has no verified source tag and remains `SOURCE_UNVERIFIED`.
 
-Run `python scripts/android_versioning.py check` before a Release build or version allocation. It verifies Gradle metadata, the fixed package and signer, the Release-only artifact policy, and the historical version-code high-water mark. Internal PR/Push CI may use `check-ci` to verify the branch's Gradle/ledger consistency without treating a newer rebuild-only historical tag as a new allocation; this does not authorize Release construction or delivery. The protected authenticated Release job must run strict `check` before using signing credentials. Use `python scripts/android_versioning.py next-test` for the next numbered candidate or `final-release` for the later `1.1.6` line; allocation is refused until the current version has a verified Release APK SHA-256 recorded as delivered.
+The ledger records v1.1.52/code 40 as a delivered allocation. GitHub currently reports a published v1.1.52 Release, but its formal/pre-release metadata conflicts and its APK lacks a matching verification sidecar; do not rewrite that historical Release or treat the metadata conflict as verified evidence. The complete public high-water mark is 44 because v1.1.56/code 44 is published. The current Gradle assignment is therefore intentionally stale for a new delivery. Do not build or allocate a user APK from it; first reconcile source history and reserve a version strictly above 44 through a reviewed change.
 
-The only user APK name is `CarPaly-XingyueL-v{versionName}.apk`, for example `CarPaly-XingyueL-v1.1.51.apk`. Build it with `scripts/build-release-apk.ps1`; validate with `scripts/verify-release-apk.ps1 -ApkPath <path> -RequireCanonicalFileName -RecordDelivery`. The verifier checks package ID, increasing version metadata, v2 APK signature, fixed signer, Release/non-debuggable status, supported ABI, ZIP integrity, and exact match of packaged runtime authentication assets to the authorized local inputs. It refuses to replace existing artifacts and records the immutable APK SHA-256 only after verification.
+The previously planned stable endpoint `v1.1.6` remains a future allocation, not a current build target; it must also use a `versionCode` above the verified high-water mark and the active signer epoch.
 
-CI may compile Debug variants and run Debug unit tests internally. CI Debug APKs are not uploaded as downloadable artifacts and are never user-installable deliverables. No standalone Debug, Test, or Upgrade-Test APK packaging task is supported.
+## Validate and allocate
 
-Missing or unreadable original Release signing credentials means `BLOCKED`: do not build with the Android Debug key, generate a replacement keystore, alter the package ID, uninstall an older app, or clear user data. A successful source/Debug build does not establish a user-delivery APK or prove that an in-place upgrade has been tested on a device.
+Run `python scripts/android_versioning.py check` before a Release build or allocation. It checks Gradle metadata, the application id, signing epoch, artifact policy and complete version high-water mark. CI may use `check-ci` for branch consistency only; that does not authorize a Release build. Use `next-test` or `final-release` only after the current allocation has a verified immutable APK SHA-256 record. Do not change an already-delivered record to make a build pass.
+
+The sole user-installable APK name is `CarPaly-XingyueL-v{versionName}.apk`. Build with `scripts/build-release-apk.ps1` through the root `build-release.ps1` orchestrator, then validate with `scripts/verify-release-apk.ps1`. The verifier checks the pinned epoch, package, monotonic version, Release/non-debuggable metadata, v2 signature, ABI, ZIP integrity and the exact local authentication asset pair. Existing output files are never overwritten.
+
+## Delivery boundaries
+
+All delivered APKs must be signed Release variants. Debug compilation is allowed only inside CI and Debug APKs are not deliverables. Missing original signer credentials means `BLOCKED_BY_SIGNING`; never substitute a Debug/new key, change the application id, uninstall an older app, or clear user data.
+
+The local orchestrator can build and verify, synchronize reviewed source changes to a feature branch, and inspect a metadata-only Draft produced by the protected publisher. It cannot create or move tags, create or publish Releases, upload APKs, change OTA state or modify production GitHub settings. The checked-in release intent stays disabled unless separately reviewed on main. APKs containing extractable authentication identity material are never uploaded by this local system to a public Release, Actions Artifact, Pages or OTA.
+
+See [Release signing policy](RELEASE_SIGNING_POLICY.md), [local release guide](LOCAL_RELEASE_GUIDE.md), and [automation architecture](RELEASE_AUTOMATION_ARCHITECTURE.md).

@@ -39,6 +39,7 @@ jobs:
         run: |
           bash -n .github/scripts/prepare-release-draft.sh
           python3 -m py_compile scripts/package_source_archive.py
+          python3 -m py_compile scripts/release_automation.py scripts/test_release_automation.py scripts/check_project_docs.py scripts/check_release_automation.py
           python3 -m py_compile scripts/ci_rebuild.py scripts/verify_ci_rebuild_apk.py scripts/test_ci_rebuild.py scripts/test_verify_ci_rebuild_apk.py
           python3 -m py_compile scripts/release_intent.py scripts/release_review_gate.py scripts/check_release_signer_pin.py scripts/test_release_signer_pin.py scripts/dispatch_release_followups.py scripts/check_release_automation.py scripts/preserve_ota_feeds.py scripts/ota_publisher_policy.py scripts/validate_ota_release_target.py scripts/ota_key_material.py scripts/ota_key_preflight.py scripts/verify_ota_environment.py
           python3 -m pip install --disable-pip-version-check -r requirements-ota.txt
@@ -48,8 +49,10 @@ jobs:
           python3 scripts/check_release_automation.py
           python3 scripts/validate_release_metadata.py
           python3 scripts/test_release_pipeline.py
+          pwsh -NoLogo -NoProfile -File scripts/test_build_release.ps1
           python3 -m unittest \
             scripts.test_android_versioning \
+            scripts.test_release_automation \
             scripts.test_release_docs_sync \
             scripts.test_release_signing_preflight \
             scripts.test_release_signer_pin \

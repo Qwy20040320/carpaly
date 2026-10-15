@@ -10,6 +10,7 @@ import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 import java.security.interfaces.ECPublicKey
 import java.security.spec.PKCS8EncodedKeySpec
+import groovy.json.JsonSlurper
 import org.gradle.api.tasks.Sync
 
 plugins {
@@ -35,10 +36,38 @@ val gitCommit = providers.exec {
     commandLine("git", "rev-parse", "--short=12", "HEAD")
 }.standardOutput.asText.map { it.trim() }
 
-// This is the signing identity already present in the published v1.1.4 APK. Do not change it
-// to accommodate a different local or CI keystore: that would break the installed upgrade chain.
-val CARPALY_RELEASE_CERT_SHA256 =
-    "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90"
+// The immutable version ledger records the verified signing epoch for each versionCode.
+// Historical releases keep their original identity; new versions use only the reviewed active epoch.
+val releaseLedger = JsonSlurper().parse(rootProject.file("config/android-version-ledger.json")) as Map<*, *>
+val releaseCurrent = releaseLedger["current"] as? Map<*, *>
+    ?: error("The Android version ledger has no current assignment")
+val releaseVersionCode = (releaseCurrent["versionCode"] as? Number)?.toInt()
+    ?: error("The Android version ledger has no current versionCode")
+val signingEpochs = releaseLedger["signingEpochs"] as? List<*>
+    ?: error("The Android version ledger has no signing epochs")
+fun signerForVersionCode(versionCode: Int): String {
+    val matches = signingEpochs.mapNotNull { rawEpoch ->
+        val epoch = rawEpoch as? Map<*, *> ?: error("Invalid signing epoch in version ledger")
+        val minimum = (epoch["minVersionCode"] as? Number)?.toInt()
+            ?: error("Signing epoch has no minimum versionCode")
+        val maximum = (epoch["maxVersionCode"] as? Number)?.toInt()
+        if (versionCode >= minimum && (maximum == null || versionCode <= maximum)) {
+            epoch["certificateSha256"] as? String
+                ?: error("Signing epoch has no certificate SHA-256")
+        } else null
+    }
+    check(matches.size == 1) { "versionCode $versionCode does not map to exactly one approved signing epoch" }
+    val fingerprint = matches.single().lowercase()
+    check(Regex("^[0-9a-f]{64}$").matches(fingerprint)) { "Signing epoch fingerprint is malformed" }
+    return fingerprint
+}
+val declaredVersionCode = Regex("(?m)^\\s*versionCode\\s*=\\s*(\\d+)\\s*$")
+    .find(file("build.gradle.kts").readText())?.groupValues?.get(1)?.toInt()
+    ?: error("Could not read the module versionCode")
+check(declaredVersionCode == releaseVersionCode) {
+    "Gradle versionCode does not match the reviewed signing epoch ledger"
+}
+val CARPALY_RELEASE_CERT_SHA256 = signerForVersionCode(releaseVersionCode)
 
 fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
     .digest(bytes)
@@ -46,7 +75,7 @@ fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
 
 val verifyCarPalyReleaseSigning by tasks.registering {
     group = "verification"
-    description = "Require the original v1.1.4 Release signing identity before any Release build."
+    description = "Require the reviewed Release signing identity assigned to this versionCode."
     notCompatibleWithConfigurationCache("Reads protected signing inputs only when a Release build is requested.")
     doLast {
         fun requiredSecret(name: String): String = providers.environmentVariable(name).orNull
@@ -72,15 +101,15 @@ val verifyCarPalyReleaseSigning by tasks.registering {
             }
             val actualFingerprint = sha256(certificate.encoded)
             check(actualFingerprint == CARPALY_RELEASE_CERT_SHA256) {
-                "Release keystore does not match the v1.1.4 signing certificate"
+                "Release keystore does not match the reviewed signing epoch for this versionCode"
             }
             val configuredFingerprint = providers.environmentVariable("RELEASE_SIGNING_CERT_SHA256").orNull
                 ?.filter(Char::isLetterOrDigit)
                 ?.lowercase()
             check(configuredFingerprint == null || configuredFingerprint == CARPALY_RELEASE_CERT_SHA256) {
-                "Configured Release certificate pin does not match the fixed v1.1.4 signing identity"
+                "Configured Release certificate pin does not match the reviewed signing epoch"
             }
-            logger.lifecycle("SIGNING_CERTIFICATE_MATCH=PASS (fixed v1.1.4 certificate)")
+            logger.lifecycle("SIGNING_CERTIFICATE_MATCH=PASS (versionCode signing epoch)")
         } catch (_: Exception) {
             error("Release signing identity could not be verified; no Release APK may be produced")
         } finally {
