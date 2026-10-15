@@ -753,10 +753,14 @@ class CarPlayController(
         com.shilapi.xcertplay.glance.CarPlayGlance.onFrame(frame)
         synchronized(playbackStatus) {
             val previousPlaying = playbackStatus.playing
-            playbackStatus.acceptUpdate(frame)?.let { it to (it.playing != previousPlaying) }
-        }?.let { (update, playingChanged) ->
+            playbackStatus.acceptUpdate(frame)?.let { Triple(it, previousPlaying, it.playing != previousPlaying) }
+        }?.let { (update, previousPlaying, playingChanged) ->
             nowPlayingListener?.invoke(update)
-            if (playingChanged) playbackListener?.invoke(update.playing)
+            if (playingChanged) {
+                debugLog("Media playback state=${if (update.playing) "PLAYING" else "PAUSED"} " +
+                    "source=IPHONE_MEDIA_STATUS previous=${if (previousPlaying) "PLAYING" else "PAUSED"}")
+                playbackListener?.invoke(update.playing)
+            }
         }
     }
 

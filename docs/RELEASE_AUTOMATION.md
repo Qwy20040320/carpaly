@@ -104,7 +104,7 @@ This preflight-only mode is the evidence path for the previous mismatch. The pre
 
 GitHub currently marks `v1.1.51` as a formal Release (`prerelease=false`), while the hand-written body says `预发布测试版（Pre-release）` and `测试预发布版`. Suggested replacement wording for owner review:
 
-> **发布渠道：正式版（GitHub `prerelease=false`）。** 此状态仅表示 GitHub Release 元数据，不代表已完成星越 L 实车验收。现有用户反馈曾报告 CarPlay 连接正常、Siri 双向语音正常及方向盘按键有响应，但对应 APK 版本、车型配置和连接方式未记录，且未由维护者独立复现；不据此宣称本 Release 已实车兼容。用户同时反馈音乐约一秒后自动暂停（唤醒 Siri 时可播放）、导航提示无声、顶部原车状态栏仍遮挡。HUD、仪表和燃油接口保持 `NOT_TESTED`。
+> **发布渠道：正式版（GitHub `prerelease=false`）。** 此状态仅表示 GitHub Release 元数据，不代表已完成星越 L 实车验收。现有用户反馈曾报告 CarPlay 连接正常、Siri 双向语音正常及方向盘按键有响应，但对应 APK 版本、车型配置和连接方式未记录，且未由维护者独立复现；不据此宣称本 Release 已实车兼容。历史反馈还提到音乐约一秒后自动暂停（唤醒 Siri 时可播放）、导航提示无声、顶部原车状态栏仍遮挡；后续提供的 V1.1.54 日志未复现音乐暂停现象，因此该项状态为 `HISTORICAL_NOT_REPRODUCED`，不是长期实车通过。HUD、仪表和燃油接口保持 `NOT_TESTED`。
 
 This is a proposal only. The synchronizer preserves this existing unmarked body, and no online Release Notes were changed.
 

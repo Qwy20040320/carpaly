@@ -11,7 +11,8 @@
 - `v1.1.52`: `versionCode=40`, delivered as a local candidate; APK SHA-256 `f5bea98180dadad4fecab77031f7373dc423b59c420bc9b085372b524c7e8c64`, signed by the legacy certificate. Keep this APK unchanged.
 - `v1.1.53`: `versionCode=41`, delivered APK SHA-256 `01212c62442b80f61d9fb9238f868d4f476bf460ededabb99ee038367dc9ed27` in the new signing epoch; GitHub Release exists. This is **fresh-install-only** relative to v1.1.52 or earlier.
 - `v1.1.54`: `versionCode=42`, delivered as a local candidate APK with SHA-256 `f244fff2765881b7f7a1b66b1ed44202ca3356730e11636b210b5267da514d3c`, signed by the new certificate. No public Release exists; actual vehicle installation remains untested.
-- `v1.1.55`: reserved locally as `versionCode=43` in the same signing epoch, based on the V1.1.54 source baseline. It is a local candidate only; no APK or vehicle test is claimed until its build gates pass.
+- `v1.1.55`: `versionCode=43`, recorded as a delivered local candidate with APK SHA-256 `3e62340c45b576a5e83638c4b9e152b86ce78b650a48fc65bedff61e37ed23e1`; vehicle behavior remains unverified.
+- `v1.1.56`: reserved as `versionCode=44` in the existing fresh-install signing epoch. It contains later local settings/diagnostics work; no APK has been built for this source, and the supplied top-level `AGENTS.md` signer rule conflicts with the ledger pending resolution.
 - Future allocations follow the immutable ledger and complete code high-water mark. The later `v1.1.6` allocation must use a version code above every prior observed or delivered code.
 
 ## Signing epochs and installation compatibility

@@ -54,7 +54,10 @@ internal object CrashRecord {
 /** Starts crash capture before an Activity, Receiver, or Service can fail. */
 class CrashRecordInstaller : ContentProvider() {
     override fun onCreate(): Boolean {
-        context?.let(CrashRecord::install)
+        context?.let {
+            CrashRecord.install(it)
+            UnifiedDiagnosticLog.initialize(it)
+        }
         return true
     }
     override fun query(uri: Uri, projection: Array<out String>?, selection: String?,

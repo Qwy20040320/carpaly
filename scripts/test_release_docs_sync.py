@@ -323,14 +323,13 @@ class RenderingTests(unittest.TestCase):
 
     def test_vehicle_feedback_preserves_user_reported_status(self):
         rendered = sync.render_vehicle_feedback(METADATA)
-        self.assertIn("USER_REPORTED_FAIL", str(METADATA["vehicleFeedback"]))
-        self.assertIn("未独立复现", rendered)
+        self.assertIn("HISTORICAL_NOT_REPRODUCED", str(METADATA["vehicleFeedback"]))
+        self.assertIn("历史反馈；本轮未复现", rendered)
         self.assertIn("自动暂停", rendered)
 
     def test_english_vehicle_feedback_does_not_overclaim(self):
         rendered = sync.render_english_vehicle_feedback(METADATA)
-        self.assertIn("User reported fail", rendered)
-        self.assertIn("not independently reproduced", rendered)
+        self.assertIn("Historical report; not reproduced this round", rendered)
         self.assertIn("NOT_TESTED", rendered)
 
     def test_downloads_do_not_advertise_local_candidate(self):

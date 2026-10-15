@@ -3997,6 +3997,7 @@ class CarPlayHostActivity : ComponentActivity() {
             mediaBufferMillis = AirPlayPersistence.loadMediaBufferMillis(this),
             onAudioDiagnostic = { message ->
                 AsyncDiagnosticLog.append(diagnosticLog, message)
+                UnifiedDiagnosticLog.recordLegacy(message)
             },
             onMediaAudioChanged = CarPlayMediaKeys::onMediaAudioChanged,
             callEchoCancellation = AirPlayPersistence.loadCallEchoCancellation(this),
@@ -4062,6 +4063,7 @@ class CarPlayHostActivity : ComponentActivity() {
                         return@runOnUiThread
                     }
                     if (controllerGeneration != restartGeneration || startupRetryStopped) return@runOnUiThread
+                    UnifiedDiagnosticLog.endConnectionSession("AIRPLAY_SESSION_ENDED")
                     startupRetryBudget.disconnected()
                     VideoFrameRateTracker.reset()
                     activeAirPlaySession = null
@@ -4099,6 +4101,7 @@ class CarPlayHostActivity : ComponentActivity() {
                 if (message.startsWith(CarPlayController.CONNECTION_DIAGNOSTIC_PREFIX + " ")) {
                     // Retain old-controller teardown evidence without accepting its UI/session state.
                     AsyncDiagnosticLog.append(diagnosticLog, message)
+                    UnifiedDiagnosticLog.recordLegacy(message)
                     return
                 }
                 runOnUiThread {
@@ -4222,6 +4225,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private fun startCarPlay(size: DisplaySize) {
         if (CarPlayBackgroundSession.hasSession() && !CarPlayBackgroundSession.isOwner(this)) return
         if (shuttingDown.get() || menuOpen || handshakeResetInProgress || controller != null) return
+        UnifiedDiagnosticLog.beginConnectionSession()
         val controllerGeneration = restartGeneration
         val config = createRuntimeConfig()
         val effectiveSize = if (isMultiWindowActive() && !AirPlayPersistence.loadAdaptPipResolution(this) &&
@@ -5090,10 +5094,12 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private fun appendLog(message: String) {
         AsyncDiagnosticLog.append(sessionLog, message)
+        UnifiedDiagnosticLog.recordLegacy(message)
     }
 
     private fun appendFileLog(message: String) {
         AsyncDiagnosticLog.append(sessionLog, message)
+        UnifiedDiagnosticLog.recordLegacy(message)
     }
 
     private fun initializeSessionLog() {
@@ -5107,6 +5113,10 @@ class CarPlayHostActivity : ComponentActivity() {
             )
         }
         sessionLog = activeLog
+        UnifiedDiagnosticLog.record(
+            level = "INFO", module = "SESSION", event = "HOST_LOG_INITIALIZED", result = "READY",
+            state = "ACTIVE", detail = "pid=${Process.myPid()} app private session log initialized",
+        )
     }
 
     private fun refreshLogView(nowMillis: Long) {

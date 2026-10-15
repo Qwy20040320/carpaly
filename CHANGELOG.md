@@ -15,8 +15,8 @@ Latest formal Release: [v1.1.53](https://github.com/Qwy20040320/carpaly/releases
 
 ## Local Candidate (Not Published)
 
-`v1.1.55` / versionCode `43` — local-only metadata; no GitHub tag, Release, or download link.
-v1.1.55/code 43 是本地 Release 候选，基于已构建的 V1.1.54 源码基线。本轮分析 V1.1.54 车机日志后，仅将 OPUS 输出能力声明改为依赖 Android 解码器探测；音乐自动暂停与顶部状态栏问题未能由本轮日志确认根因。V1.1.55 尚未实车回归，不能据此宣称 CarPlay 功能已修复或通过。
+`v1.1.56` / versionCode `44` — local-only metadata; no GitHub tag, Release, or download link.
+v1.1.56/code 44 是本地候选，包含设置页整合及统一结构化诊断日志增强；本轮尚未生成 APK。音乐自动暂停仍为历史问题，本轮没有修改音频状态机。实车功能均未测试；签名身份需先解决顶层 AGENTS 要求与版本台账签名代际之间的冲突。
 
 Vehicle validation is separate from software release status. See the root README; user feedback is labeled and unverified features remain NOT_TESTED.
 <!-- CARPALY:CHANGELOG:END -->
