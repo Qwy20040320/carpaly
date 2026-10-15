@@ -1,13 +1,14 @@
 <!-- CARPALY:CHANGELOG:START -->
 # CarPaly release history (automatically synchronized)
 
-Latest formal Release: [v1.1.54](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.54) (2026-10-15). APK metadata proof: `NOT_VERIFIED`.
+Latest formal Release: [v1.1.56](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.56) (2026-10-15). APK metadata proof: `NOT_VERIFIED`.
 Release state wording conflict: GitHub marks this as formal while the hand-written notes still say pre-release; original notes are preserved.
 
 ## Published Releases
 
 | Tag | Channel | Published | APK assets | Source commit |
 | --- | --- | --- | --- | --- |
+| [v1.1.56](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.56) | Formal | 2026-10-15 | `CarPaly-XingyueL-v1.1.56.apk` | `6b206c9e6944255a159424522017dca984423e67` |
 | [v1.1.54](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.54) | Formal | 2026-10-15 | `CarPaly-XingyueL-v1.1.54.apk` | `e3eca1dc5145cd293815d8f176d5c3812169271a` |
 | [v1.1.53](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.53) | Formal | 2026-10-14 | `CarPaly-XingyueL-v1.1.53.apk` | `64703e7dced85b81963a85b8b3ff12a7efc56448` |
 | [v1.1.52](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.52) | Formal | 2026-10-13 | `CarPaly-XingyueL-v1.1.52.apk` | `64703e7dced85b81963a85b8b3ff12a7efc56448` |
