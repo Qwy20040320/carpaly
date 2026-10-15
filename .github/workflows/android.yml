@@ -64,7 +64,7 @@ jobs:
             scripts.test_ota_key_preflight \
             scripts.test_ci_rebuild \
             scripts.test_verify_ci_rebuild_apk
-          python3 scripts/android_versioning.py check
+          python3 scripts/android_versioning.py check-ci
           python3 scripts/check_project_docs.py
           python3 scripts/release_intent.py \
             --commit "$GITHUB_SHA" --event pull_request --branch feature \
@@ -308,6 +308,8 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Enforce Release version high-water mark before credentials are used
+        run: python3 scripts/android_versioning.py check
       # The publisher creates a tag only after CI and exact protected-main authorization pass.
       - name: Confirm release tag is contained in main
         env:

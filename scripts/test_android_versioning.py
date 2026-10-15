@@ -8,6 +8,8 @@ from pathlib import Path
 from scripts.android_versioning import (
     allocate,
     check_project,
+    check_ci_project,
+    historical_versions,
     next_test_name,
     parse_gradle_version,
     parse_version_tuple,
@@ -41,9 +43,9 @@ class AndroidVersioningTests(unittest.TestCase):
         self.assertEqual((1, 1, 51), parse_version_tuple("1.1.51"))
         self.assertIsNone(parse_version_tuple("v1.1.51"))
 
-    def test_repository_reservation_matches_monotonic_project_version(self):
+    def test_repository_reservation_matches_project_version(self):
         root = Path(__file__).resolve().parents[1]
-        version = check_project(root)
+        version = check_ci_project(root)
         ledger = json.loads((root / "config/android-version-ledger.json").read_text(encoding="utf-8"))
         current = ledger["current"]
         self.assertEqual(current["versionName"], version.version_name)
@@ -64,6 +66,17 @@ class AndroidVersioningTests(unittest.TestCase):
         }
         self.assertEqual(("1.1.4", 36), history["v1.1.4"])
         self.assertEqual(("1.1.5", 37), history["v1.1.5"])
+
+    def test_release_check_enforces_high_water_but_ci_check_accepts_existing_baseline(self):
+        root = Path(__file__).resolve().parents[1]
+        version = check_ci_project(root)
+        previous = historical_versions(root, version)
+        highest_previous = max((item.version_code for item in previous), default=0)
+        if version.version_code <= highest_previous:
+            with self.assertRaisesRegex(ValueError, "must exceed all previous known values"):
+                check_project(root)
+        else:
+            self.assertEqual(version, check_project(root))
 
     def test_next_version_is_blocked_until_current_release_artifact_is_recorded(self):
         ledger = {
