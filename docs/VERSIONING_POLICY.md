@@ -18,6 +18,8 @@
 
 Version code 38 was observed in a local historical build and must not be reused. The complete observed high-water mark is 45. v1.1.55 remains source-unverified even though a local APK record exists; do not infer its source from its version label. Do not fabricate or retarget the v1.1.53 historical tag mapping.
 
+The planned label `v1.1.6` is not currently allocated or released. Any future allocation must use the canonical user APK filename `CarPaly-XingyueL-v{versionName}.apk`, remain above the full version-code high-water mark, and pass the release gates; the label alone does not assert a release.
+
 ## Signing epochs and upgrade boundary
 
 Codes 36–40 use signer `4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90`. Code 41 onward uses signer `d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e`. No Android signing lineage between those certificates is verified: code 40 to 41 cannot be claimed as an in-place update. Code 42 to 45 have same-signer/increasing-code prerequisites within the d9 epoch; actual device installation and data preservation still require device evidence.
