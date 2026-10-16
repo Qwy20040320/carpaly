@@ -14,6 +14,7 @@ from typing import Any
 from unittest.mock import patch
 
 from scripts import sync_release_docs as sync
+from scripts.android_versioning import signer_for_version
 from scripts.validate_release_metadata import validate_metadata
 
 
@@ -21,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 METADATA = json.loads((ROOT / "config/release-documentation.json").read_text(encoding="utf-8"))
 LEDGER = json.loads((ROOT / "config/android-version-ledger.json").read_text(encoding="utf-8"))
 REPO = "Qwy20040320/carpaly"
-SIGNER = LEDGER["releaseCertificateSha256"]
+SIGNER = signer_for_version(LEDGER, "1.1.51", 39)
 APK_SHA = "a" * 64
 COMMIT = "b" * 40
 SECRET = "token-value-must-not-be-logged"
@@ -299,6 +300,13 @@ class RenderingTests(unittest.TestCase):
         self.assertIn("CarPaly-XingyueL-1.1.51.apk", rendered)
         self.assertIn(APK_SHA, rendered)
 
+    def test_summary_never_links_an_unverified_apk_attachment(self):
+        release = make_release("v1.1.52", body="Pre-release Beta")
+        records = sync._released_records([release], [], REPO, LEDGER, {})
+        rendered = sync.render_release_summary(records)
+        self.assertIn("APK 附件（未验证，不提供链接）", rendered)
+        self.assertNotIn(release["assets"][0]["browser_download_url"], rendered)
+
     def test_prerelease_label_is_explicit(self):
         release = make_release("v1.1.5", prerelease=True)
         records = sync._released_records([release], [], REPO, LEDGER, {})
@@ -310,24 +318,48 @@ class RenderingTests(unittest.TestCase):
         self.assertNotIn("releases/download", rendered)
 
     def test_candidate_tag_without_release_is_not_called_published(self):
-        rendered = sync.render_candidate(METADATA, LEDGER, set(), {"v1.1.52"})
+        tag = f"v{METADATA['candidate']['versionName']}"
+        rendered = sync.render_candidate(METADATA, LEDGER, set(), {tag})
         self.assertIn("Git 标签已存在", rendered)
         self.assertNotIn("已存在 GitHub Release", rendered)
 
     def test_public_candidate_tag_is_not_rendered_as_local(self):
-        rendered = sync.render_candidate(METADATA, LEDGER, {"v1.1.52"}, {"v1.1.52"})
+        tag = f"v{METADATA['candidate']['versionName']}"
+        rendered = sync.render_candidate(METADATA, LEDGER, {tag}, {tag})
         self.assertIn("已存在 GitHub Release", rendered)
+
+    def test_published_candidate_reports_live_channel_and_note_conflict(self):
+        candidate_tag = f"v{METADATA['candidate']['versionName']}"
+        release = make_release(candidate_tag, body="Beta pre-release testing build")
+        records = sync._released_records([release], [], REPO, LEDGER, {})
+        rendered = sync.render_candidate(METADATA, LEDGER, {candidate_tag}, {candidate_tag}, records)
+        self.assertIn("已由 GitHub 标记为已发布（正式版）", rendered)
+        self.assertIn("NOT_VERIFIED", rendered)
+        self.assertIn("状态不一致", rendered)
+        self.assertNotIn("尚无公开标签或 Release", rendered)
+
+    def test_published_candidate_is_not_described_as_local_in_downloads(self):
+        candidate_tag = f"v{METADATA['candidate']['versionName']}"
+        release = make_release(candidate_tag, body="Beta pre-release testing build")
+        candidate = sync._released_records([release], [], REPO, LEDGER, {})[0]
+        records = self._records() + [candidate]
+        zh = sync.render_downloads(records, METADATA, LEDGER)
+        en = sync.render_english_downloads(records, METADATA, LEDGER)
+        self.assertIn("已在 GitHub 发布（正式版）", zh)
+        self.assertIn("NOT_VERIFIED", zh)
+        self.assertNotIn("v1.1.52 / versionCode 40，尚未公开发布", zh)
+        self.assertIn("already published as a formal Release", en)
+        self.assertIn("conflict with GitHub channel metadata", en)
 
     def test_vehicle_feedback_preserves_user_reported_status(self):
         rendered = sync.render_vehicle_feedback(METADATA)
-        self.assertIn("USER_REPORTED_FAIL", str(METADATA["vehicleFeedback"]))
-        self.assertIn("未独立复现", rendered)
+        self.assertIn("HISTORICAL_NOT_REPRODUCED", str(METADATA["vehicleFeedback"]))
+        self.assertIn("历史反馈；本轮未复现", rendered)
         self.assertIn("自动暂停", rendered)
 
     def test_english_vehicle_feedback_does_not_overclaim(self):
         rendered = sync.render_english_vehicle_feedback(METADATA)
-        self.assertIn("User reported fail", rendered)
-        self.assertIn("not independently reproduced", rendered)
+        self.assertIn("Historical report; not reproduced this round", rendered)
         self.assertIn("NOT_TESTED", rendered)
 
     def test_downloads_do_not_advertise_local_candidate(self):
@@ -341,6 +373,15 @@ class RenderingTests(unittest.TestCase):
         self.assertIn("v1.1.51", rendered)
         self.assertIn("Local Candidate (Not Published)", rendered)
         self.assertIn("NOT_TESTED", rendered)
+
+    def test_changelog_does_not_call_published_candidate_unpublished(self):
+        candidate_tag = f"v{METADATA['candidate']['versionName']}"
+        release = make_release(candidate_tag, body="Pre-release Beta")
+        candidate = sync._released_records([release], [], REPO, LEDGER, {})[0]
+        rendered = sync.render_changelog(self._records() + [candidate], METADATA, LEDGER)
+        self.assertIn("Recorded Candidate Allocation (GitHub Release Exists)", rendered)
+        self.assertIn("GitHub reports a published Formal Release", rendered)
+        self.assertNotIn("no GitHub tag, Release, or download link", rendered)
 
     def test_release_notes_managed_block_contains_only_verified_artifact_facts(self):
         record = self._records()[0]

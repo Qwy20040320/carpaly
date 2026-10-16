@@ -11,6 +11,22 @@ import java.util.concurrent.atomic.AtomicInteger
 
 enum class AudioCodecKind { AAC_LC, OPUS, LPCM }
 
+/** Audio stream log summaries deliberately contain metadata only, never packet or PCM bytes. */
+internal object AudioStreamDiagnosticMessages {
+    fun decryptFailure(streamType: Int, packetNumber: Int, wireBytes: Int, errorType: String): String =
+        "audio stream type=$streamType first decrypt failure packet=$packetNumber " +
+            "wireBytes=$wireBytes error=$errorType"
+
+    fun decryptedPacket(
+        streamType: Int,
+        packetNumber: Int,
+        sample: Int,
+        wireBytes: Int,
+        payloadBytes: Int,
+    ): String = "audio stream type=$streamType packet=$packetNumber sample=$sample " +
+        "wireBytes=$wireBytes payloadBytes=$payloadBytes"
+}
+
 data class AudioFormat(
     val codec: AudioCodecKind,
     val sampleRate: Int,
@@ -135,9 +151,12 @@ class AudioStream(
                     if (failureNumber == 1) {
                         android.util.Log.w(
                             TAG,
-                            "audio stream type=$streamType first decrypt failure " +
-                                "wire=${wire.toHexString()}",
-                            error,
+                            AudioStreamDiagnosticMessages.decryptFailure(
+                                streamType = streamType,
+                                packetNumber = failureNumber,
+                                wireBytes = wire.size,
+                                errorType = error.javaClass.simpleName,
+                            ),
                         )
                     }
                     listener.onPacket(wire, null, sample, error)
@@ -149,9 +168,13 @@ class AudioStream(
                 if (decryptedNumber <= FIRST_PACKET_LOG_COUNT) {
                     android.util.Log.i(
                         TAG,
-                        "audio stream type=$streamType packet=$decryptedNumber sample=$sample " +
-                            "wireBytes=${wire.size} payloadBytes=${payload.size} " +
-                            "payloadHead=${payload.copyOf(minOf(payload.size, 16)).toHexString()}",
+                        AudioStreamDiagnosticMessages.decryptedPacket(
+                            streamType = streamType,
+                            packetNumber = decryptedNumber,
+                            sample = sample,
+                            wireBytes = wire.size,
+                            payloadBytes = payload.size,
+                        ),
                     )
                 } else if (decryptedNumber % PACKET_LOG_INTERVAL == 0) {
                     android.util.Log.i(
@@ -194,9 +217,6 @@ class AudioStream(
             ((source[offset + 1].toInt() and 0xff) shl 16) or
             ((source[offset + 2].toInt() and 0xff) shl 8) or
             (source[offset + 3].toInt() and 0xff)
-
-    private fun ByteArray.toHexString(): String =
-        joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
 
     private companion object {
         const val TAG = "xcertplay-usb"

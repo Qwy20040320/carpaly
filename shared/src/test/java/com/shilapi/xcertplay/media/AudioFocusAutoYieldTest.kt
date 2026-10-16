@@ -37,22 +37,75 @@ class AudioFocusAutoYieldTest {
         VolumeTrackingAudioTrack.volumes.clear()
     }
 
-    @Test fun transientLossMutesOnlyMediaAndGainPreservesUserStreamVolume() {
+    @Test fun navigationDucksLocalMediaAndFocusGainPreservesNavigationDuckAndUserVolume() {
         val coordinator = coordinator()
         val media = track(); val phone = track(); val assistant = track(); val navigation = track()
         coordinator.acquire(media, AudioChannel.MEDIA, attributes)
         coordinator.acquire(phone, AudioChannel.PHONE, attributes)
         coordinator.acquire(assistant, AudioChannel.ASSISTANT, attributes)
         coordinator.acquire(navigation, AudioChannel.NAVIGATION, attributes)
+        assertTrue(volumes(media).isEmpty())
+        coordinator.setNavigationPlayback(navigation, true)
+        assertEquals(listOf(0.2f), volumes(media))
         manager.setStreamVolume(AudioManager.STREAM_MUSIC, 3, 0)
         val userVolume = manager.getStreamVolume(AudioManager.STREAM_MUSIC)
         coordinator.listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT)
-        assertEquals(listOf(0f), volumes(media))
+        assertEquals(listOf(0.2f, 0f), volumes(media))
         coordinator.listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_GAIN)
-        assertEquals(listOf(0f, 1f), volumes(media))
+        assertEquals(listOf(0.2f, 0f, 0.2f), volumes(media))
         assertTrue(volumes(phone).isEmpty())
         assertTrue(volumes(assistant).isEmpty())
         assertTrue(volumes(navigation).isEmpty())
+        assertEquals(userVolume, manager.getStreamVolume(AudioManager.STREAM_MUSIC))
+        coordinator.setNavigationPlayback(navigation, false)
+        assertEquals(listOf(0.2f, 0f, 0.2f, 1f), volumes(media))
+    }
+
+    @Test fun navigationDuckingStillWorksWhenSystemFocusYieldIsDisabled() {
+        val coordinator = coordinator(enabled = false)
+        val media = track(); val navigation = track()
+        coordinator.acquire(media, AudioChannel.MEDIA, attributes)
+        coordinator.acquire(navigation, AudioChannel.NAVIGATION, attributes)
+
+        coordinator.setNavigationPlayback(navigation, true)
+
+        assertEquals(listOf(0.2f), volumes(media))
+        assertTrue(volumes(navigation).isEmpty())
+        coordinator.setNavigationPlayback(navigation, false)
+        assertEquals(listOf(0.2f, 1f), volumes(media))
+    }
+
+    @Test fun multipleNavigationTracksKeepMediaDuckedUntilTheLastTrackStops() {
+        val coordinator = coordinator(enabled = false)
+        val media = track(); val firstNavigation = track(); val secondNavigation = track()
+        coordinator.acquire(media, AudioChannel.MEDIA, attributes)
+        coordinator.acquire(firstNavigation, AudioChannel.NAVIGATION, attributes)
+        coordinator.acquire(secondNavigation, AudioChannel.NAVIGATION, attributes)
+
+        coordinator.setNavigationPlayback(firstNavigation, true)
+        coordinator.setNavigationPlayback(secondNavigation, true)
+        coordinator.setNavigationPlayback(firstNavigation, false)
+
+        assertEquals(listOf(0.2f), volumes(media))
+        coordinator.setNavigationPlayback(secondNavigation, false)
+        assertEquals(listOf(0.2f, 1f), volumes(media))
+        // Duplicate playback notifications are idempotent and cannot create gain oscillation.
+        coordinator.setNavigationPlayback(secondNavigation, false)
+        assertEquals(listOf(0.2f, 1f), volumes(media))
+    }
+
+    @Test fun releasingAnActiveNavigationTrackRestoresMediaWithoutTouchingSystemVolume() {
+        val coordinator = coordinator(enabled = false)
+        val media = track(); val navigation = track()
+        coordinator.acquire(media, AudioChannel.MEDIA, attributes)
+        coordinator.acquire(navigation, AudioChannel.NAVIGATION, attributes)
+        coordinator.setNavigationPlayback(navigation, true)
+        manager.setStreamVolume(AudioManager.STREAM_MUSIC, 4, 0)
+        val userVolume = manager.getStreamVolume(AudioManager.STREAM_MUSIC)
+
+        coordinator.release(navigation)
+
+        assertEquals(listOf(0.2f, 1f), volumes(media))
         assertEquals(userVolume, manager.getStreamVolume(AudioManager.STREAM_MUSIC))
     }
 

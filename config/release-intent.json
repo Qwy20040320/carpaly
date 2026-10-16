@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "enabled": false,
   "channel": "beta",
-  "versionName": "1.1.52",
-  "versionCode": 40,
-  "reason": "Disabled baseline; a reviewed main-branch change must explicitly arm a future release."
+  "versionName": "1.1.53",
+  "versionCode": 41,
+  "reason": "Disabled baseline; V1.1.53 is a local development candidate and no release is authorized. A reviewed main-branch change must explicitly arm a future release."
 }

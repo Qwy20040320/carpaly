@@ -16,10 +16,16 @@ else:
     import ota_manifest
 
 
-SIGNER = "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90"
+SIGNER = "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e"
+LEGACY_SIGNER = "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90"
 REPO = "Qwy20040320/carpaly"
 APK_HASH = "a" * 64
 KEY_ID = "test-ota-key"
+
+
+def signer_for_test_version(version_code: int) -> str:
+    """Match synthetic Release proofs to the repository's reviewed signer epochs."""
+    return LEGACY_SIGNER if version_code <= 40 else SIGNER
 
 
 def make_release(version: str, code: int, *, prerelease: bool = False, draft: bool = False):
@@ -59,7 +65,7 @@ def make_release(version: str, code: int, *, prerelease: bool = False, draft: bo
         "versionName": version,
         "versionCode": code,
         "packageName": "com.shihab.diplay.hudtest",
-        "signerCertificateSha256": SIGNER,
+        "signerCertificateSha256": signer_for_test_version(code),
         "apkSha256": APK_HASH,
         "checks": checks,
     }
@@ -99,10 +105,7 @@ class SignedManifestTests(unittest.TestCase):
             "minimumSupportedVersionCode": 36,
             "maximumApkBytes": 52_428_800,
         }
-        cls.ledger = {
-            "applicationId": "com.shihab.diplay.hudtest",
-            "releaseCertificateSha256": SIGNER,
-        }
+        cls.ledger = json.loads(ota_manifest.LEDGER_PATH.read_text(encoding="utf-8"))
 
     def test_signed_envelope_round_trips_and_detects_tampering(self):
         payload = {"schemaVersion": 1, "manifestKeyId": KEY_ID, "channel": "stable", "versionCode": 40}

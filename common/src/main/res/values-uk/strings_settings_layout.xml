@@ -37,4 +37,7 @@
     <string name="settings_choose_iphone_title">Виберіть iPhone</string>
     <string name="settings_choose_iphone_description">Для бездротового CarPlay потрібен спарений iPhone.</string>
     <string name="settings_choose_iphone_action">Вибрати iPhone</string>
+    <string name="settings_geely_capability_diagnostics">Перевірка можливостей GEELY</string>
+    <string name="settings_geely_capability_diagnostics_summary">Лише спостереження за можливостями й дозволами без запису. Інтерфейси OEM не викликаються, функції авто не підтверджені.</string>
+    <string name="settings_geely_refresh_capabilities">Оновити стан можливостей</string>
 </resources>

@@ -13,6 +13,7 @@ class AirPlayInfoPlistTest {
             deviceName = "test", deviceId = "02:00:00:00:00:02", btMac = "02:00:00:00:00:02",
             sourceVersion = "366.0",
             main = AirPlayDisplayConfig(widthPixels = 1280, heightPixels = 720),
+            audioOutputOpus = true,
             cluster = AirPlayDisplayConfig(widthPixels = 960, heightPixels = 360),
         )
         val displays = AirPlayInfoPlist.build(config)["displays"] as List<*>
@@ -240,13 +241,45 @@ class AirPlayInfoPlistTest {
                 .map { it as Map<*, *> }
                 .single { it["audioType"] == "speechRecognition" }["audioInputFormats"],
         )
-        // Output is untouched: the Opus decoder exists from API 21, only the encoder is missing.
+        // Disabling the microphone encoder does not affect a separately confirmed playback decoder.
         assertEquals(
             telephony(AirPlayInfoPlist.build(base.copy(microphone = true)))["audioOutputFormats"],
             telephony(withoutOpus)["audioOutputFormats"],
         )
         assertFalse(telephony(AirPlayInfoPlist.build(base.copy(microphoneOpus = false)))
             .containsKey("audioInputFormats"))
+    }
+
+    @Test
+    fun unsupportedOpusDecoderIsNotAdvertisedForCarAudioOutput() {
+        val base = AirPlayConfig(
+            deviceName = "test",
+            deviceId = "02:00:00:00:00:02",
+            btMac = "02:00:00:00:00:02",
+            sourceVersion = "366.0",
+            main = AirPlayDisplayConfig(widthPixels = 1280, heightPixels = 720),
+            microphone = true,
+            microphoneOpus = true,
+            audioOutputOpus = false,
+        )
+        val info = AirPlayInfoPlist.build(base)
+        val formats = (info["audioFormats"] as List<*>).map { it as Map<*, *> }
+        val outputOpusMask = 0x70000000
+
+        formats.filter { it["audioType"] in setOf("default", "alert", "telephony", "speechRecognition") }
+            .forEach { format ->
+                assertEquals(0, (format["audioOutputFormats"] as Int) and outputOpusMask)
+            }
+        // Input Opus is a separate encoder capability and remains available for the microphone.
+        assertEquals(
+            0x70004154,
+            formats.single { it["type"] == 100 && it["audioType"] == "default" }["audioInputFormats"],
+        )
+        assertEquals(
+            0x70004154,
+            formats.single { it["audioType"] == "telephony" }["audioInputFormats"],
+        )
+        assertEquals(0x800000, formats.single { it["type"] == 102 }["audioOutputFormats"])
     }
 
     @Test

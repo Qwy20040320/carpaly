@@ -55,5 +55,13 @@ class SettingsLayoutPolicyTest {
             SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.DIAGNOSTICS))
         assertFalse(SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.VEHICLE)
             .contains(SettingsSection.DIAGNOSTICS))
+        assertTrue(SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.ABOUT)
+            .contains(SettingsSection.APP_UPDATES))
+    }
+
+    @Test fun legacyStandaloneUpdateRouteRestoresToAbout() {
+        assertEquals(SettingsCategory.ABOUT, SettingsCategory.restore("APP_UPDATES"))
+        assertEquals(SettingsCategory.DISPLAY, SettingsCategory.restore("DISPLAY"))
+        assertEquals(null, SettingsCategory.restore("removed-or-unknown"))
     }
 }

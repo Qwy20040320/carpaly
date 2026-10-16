@@ -26,6 +26,14 @@ OLD_DELIVERY_SCRIPTS = (
     ROOT / "scripts/build-upgrade-apk.ps1",
     ROOT / "scripts/verify-upgrade-apk.ps1",
 )
+LOCAL_RELEASE_DOCS = (
+    ROOT / "docs/LOCAL_RELEASE_GUIDE.md",
+    ROOT / "docs/GITHUB_AUTO_MERGE_GUIDE.md",
+    ROOT / "docs/GITHUB_DRAFT_WORKFLOW.md",
+    ROOT / "docs/RELEASE_SIGNING_GUIDE.md",
+    ROOT / "docs/RELEASE_TROUBLESHOOTING.md",
+    ROOT / "docs/RELEASE_AUTOMATION_ARCHITECTURE.md",
+)
 
 
 def check() -> list[str]:
@@ -53,6 +61,11 @@ def check() -> list[str]:
         errors.append("Delivered APK artifacts must be immutable")
     if not RELEASE_BUILDER.is_file() or not RELEASE_VERIFIER.is_file():
         errors.append("Canonical Release APK build and verification scripts must both exist")
+    if not (ROOT / "build-release.ps1").is_file() or not (ROOT / "scripts/ReleaseSystem.Core.psm1").is_file():
+        errors.append("The Windows Release orchestrator and its core module must both exist")
+    for path in LOCAL_RELEASE_DOCS:
+        if not path.is_file():
+            errors.append(f"Missing local Release system guide: {path.relative_to(ROOT).as_posix()}")
     for path in OLD_DELIVERY_SCRIPTS:
         if path.exists():
             errors.append(f"Obsolete Upgrade-Test delivery script remains: {path.relative_to(ROOT).as_posix()}")
@@ -102,6 +115,8 @@ def check() -> list[str]:
     signing_policy = SIGNING_POLICY.read_text(encoding="utf-8")
     if "no Debug APKs" not in signing_policy and "must not upload Debug APKs" not in signing_policy:
         errors.append("Release signing policy must forbid Debug APK delivery artifacts")
+    if "signingEpochs" not in signing_policy or "41+" not in signing_policy:
+        errors.append("Release signing policy must document version-code signing epochs")
 
     return errors
 

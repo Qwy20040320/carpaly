@@ -13,7 +13,18 @@ internal object AsyncDiagnosticLog {
         if (target == null) return
         val safe = DiagnosticRedactor.redact(message) ?: return
         val timestamp = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date(nowMillis))
-        runCatching { writer.enqueue(Entry(target, "$timestamp  $safe")) }
+        enqueue(target, "$timestamp  $safe")
+    }
+
+    /** Appends an already timestamped structured event through the same bounded background queue. */
+    internal fun appendStructured(target: SessionLogFile?, line: String) {
+        if (target == null) return
+        val safe = DiagnosticRedactor.redact(line) ?: return
+        enqueue(target, safe)
+    }
+
+    private fun enqueue(target: SessionLogFile, line: String) {
+        runCatching { writer.enqueue(Entry(target, line)) }
     }
 
     internal fun awaitIdle(timeoutMillis: Long): Boolean = writer.awaitIdle(timeoutMillis)

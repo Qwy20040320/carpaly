@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "repository": "Qwy20040320/carpaly",
   "applicationId": "com.shihab.diplay.hudtest",
-  "releaseSignerCertificateSha256": "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90",
+  "releaseSignerCertificateSha256": "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e",
   "minimumSupportedVersionCode": 36,
   "maximumApkBytes": 52428800,
   "manifestSignature": {

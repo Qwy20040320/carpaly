@@ -24,10 +24,37 @@ import java.io.File
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], qualifiers = "en", shadows = [FileProviderPathTestShadow::class])
 class DiagnosticExportUiTest {
+    @Test fun diagnosticsPageRetainsItsSingleCombinedExportAndOriginalControls() {
+        val controller = Robolectric.buildActivity(DiPlayActivity::class.java).setup()
+        val activity = controller.get()
+        try {
+            ReflectionHelpers.setField(activity, "page", "settings")
+            ReflectionHelpers.setField(activity, "settingsCategory", SettingsCategory.DIAGNOSTICS)
+            ReflectionHelpers.callInstanceMethod<Unit>(activity, "render")
+            shadowOf(Looper.getMainLooper()).idle()
+
+            val visibleText = descendants(activity.window.decorView).filterIsInstance<TextView>()
+                .map { it.text.toString() }.toList()
+            assertTrue(visibleText.contains(activity.getString(R.string.diagnostics)))
+            assertEquals(1, visibleText.count { it == activity.getString(R.string.save_diagnostic_report) })
+            assertEquals(1, visibleText.count { it == activity.getString(R.string.choose_save_location) })
+            assertEquals(1, visibleText.count { it == activity.getString(R.string.settings_geely_refresh_capabilities) })
+            assertFalse(visibleText.any { it.contains("export USB", ignoreCase = true) })
+            assertFalse(visibleText.any { it.contains("export audio", ignoreCase = true) })
+            assertFalse(visibleText.any { it.contains("export video", ignoreCase = true) })
+        } finally {
+            controller.pause().stop().destroy()
+        }
+    }
+
     @Test fun missingPickerSavesAReportAndProvidesSelectableTextInsideDiPlay() {
         val controller = Robolectric.buildActivity(DiPlayActivity::class.java).setup()
         val activity = controller.get()
         val context = activity.applicationContext
+        File(context.filesDir, "logs/app-runtime.log").apply {
+            parentFile!!.mkdirs()
+            writeText("ts=2026-10-15T09:10:11.123+0800 level=INFO module=APP event=TEST_EXPORT_MARKER\n")
+        }
         val authority = "${context.packageName}.diagnostic-reports"
         val info = context.packageManager.resolveContentProvider(authority, PackageManager.GET_META_DATA)!!
         ShadowContentResolver.registerProviderInternal(authority, DiagnosticReportProvider().apply { attachInfo(context, info) })
@@ -53,6 +80,8 @@ class DiagnosticExportUiTest {
             assertTrue(descendants(saved.window!!.decorView).filterIsInstance<TextView>()
                 .any { it.text.contains(file.absolutePath) })
             assertTrue(file.readText().contains("Android 9 / API 28"))
+            assertTrue(file.readText().contains("--- app-runtime.log ---"))
+            assertTrue(file.readText().contains("TEST_EXPORT_MARKER"))
             saved.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick()
             shadowOf(Looper.getMainLooper()).idle()
             val viewer = ShadowAlertDialog.getLatestAlertDialog()

@@ -37,4 +37,7 @@
     <string name="settings_choose_iphone_title">Выберите iPhone</string>
     <string name="settings_choose_iphone_description">Для беспроводного CarPlay нужен сопряжённый iPhone.</string>
     <string name="settings_choose_iphone_action">Выбрать iPhone</string>
+    <string name="settings_geely_capability_diagnostics">Проверка возможностей GEELY</string>
+    <string name="settings_geely_capability_diagnostics_summary">Только наблюдение возможностей и разрешений без записи. Интерфейсы OEM не вызываются, функции автомобиля не подтверждены.</string>
+    <string name="settings_geely_refresh_capabilities">Обновить состояние возможностей</string>
 </resources>

@@ -63,7 +63,7 @@ class RemoteMfiAuthenticationClientTest {
             val body = exchange.requestBody.readText()
             signRequests += body
             if (signRequests.size == 1) {
-                Thread.sleep(200)
+                Thread.sleep(1_000)
             }
             exchange.respond(
                 200,
@@ -74,7 +74,7 @@ class RemoteMfiAuthenticationClientTest {
         val client = RemoteMfiAuthenticationClient(
             serverAddress = serverAddress(),
             token = "test-token",
-            readTimeoutMillis = 50,
+            readTimeoutMillis = 500,
         )
         client.reset()
         assertEquals(3, client.protocolMajor())
