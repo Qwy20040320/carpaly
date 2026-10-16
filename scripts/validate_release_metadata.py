@@ -25,6 +25,7 @@ VEHICLE_STATES = {
     "USER_REPORTED_PASS",
     "USER_REPORTED_FAIL",
     "USER_REPORTED_ISSUE",
+    "HISTORICAL_NOT_REPRODUCED",
 }
 
 
@@ -71,8 +72,8 @@ def validate_metadata(root: Path = ROOT) -> list[str]:
 
     candidate = metadata.get("candidate", {})
     current = ledger.get("current", {})
-    if candidate.get("status") != "ledger_allocation":
-        errors.append("candidate.status must identify the ledger allocation; public Release state comes from GitHub")
+    if candidate.get("status") != "local_candidate":
+        errors.append("candidate.status must remain local_candidate until an actual GitHub Release exists")
     if candidate.get("versionName") != current.get("versionName"):
         errors.append("candidate.versionName must match the current version ledger entry")
     allocation = next(
@@ -81,15 +82,20 @@ def validate_metadata(root: Path = ROOT) -> list[str]:
             for item in ledger.get("allocations", [])
             if item.get("versionName") == candidate.get("versionName")
             and item.get("versionCode") == current.get("versionCode")
+            and item.get("channel") == current.get("channel")
         ),
         None,
     )
     if allocation is None:
         errors.append("candidate version must have an immutable versionCode allocation")
-    elif allocation.get("status") != "delivered" or not SHA256.fullmatch(
-        str(allocation.get("artifactSha256", "")).lower()
-    ):
-        errors.append("ledger allocation must have delivered status and an artifact SHA-256")
+    elif allocation.get("status") == "reserved":
+        if allocation.get("artifactSha256") is not None:
+            errors.append("reserved candidate must not claim an artifact SHA-256")
+    elif allocation.get("status") == "delivered":
+        if not SHA256.fullmatch(str(allocation.get("artifactSha256", "")).lower()):
+            errors.append("delivered candidate must have a verified artifact SHA-256")
+    else:
+        errors.append("candidate allocation must be reserved or have a verified delivered artifact")
     if current.get("channel") != "test":
         errors.append("this metadata candidate must not be marked as a stable release")
     if candidate.get("vehicleStatus") != "NOT_TESTED":

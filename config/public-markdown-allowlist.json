@@ -48,6 +48,14 @@
     "docs/geely/v1.1.51/HUD_CLUSTER_INTEGRATION.md",
     "docs/geely/v1.1.51/SEVEN_APK_INTERFACE_COMPARISON.md",
     "docs/geely/v1.1.51/STEERING_WHEEL_API.md",
-    "docs/geely/v1.1.51/VEHICLE_SENSOR_API.md"
+    "docs/geely/v1.1.51/VEHICLE_SENSOR_API.md",
+    "docs/v1.1.57/V1157_BUILD_REPORT.md",
+    "docs/v1.1.57/V1157_FIX_REPORT.md",
+    "docs/v1.1.57/V1157_LOG_ROOT_CAUSE.md",
+    "docs/v1.1.57/V1157_RELEASE_READINESS.md",
+    "docs/v1.1.57/V1157_SIGNER_POLICY_AUDIT.md",
+    "docs/v1.1.57/V1157_TEST_REPORT.md",
+    "docs/v1.1.57/V1157_VEHICLE_TEST_PLAN.md",
+    "docs/v1.1.57/V1157_WIRED_CARPLAY_REPORT.md"
   ]
 }

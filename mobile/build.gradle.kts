@@ -36,48 +36,55 @@ val gitCommit = providers.exec {
     commandLine("git", "rev-parse", "--short=12", "HEAD")
 }.standardOutput.asText.map { it.trim() }
 
-// The immutable version ledger records the verified signing epoch for each versionCode.
-// Historical releases keep their original identity; new versions use only the reviewed active epoch.
-val releaseLedger = JsonSlurper().parse(rootProject.file("config/android-version-ledger.json")) as Map<*, *>
-val releaseCurrent = releaseLedger["current"] as? Map<*, *>
-    ?: error("The Android version ledger has no current assignment")
-val releaseVersionCode = (releaseCurrent["versionCode"] as? Number)?.toInt()
-    ?: error("The Android version ledger has no current versionCode")
-val signingEpochs = releaseLedger["signingEpochs"] as? List<*>
-    ?: error("The Android version ledger has no signing epochs")
-fun signerForVersionCode(versionCode: Int): String {
-    val matches = signingEpochs.mapNotNull { rawEpoch ->
-        val epoch = rawEpoch as? Map<*, *> ?: error("Invalid signing epoch in version ledger")
-        val minimum = (epoch["minVersionCode"] as? Number)?.toInt()
-            ?: error("Signing epoch has no minimum versionCode")
-        val maximum = (epoch["maxVersionCode"] as? Number)?.toInt()
-        if (versionCode >= minimum && (maximum == null || versionCode <= maximum)) {
-            epoch["certificateSha256"] as? String
-                ?: error("Signing epoch has no certificate SHA-256")
-        } else null
-    }
-    check(matches.size == 1) { "versionCode $versionCode does not map to exactly one approved signing epoch" }
-    val fingerprint = matches.single().lowercase()
-    check(Regex("^[0-9a-f]{64}$").matches(fingerprint)) { "Signing epoch fingerprint is malformed" }
-    return fingerprint
-}
-val declaredVersionCode = Regex("(?m)^\\s*versionCode\\s*=\\s*(\\d+)\\s*$")
-    .find(file("build.gradle.kts").readText())?.groupValues?.get(1)?.toInt()
-    ?: error("Could not read the module versionCode")
-check(declaredVersionCode == releaseVersionCode) {
-    "Gradle versionCode does not match the reviewed signing epoch ledger"
-}
-val CARPALY_RELEASE_CERT_SHA256 = signerForVersionCode(releaseVersionCode)
-
 fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
     .digest(bytes)
     .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
 
+fun releaseSignerForVersion(versionCode: Int): Pair<String, String> {
+    val ledgerFile = rootProject.file("config/android-version-ledger.json")
+    check(ledgerFile.isFile) { "Android version ledger is missing" }
+    val ledger = JsonSlurper().parse(ledgerFile) as? Map<*, *>
+        ?: error("Android version ledger is not a JSON object")
+    check(ledger["applicationId"] == "com.shihab.diplay.hudtest") {
+        "Android version ledger applicationId does not match the app identity"
+    }
+    val current = ledger["current"] as? Map<*, *> ?: error("Current Android version is missing from the ledger")
+    check((current["versionCode"] as? Number)?.toInt() == versionCode) {
+        "Gradle versionCode differs from the current ledger allocation"
+    }
+    val epochs = ledger["signingEpochs"] as? List<*> ?: error("Reviewed Release signing epochs are missing")
+    val matches = epochs.filter { raw ->
+        val epoch = raw as? Map<*, *> ?: return@filter false
+        val minimum = (epoch["minimumVersionCode"] as? Number)?.toInt() ?: return@filter false
+        val maximum = epoch["maximumVersionCode"] as? Number
+        versionCode >= minimum && (maximum == null || versionCode <= maximum.toInt())
+    }
+    check(matches.size == 1) { "versionCode does not map to exactly one Release signing epoch" }
+    val epoch = matches.single() as Map<*, *>
+    val epochId = epoch["id"] as? String ?: error("Release signing epoch id is missing")
+    val expected = epoch["certificateSha256"] as? String
+        ?: error("Release signing epoch certificate fingerprint is missing")
+    check(expected.matches(Regex("[0-9a-f]{64}"))) { "Release signing epoch fingerprint is malformed" }
+    check(current["signingEpochId"] == epochId) { "Current version epoch id does not match its versionCode" }
+    check(ledger["releaseCertificateSha256"] == expected) {
+        "Ledger active signer does not match the current version epoch"
+    }
+    val deliveryPolicy = ledger["deliveryPolicy"] as? Map<*, *> ?: error("Delivery policy is missing")
+    check(deliveryPolicy["releaseCertificateSha256"] == expected) {
+        "Delivery policy signer does not match the current version epoch"
+    }
+    return expected to epochId
+}
+
 val verifyCarPalyReleaseSigning by tasks.registering {
     group = "verification"
-    description = "Require the reviewed Release signing identity assigned to this versionCode."
+    description = "Require the ledger-pinned v1.1.53+ Release signing identity before any Release build."
     notCompatibleWithConfigurationCache("Reads protected signing inputs only when a Release build is requested.")
     doLast {
+        val configuredVersionCode = requireNotNull(android.defaultConfig.versionCode) {
+            "Android versionCode is required to select the Release signing epoch"
+        }
+        val (expectedFingerprint, signingEpochId) = releaseSignerForVersion(configuredVersionCode)
         fun requiredSecret(name: String): String = providers.environmentVariable(name).orNull
             ?.takeIf { it.isNotBlank() }
             ?: error("Authorized Release signing input $name is not configured")
@@ -100,16 +107,16 @@ val verifyCarPalyReleaseSigning by tasks.registering {
                 "Configured Release key password does not unlock the signing key"
             }
             val actualFingerprint = sha256(certificate.encoded)
-            check(actualFingerprint == CARPALY_RELEASE_CERT_SHA256) {
-                "Release keystore does not match the reviewed signing epoch for this versionCode"
+            check(actualFingerprint == expectedFingerprint) {
+                "Release keystore does not match the active version-ledger signing certificate"
             }
             val configuredFingerprint = providers.environmentVariable("RELEASE_SIGNING_CERT_SHA256").orNull
                 ?.filter(Char::isLetterOrDigit)
                 ?.lowercase()
-            check(configuredFingerprint == null || configuredFingerprint == CARPALY_RELEASE_CERT_SHA256) {
-                "Configured Release certificate pin does not match the reviewed signing epoch"
+            check(configuredFingerprint == null || configuredFingerprint == expectedFingerprint) {
+                "Configured Release certificate pin does not match the active version-ledger signing identity"
             }
-            logger.lifecycle("SIGNING_CERTIFICATE_MATCH=PASS (versionCode signing epoch)")
+            logger.lifecycle("SIGNING_CERTIFICATE_MATCH=PASS (signing epoch $signingEpochId)")
         } catch (_: Exception) {
             error("Release signing identity could not be verified; no Release APK may be produced")
         } finally {
@@ -185,8 +192,8 @@ android {
         applicationId = "com.shihab.diplay.hudtest"
         minSdk = 25
         targetSdk = 37
-        versionCode = 40
-        versionName = "1.1.52"
+        versionCode = 45
+        versionName = "1.1.57"
         buildConfigField("String", "GIT_COMMIT", "\"${gitCommit.get()}\"")
 
     }
@@ -207,6 +214,7 @@ android {
             storePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").getOrElse("")
             keyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").getOrElse("")
             keyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").getOrElse("")
+            storeType = "PKCS12"
         }
         create("distributionDebug") {
             storeFile = distributionDebugKeystore ?: file("missing-distribution-debug-keystore.jks")

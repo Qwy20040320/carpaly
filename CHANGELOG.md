@@ -16,10 +16,11 @@ Release state wording conflict: GitHub marks this as formal while the hand-writt
 | [v1.1.5](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.5) | Pre-release | 2026-10-11 | `CarPaly-XingyueL1.1.5-Upgrade-Test-build20261011.apk` | `ef8bec6e0d20060ceb436c36eb2d495f63c831bd` |
 | [v1.1.4](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.4) | Pre-release | 2026-10-11 | `CarPaly-XingyueL1.1.4.apk` | `ef8bec6e0d20060ceb436c36eb2d495f63c831bd` |
 
-## Recorded Candidate Allocation (GitHub Release Exists)
+## Release metadata note and local candidate
 
-`v1.1.52` / versionCode `40` — GitHub reports a published Formal Release; APK verification status: `NOT_VERIFIED`. Release notes contain conflicting pre-release wording and were not changed.
-Vehicle validation remains separate from publication status; do not infer feature validation from the Release.
+GitHub reports v1.1.52 as a published formal Release while its hand-written notes contain pre-release wording; the historical Release is preserved and the mismatch is not silently rewritten.
+
+`v1.1.57` / versionCode `45` is a local candidate only: no public Tag, Release, or download link. Its existing local APK has a verified SHA-256, package/version metadata, and d9 signer, but source reproducibility against the integrated commit is not established. Vehicle validation remains separate from software release status; real vehicle behavior remains NOT_TESTED and OTA is not enabled.
 
 Vehicle validation is separate from software release status. See the root README; user feedback is labeled and unverified features remain NOT_TESTED.
 <!-- CARPALY:CHANGELOG:END -->

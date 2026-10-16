@@ -11,10 +11,27 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+try:
+    from scripts.release_signing_policy import (
+        LEGACY_RELEASE_CERT_SHA256,
+        approved_epoch_for_version_code,
+        normalize_sha256,
+        signer_for_ledger_version,
+        signing_epoch_for_version_code,
+        validate_signing_epoch_configuration,
+    )
+except ModuleNotFoundError:  # Direct `python scripts/android_versioning.py ...` execution.
+    from release_signing_policy import (
+        LEGACY_RELEASE_CERT_SHA256,
+        approved_epoch_for_version_code,
+        normalize_sha256,
+        signer_for_ledger_version,
+        signing_epoch_for_version_code,
+        validate_signing_epoch_configuration,
+    )
+
 
 APPLICATION_ID = "com.shihab.diplay.hudtest"
-LEGACY_RELEASE_CERT_SHA256 = "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90"
-ACTIVE_RELEASE_CERT_SHA256 = "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e"
 GRADLE_PATH = Path("mobile/build.gradle.kts")
 LEDGER_PATH = Path("config/android-version-ledger.json")
 VERSION_FIELDS = {
@@ -52,82 +69,6 @@ def read_ledger(root: Path) -> dict:
     return json.loads((root / LEDGER_PATH).read_text(encoding="utf-8"))
 
 
-def signer_for_version_code(version_code: int, ledger: dict) -> str:
-    """Return the signer epoch assigned to a versionCode; gaps and overlaps fail closed."""
-    matches: list[str] = []
-    epochs = ledger.get("signingEpochs")
-    if not isinstance(epochs, list) or not epochs:
-        raise ValueError("Version ledger has no explicit Android signing epochs")
-    for epoch in epochs:
-        if not isinstance(epoch, dict):
-            raise ValueError("Signing epoch entries must be objects")
-        minimum = epoch.get("minVersionCode")
-        maximum = epoch.get("maxVersionCode")
-        fingerprint = str(epoch.get("certificateSha256", "")).lower()
-        if isinstance(minimum, bool) or not isinstance(minimum, int) or minimum < 1:
-            raise ValueError("Signing epoch minVersionCode must be a positive integer")
-        if maximum is not None and (
-            isinstance(maximum, bool) or not isinstance(maximum, int) or maximum < minimum
-        ):
-            raise ValueError("Signing epoch maxVersionCode is invalid")
-        if not re.fullmatch(r"[a-f0-9]{64}", fingerprint):
-            raise ValueError("Signing epoch certificateSha256 must be a 32-byte SHA-256")
-        if version_code >= minimum and (maximum is None or version_code <= maximum):
-            matches.append(fingerprint)
-    if len(matches) != 1:
-        raise ValueError(f"versionCode {version_code} maps to {len(matches)} signing epochs")
-    return matches[0]
-
-
-def validate_signing_epochs(ledger: dict) -> None:
-    epochs = ledger.get("signingEpochs")
-    if not isinstance(epochs, list) or not epochs:
-        raise ValueError("The version ledger must define at least one signing epoch")
-    if any(not isinstance(epoch, dict) for epoch in epochs):
-        raise ValueError("Signing epoch entries must be objects")
-    ordered = sorted(epochs, key=lambda epoch: epoch.get("minVersionCode", -1))
-    if epochs != ordered:
-        raise ValueError("Signing epochs must be ordered by minVersionCode")
-    for index, epoch in enumerate(ordered):
-        start = epoch.get("minVersionCode")
-        end = epoch.get("maxVersionCode")
-        signer = str(epoch.get("certificateSha256", "")).lower()
-        if isinstance(start, bool) or not isinstance(start, int) or start < 1:
-            raise ValueError("Signing epoch minVersionCode must be a positive integer")
-        if end is not None and (
-            isinstance(end, bool) or not isinstance(end, int) or end < start
-        ):
-            raise ValueError("Signing epoch maxVersionCode is invalid")
-        if signer not in {LEGACY_RELEASE_CERT_SHA256, ACTIVE_RELEASE_CERT_SHA256}:
-            raise ValueError("Signing epoch certificate is not an approved CarPaly Release identity")
-        if epoch.get("status") not in {"historical", "active"}:
-            raise ValueError("Signing epoch status must be historical or active")
-        if index:
-            previous_end = ordered[index - 1].get("maxVersionCode")
-            if previous_end is None or start != previous_end + 1:
-                raise ValueError("Signing epochs must be contiguous with no overlap or gap")
-    active = [epoch for epoch in ordered if epoch.get("status") == "active"]
-    if (len(active) != 1 or active[0].get("maxVersionCode") is not None
-            or active[0] is not ordered[-1]):
-        raise ValueError("Exactly one open-ended active signing epoch is required")
-    active_signer = str(active[0]["certificateSha256"]).lower()
-    historical = [epoch for epoch in ordered if epoch.get("status") == "historical"]
-    if len(historical) != len(ordered) - 1 or any(epoch.get("status") != "historical" for epoch in ordered[:-1]):
-        raise ValueError("All non-active signing epochs must be explicitly historical")
-    if ledger.get("releaseCertificateSha256", "").lower() != active_signer:
-        raise ValueError("Ledger releaseCertificateSha256 must match the active signing epoch")
-    policy = ledger.get("deliveryPolicy", {})
-    if policy.get("releaseCertificateSha256", "").lower() != active_signer:
-        raise ValueError("Delivery policy signer must match the active signing epoch")
-    known_codes = [
-        item.get("versionCode")
-        for collection in (ledger.get("verifiedHistoricalDeliveries", []), ledger.get("allocations", []))
-        for item in collection
-    ]
-    if known_codes and ordered[0]["minVersionCode"] > min(known_codes):
-        raise ValueError("Signing epochs do not cover all known CarPaly version codes")
-
-
 def write_ledger(root: Path, ledger: dict) -> None:
     (root / LEDGER_PATH).write_text(
         json.dumps(ledger, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
@@ -137,6 +78,16 @@ def write_ledger(root: Path, ledger: dict) -> None:
 def parse_version_tuple(name: str) -> tuple[int, int, int] | None:
     match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", name)
     return tuple(map(int, match.groups())) if match else None
+
+
+def signing_epoch_for_version(ledger: dict, version_code: int) -> dict | None:
+    """Return the unique signer epoch covering a versionCode, or fail closed."""
+    return signing_epoch_for_version_code(ledger.get("signingEpochs"), version_code)
+
+
+def signer_for_version(ledger: dict, version_name: str, version_code: int) -> str | None:
+    """Return a signer's public fingerprint only when the ledger record agrees with its epoch."""
+    return signer_for_ledger_version(ledger, version_name, version_code)
 
 
 def next_test_name(current_name: str) -> str:
@@ -178,8 +129,12 @@ def historical_versions(root: Path, current: AndroidVersion) -> list[AndroidVers
 
 
 def validate_ledger(ledger: dict) -> None:
-    validate_signing_epochs(ledger)
+    if not isinstance(ledger, dict):
+        raise ValueError("The Android version ledger must be a JSON object")
+    validate_signing_epoch_configuration(ledger)
     allocations = ledger.get("allocations", [])
+    if not isinstance(allocations, list) or not all(isinstance(item, dict) for item in allocations):
+        raise ValueError("The Android version ledger allocations are malformed")
     names = [item["versionName"] for item in allocations]
     codes = [item["versionCode"] for item in allocations]
     if len(names) != len(set(names)):
@@ -195,15 +150,20 @@ def validate_ledger(ledger: dict) -> None:
     ):
         raise ValueError("The current version assignment is absent from the immutable allocation ledger")
     policy = ledger.get("deliveryPolicy", {})
+    if not isinstance(policy, dict):
+        raise ValueError("The Android version delivery policy is malformed")
     if (
         policy.get("buildType") != "release"
         or policy.get("apkFileNamePattern") != "CarPaly-XingyueL-v{versionName}.apk"
         or policy.get("applicationId") != APPLICATION_ID
+        or policy.get("legacyReleaseCertificateSha256", "").lower() != LEGACY_RELEASE_CERT_SHA256
         or policy.get("debugApkUserDeliverable") is not False
         or policy.get("overwriteDeliveredArtifact") is not False
     ):
         raise ValueError("Version ledger does not enforce the permanent Release APK delivery policy")
     historical = ledger.get("verifiedHistoricalDeliveries", [])
+    if not isinstance(historical, list) or not all(isinstance(item, dict) for item in historical):
+        raise ValueError("The verified historical delivery records are malformed")
     historical_names = [item["versionName"] for item in historical]
     historical_codes = [item["versionCode"] for item in historical]
     if len(historical_names) != len(set(historical_names)) or len(historical_codes) != len(set(historical_codes)):
@@ -212,16 +172,26 @@ def validate_ledger(ledger: dict) -> None:
         raise ValueError("An allocated versionName or versionCode conflicts with a published historical version")
     if any(item.get("status") != "published" for item in historical):
         raise ValueError("Historical version records must describe verified published deliveries")
-    if ledger.get("highestObservedVersionCode", 0) < max(historical_codes, default=0):
-        raise ValueError("The Android version-code high-water mark is below a published historical version")
-    for item in historical:
-        signer = item.get("signerCertificateSha256")
-        if signer is None or str(signer).lower() != signer_for_version_code(item["versionCode"], ledger):
-            raise ValueError(f"Historical signer does not match its signing epoch: {item['tag']}")
-    for item in allocations:
-        signer = item.get("signerCertificateSha256")
-        if signer is None or str(signer).lower() != signer_for_version_code(item["versionCode"], ledger):
-            raise ValueError(f"Allocation signer does not match its signing epoch: {item['versionName']}")
+    all_record_codes = codes + historical_codes
+    if ledger.get("highestObservedVersionCode", 0) < max(all_record_codes, default=0):
+        raise ValueError("The Android version-code high-water mark is below a known allocation or delivery")
+
+    for record in [*allocations, *historical]:
+        if signer_for_version(ledger, record["versionName"], record["versionCode"]) is None:
+            raise ValueError(
+                f"Version {record['versionName']} has missing or mismatched signing-epoch evidence"
+            )
+
+    epoch = signing_epoch_for_version(ledger, current["versionCode"])
+    current_signer = signer_for_version(ledger, current["versionName"], current["versionCode"])
+    if (
+        epoch is None
+        or current.get("signingEpochId") != epoch.get("id")
+        or current_signer is None
+        or normalize_sha256(ledger.get("releaseCertificateSha256")) != current_signer
+        or normalize_sha256(policy.get("releaseCertificateSha256")) != current_signer
+    ):
+        raise ValueError("Current version signer and active Release signer policy do not match its signing epoch")
 
 
 def require_current_delivery_recorded(ledger: dict) -> None:
@@ -236,7 +206,7 @@ def require_current_delivery_recorded(ledger: dict) -> None:
         ),
         None,
     )
-    if allocation is None or allocation.get("status") not in {"delivered", "published"} or not re.fullmatch(
+    if allocation is None or allocation.get("status") != "delivered" or not re.fullmatch(
         r"[a-f0-9]{64}", (allocation.get("artifactSha256") or "").lower()
     ):
         raise ValueError(
@@ -255,13 +225,22 @@ def check_project(root: Path, *, enforce_historical_high_water: bool = True) -> 
         raise ValueError("CarPaly applicationId changed; upgrade continuity is not verified")
     if (version.version_name, version.version_code) != (current["versionName"], current["versionCode"]):
         raise ValueError("Gradle versionName/versionCode differs from the reserved version ledger")
-    expected_signer = signer_for_version_code(version.version_code, ledger)
+    expected_signer = signer_for_version(ledger, current["versionName"], current["versionCode"])
+    epoch = signing_epoch_for_version(ledger, current["versionCode"])
+    if (
+        expected_signer is None
+        or epoch is None
+        or current.get("signingEpochId") != epoch.get("id")
+        or normalize_sha256(ledger.get("releaseCertificateSha256")) != expected_signer
+        or normalize_sha256(ledger.get("deliveryPolicy", {}).get("releaseCertificateSha256")) != expected_signer
+    ):
+        raise ValueError("Current version does not match its reviewed signing epoch")
     if re.search(r"(?m)^\s*applicationIdSuffix\s*=", source) or re.search(
         r"(?m)^\s*versionNameSuffix\s*=", source
     ):
         raise ValueError("Unexpected applicationId/versionName suffix can break upgrade identity")
-    if "signingEpochs" not in source or "signerForVersionCode" not in source:
-        raise ValueError("Gradle Release signing must select the signer from the reviewed version epoch")
+    if "releaseSignerForVersion(configuredVersionCode)" not in source or "signingEpochs" not in source:
+        raise ValueError("Gradle Release signing preflight does not resolve the current signing epoch")
 
     if current["channel"] == "test":
         parsed = parse_version_tuple(version.version_name)
@@ -286,9 +265,9 @@ def check_project(root: Path, *, enforce_historical_high_water: bool = True) -> 
         + [item["versionCode"] for item in ledger.get("verifiedHistoricalDeliveries", [])]
         + allocated_codes
     )
-    if enforce_historical_high_water and version.version_code <= highest_previous:
+    if enforce_historical_high_water and version.version_code < highest_previous:
         raise ValueError(
-            f"versionCode {version.version_code} must exceed all previous known values ({highest_previous})"
+            f"versionCode {version.version_code} is below the highest observed value ({highest_previous})"
         )
     return version
 
@@ -343,7 +322,9 @@ def allocate(root: Path, channel: str) -> AndroidVersion:
         + [item["versionCode"] for item in ledger["allocations"]]
     )
     version = AndroidVersion(APPLICATION_ID, version_name, highest + 1)
-    signer_sha256 = signer_for_version_code(version.version_code, ledger)
+    epoch = approved_epoch_for_version_code(version.version_code)
+    if epoch is None:
+        raise ValueError(f"No reviewed Release signing epoch covers versionCode {version.version_code}")
     update_gradle_version(root, version.version_name, version.version_code)
     allocation = {
         "versionName": version.version_name,
@@ -351,13 +332,19 @@ def allocate(root: Path, channel: str) -> AndroidVersion:
         "channel": channel,
         "status": "reserved",
         "artifactSha256": None,
-        "signerCertificateSha256": signer_sha256,
+        "signerCertificateSha256": epoch["certificateSha256"],
+        "signingEpochId": epoch["id"],
+        "upgradePolicy": "fresh-install-required" if version.version_code == 41 else "same-signer-upgrade-only",
     }
     ledger["current"] = {
         "versionName": version.version_name,
         "versionCode": version.version_code,
         "channel": channel,
+        "signingEpochId": epoch["id"],
     }
+    ledger["highestObservedVersionCode"] = version.version_code
+    ledger["releaseCertificateSha256"] = epoch["certificateSha256"]
+    ledger["deliveryPolicy"]["releaseCertificateSha256"] = epoch["certificateSha256"]
     ledger["allocations"].append(allocation)
     write_ledger(root, ledger)
     return version

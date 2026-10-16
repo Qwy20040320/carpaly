@@ -16,10 +16,11 @@ internal object CarPlaySystemBarInsets {
         navigationBarsVisible: Boolean,
         navigationBars: CarPlayContentInsets,
         displayCutout: CarPlayContentInsets,
+        hiddenStatusBarFallbackTop: Int = 0,
     ): CarPlayContentInsets = CarPlayContentInsets(
         left = maxOf(displayCutout.left, if (statusBarsVisible) statusBars.left else 0,
             if (navigationBarsVisible) navigationBars.left else 0),
-        top = maxOf(displayCutout.top, if (statusBarsVisible) statusBars.top else 0,
+        top = maxOf(displayCutout.top, if (statusBarsVisible) statusBars.top else hiddenStatusBarFallbackTop.coerceAtLeast(0),
             if (navigationBarsVisible) navigationBars.top else 0),
         right = maxOf(displayCutout.right, if (statusBarsVisible) statusBars.right else 0,
             if (navigationBarsVisible) navigationBars.right else 0),

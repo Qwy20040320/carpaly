@@ -16,21 +16,25 @@
     ]
   },
   "candidate": {
-    "status": "ledger_allocation",
-    "versionName": "1.1.52",
-    "summaryZh": "版本台账记录的候选分配；公开发布状态以 GitHub Releases API 为准。当前资料没有证明本版本修复了任何实车 CarPlay、音频或车机显示故障。",
-    "summaryEn": "A candidate allocation in the version ledger; public status is determined by the GitHub Releases API. Available evidence does not establish that this version fixes any in-vehicle CarPlay, audio, or head-unit display issue.",
+    "status": "local_candidate",
+    "versionName": "1.1.57",
+    "summaryZh": "v1.1.57/code 45 是本地 Release 候选：保留 OPUS 解码器兼容回退、改进有线启动与连接诊断，并增强协议音频分类及日志脱敏。现存候选 APK 的 d9 签名已核验，但与整合提交的可复现源码对应关系尚未建立；实车功能尚未测试。",
+    "summaryEn": "v1.1.57/code 45 is a local Release candidate retaining OPUS decoder compatibility fallback, improving wired-startup diagnostics, and strengthening protocol-audio classification and log redaction. The existing APK's d9 signer was checked, but reproducible source provenance against the integration commit is not established; real-vehicle behavior remains untested.",
     "vehicleStatus": "NOT_TESTED",
     "releaseClaims": [],
     "releaseNotesZh": [
-      "本地候选版本，尚未发布。",
-      "不得据此宣称音乐自动暂停、导航无声或顶部状态栏遮挡问题已修复。",
-      "HUD、仪表、燃油及其他未经实际验证的车辆功能保持 NOT_TESTED。"
+      "v1.1.57/code 45 是本地候选，不代表 GitHub Release；现存 APK 的哈希、包名、版本和 d9 签名已核验，但与本次整合提交的可复现源码对应关系尚未建立。",
+      "本轮将应用更新完整控件整合到关于页面，保留既有更新业务逻辑、持久化和单一诊断导出入口。",
+      "增加应用私有、脱敏、限量滚动的结构化运行日志，并对重复旧诊断行限流；不记录协议载荷或原始音频。",
+      "保留 V1.1.55 的 OPUS 输出能力探测修复。音乐自动暂停仍是历史反馈；V1.1.54 日志未复现，根因未知，本轮未修改音频状态机。",
+      "本轮代码未在真实车辆上验证；CarPlay、OPUS 实际解码与扬声器路由、音乐自动暂停、导航语音、顶部状态栏、HUD、仪表、方向盘及车辆数据均保持 NOT_TESTED。OTA 未启用。"
     ],
     "releaseNotesEn": [
-      "Local candidate only; not released.",
-      "Do not claim that media auto-pause, silent navigation prompts, or OEM status-bar overlap is fixed.",
-      "HUD, instrument cluster, fuel data, and other unverified vehicle features remain NOT_TESTED."
+      "v1.1.57/code 45 is a local candidate, not a GitHub Release. The existing APK hash, package, version, and d9 signer were checked, but reproducible source provenance against this integration commit has not been established.",
+      "The full app-update controls now live in About, reusing the existing update logic, persistence, and single diagnostic-export flow.",
+      "Adds a private, redacted, size-bounded structured runtime log with duplicate-line rate limiting; it does not record protocol payloads or raw audio.",
+      "Retains the V1.1.55 OPUS output capability detection fix. Media auto-pause remains a historical report; V1.1.54 logs did not reproduce it, its cause is unknown, and this round did not change the audio state machine.",
+      "This source has not been tested in a real vehicle. CarPlay, actual OPUS decoding and speaker routing, media auto-pause, navigation audio, OEM status bar, HUD, cluster, steering-wheel, and vehicle-data behavior remain NOT_TESTED. OTA remains disabled."
     ]
   },
   "vehicleFeedback": [
@@ -46,9 +50,9 @@
       "id": "media_audio",
       "labelZh": "音乐播放",
       "labelEn": "Media playback",
-      "status": "USER_REPORTED_ISSUE",
-      "detailZh": "用户反馈音乐播放约一秒后自动暂停；唤醒 Siri 时音乐可播放。",
-      "detailEn": "User reported that music pauses after about one second, while playback works when Siri is active."
+      "status": "HISTORICAL_NOT_REPRODUCED",
+      "detailZh": "历史用户反馈称音乐播放约一秒后自动暂停，唤醒 Siri 时可播放；V1.1.54 日志未复现该现象，根因未知，本轮未实车复测。",
+      "detailEn": "Historical user feedback reported that music paused after about one second but played while Siri was active. The V1.1.54 logs did not reproduce this; the cause is unknown and no vehicle retest occurred in this round."
     },
     {
       "id": "navigation_audio",

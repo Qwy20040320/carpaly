@@ -42,13 +42,18 @@ internal class AudioFocusCoordinator(
     private val muteMediaOnTransientLoss: Boolean = true,
     private val report: (String) -> Unit = {},
 ) {
-    private data class Entry(val channel: AudioChannel, val attributes: AudioAttributes, var appliedVolume: Float = FULL_VOLUME)
+    private data class Entry(
+        val channel: AudioChannel,
+        val attributes: AudioAttributes,
+        var navigationPlaybackActive: Boolean = false,
+        var appliedVolume: Float = FULL_VOLUME,
+    )
 
     private val manager = context?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
     private val active = LinkedHashMap<AudioTrack, Entry>()
     private var request: AudioFocusRequestCompat? = null
     private var requestedChannel: AudioChannel? = null
-    private var mediaVolume = FULL_VOLUME
+    private var focusVolume = FULL_VOLUME
     private var closed = false
     private var focusGeneration = 0L
     private var currentListener = listenerFor(focusGeneration)
@@ -77,7 +82,7 @@ internal class AudioFocusCoordinator(
 
     @Synchronized
     fun acquire(track: AudioTrack, channel: AudioChannel, attributes: AudioAttributes) {
-        if (closed || !enabled || manager == null || channel == AudioChannel.NAVIGATION) return
+        if (closed) return
         active[track] = Entry(channel, attributes)
         refreshRequest()
         applyMediaVolume(track, active.getValue(track))
@@ -85,7 +90,23 @@ internal class AudioFocusCoordinator(
 
     @Synchronized
     fun release(track: AudioTrack) {
-        if (active.remove(track) != null) refreshRequest()
+        if (active.remove(track) != null) {
+            refreshRequest()
+            applyMediaTracks()
+        }
+    }
+
+    /** Ducks only CarPaly's media renderer while a navigation AudioTrack is actually playing. */
+    @Synchronized
+    fun setNavigationPlayback(track: AudioTrack, playing: Boolean) {
+        val entry = active[track] ?: return
+        if (entry.channel != AudioChannel.NAVIGATION || entry.navigationPlaybackActive == playing) return
+        entry.navigationPlaybackActive = playing
+        applyMediaTracks()
+        val line = "Audio: navigation playback active=$playing; local media duck=" +
+            if (playing) DUCKED_VOLUME else "released"
+        Log.i(TAG, line)
+        runCatching { report(line) }
     }
 
     fun onExternalFocusChange(change: Int) {
@@ -102,14 +123,27 @@ internal class AudioFocusCoordinator(
     }
 
     private fun refreshRequest() {
-        val primary = active.values.maxByOrNull { it.channel.focusPriority() }
+        if (!enabled || manager == null) {
+            focusGeneration += 1
+            val abandoned = request
+            request = null
+            requestedChannel = null
+            focusVolume = FULL_VOLUME
+            manager?.let { abandoned?.abandon(it) }
+            applyMediaTracks()
+            return
+        }
+        val primary = active.values.asSequence()
+            .filter { it.channel != AudioChannel.NAVIGATION }
+            .maxByOrNull { it.channel.focusPriority() }
         if (primary == null) {
             focusGeneration += 1
             val abandoned = request
             request = null
             requestedChannel = null
-            mediaVolume = FULL_VOLUME
+            focusVolume = FULL_VOLUME
             manager?.let { abandoned?.abandon(it) }
+            applyMediaTracks()
             return
         }
         if (request != null && requestedChannel == primary.channel) return
@@ -137,16 +171,27 @@ internal class AudioFocusCoordinator(
     }
 
     private fun setMediaVolume(volume: Float) {
-        mediaVolume = volume
+        focusVolume = volume
+        applyMediaTracks()
+    }
+
+    private fun applyMediaTracks() {
         active.forEach { (track, entry) -> applyMediaVolume(track, entry) }
     }
 
     private fun applyMediaVolume(track: AudioTrack, entry: Entry) {
-        // Telephony and assistant speech remain audible, and navigation never enters this map.
-        // This changes only the renderer's relative gain, never Android's user stream volume.
-        if (entry.channel != AudioChannel.MEDIA || entry.appliedVolume == mediaVolume) return
-        val applied = runCatching { track.setStereoVolume(mediaVolume, mediaVolume) == AudioTrack.SUCCESS }.getOrDefault(false)
-        if (applied) entry.appliedVolume = mediaVolume
+        // Speech tracks remain audible. Navigation locally ducks media without changing the user's
+        // Android stream volume or requesting a second OEM/system focus owner.
+        if (entry.channel != AudioChannel.MEDIA) return
+        val navigationDuck = if (active.values.any {
+                it.channel == AudioChannel.NAVIGATION && it.navigationPlaybackActive
+            }) DUCKED_VOLUME else FULL_VOLUME
+        val targetVolume = minOf(focusVolume, navigationDuck)
+        if (entry.appliedVolume == targetVolume) return
+        val applied = runCatching {
+            track.setStereoVolume(targetVolume, targetVolume) == AudioTrack.SUCCESS
+        }.getOrDefault(false)
+        if (applied) entry.appliedVolume = targetVolume
     }
 
     private fun AudioChannel.focusPriority(): Int = when (this) {
@@ -1439,17 +1484,63 @@ private class AudioRenderer(
             )
         }
         codec = try {
-            MediaCodecStartup.create(
-                create = { diagnosticStage = "decoder-create"; MediaCodec.createDecoderByType(mime) },
+            var defaultDecoderName: String? = null
+            val candidates = mutableListOf<MediaCodecStartup.Candidate<MediaCodec>>(
+                MediaCodecStartup.Candidate("default") {
+                    diagnosticStage = "decoder-create"
+                    MediaCodec.createDecoderByType(mime).also { candidate ->
+                        defaultDecoderName = runCatching { candidate.name }.getOrNull()
+                    }
+                },
+            )
+            if (mime == MediaFormat.MIMETYPE_AUDIO_OPUS) {
+                val explicitDecoders = runCatching {
+                    MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
+                        .filter { info -> !info.isEncoder && info.supportedTypes.any { it.equals(mime, ignoreCase = true) } }
+                        .sortedWith(
+                            compareByDescending<android.media.MediaCodecInfo> { info ->
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) info.isSoftwareOnly
+                                else info.name.startsWith("OMX.google.") || info.name.startsWith("c2.android.")
+                            }.thenBy { it.name },
+                        )
+                }.getOrElse { error ->
+                    runCatching {
+                        report("Audio: explicit decoder enumeration unavailable mime=$mime error=${error.javaClass.simpleName}")
+                    }
+                    emptyList()
+                }
+                explicitDecoders.forEach { info ->
+                    candidates += MediaCodecStartup.Candidate(
+                        name = info.name,
+                        create = {
+                            diagnosticStage = "decoder-create"
+                            MediaCodec.createByCodecName(info.name)
+                        },
+                        shouldAttempt = { defaultDecoderName != info.name },
+                    )
+                }
+            }
+            val started = MediaCodecStartup.createWithFallback(
+                candidates = candidates,
                 configure = { diagnosticStage = "decoder-configure"; it.configure(mediaFormat, null, null, 0) },
                 start = { diagnosticStage = "decoder-start"; it.start() },
                 release = { it.release() },
-            ).also {
+                onFailure = { candidateName, failure ->
+                    val message = "Audio: decoder candidate unavailable mime=$mime candidate=$candidateName " +
+                        "stage=$diagnosticStage error=${failure.javaClass.simpleName}"
+                    Log.w(TAG, message)
+                    runCatching { report(message) }
+                },
+            )
+            started.value.also {
                 // A vendor name getter or diagnostic callback must not discard a started codec.
                 runCatching {
                     val name = it.name
-                    Log.i(TAG, "audio decoder configured mime=$mime name=$name")
-                    report("Audio: decoder ready audioType=${format.audioType} codec=${format.codec} name=$name")
+                    Log.i(TAG, "audio decoder configured mime=$mime candidate=${started.candidateName} name=$name")
+                    report(
+                        "Audio: decoder ready audioType=${format.audioType} codec=${format.codec} " +
+                            "candidate=${started.candidateName} name=$name",
+                    )
                 }
             }
         } catch (error: Exception) {
@@ -1473,6 +1564,7 @@ private class AudioRenderer(
             return
         }
         val selection = mappedSelection()
+        val audioClassification = AudioTypeClassifier.classify(format.audioType)
         mappedChannel = selection.channel
         val streamOverride = channelOverride(selection.channel)
         var attributes = audioAttributesFor(selection, streamOverride)
@@ -1528,7 +1620,9 @@ private class AudioRenderer(
                 "usage=${trackAttributes?.usage} contentType=${trackAttributes?.contentType} " +
                 "attributesSource=${if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) "track" else "configured"}"
         }.getOrDefault("api=${Build.VERSION.SDK_INT} trackMetadata=unavailable")
-        report("Audio: ready audioType=${format.audioType} codec=${format.codec} " +
+        report("Audio: ready audioType=${format.audioType} " +
+            "audioClass=${audioClassification.audioClass} classificationBasis=${audioClassification.basis} " +
+            "codec=${format.codec} " +
             "rate=${format.sampleRate} channels=${format.channels} " +
             "route=$routeLabel " +
             "bufferMs=${capacityBytes * 1000L / bytesPerSecond} startMs=${startThresholdBytes * 1000L / bytesPerSecond} " +
@@ -1544,6 +1638,7 @@ private class AudioRenderer(
         Log.i(
             TAG,
             "audio route type=${format.payloadType} audioType=${format.audioType} " +
+                "audioClass=${audioClassification.audioClass} classificationBasis=${audioClassification.basis} " +
                 "mode=${if (advancedAudioChannelMapping) AudioChannelMappingMode.AUTOMOTIVE_BUS else AudioChannelMappingMode.MOBILE_COMPATIBLE} " +
                 "channel=${selection.channel} usage=${usageFor(selection.channel)} " +
                 "contentType=${contentTypeFor(selection.contentType)} " +
@@ -1599,17 +1694,10 @@ private class AudioRenderer(
             .setContentType(contentTypeFor(selection.contentType))
             .build()
 
-    /**
-     * Shares a sink-level focus request across all active non-navigation renderers.
-     * Navigation guidance intentionally takes no focus: it overlays media without ducking it.
-     */
+    /** Shares system focus across non-navigation renderers; active navigation locally ducks media. */
     private fun requestAudioFocus() {
         val channel = mappedChannel ?: return
         val attributes = trackAttributes ?: return
-        if (channel == AudioChannel.NAVIGATION) {
-            Log.i(TAG, "audio focus skipped channel=NAVIGATION; overlays without ducking")
-            return
-        }
         track?.let { audioFocusCoordinator.acquire(it, channel, attributes) }
     }
 
@@ -1884,6 +1972,9 @@ private class AudioRenderer(
         underrunsAtPlaybackStart = track.underrunCount
         track.play()
         playbackStarted = true
+        if (mappedChannel == AudioChannel.NAVIGATION) {
+            audioFocusCoordinator.setNavigationPlayback(track, true)
+        }
         // A track being constructed does not prove it reached an output route. Capture the
         // observed Android route state when audio actually starts; never log device names or device IDs.
         runCatching {
@@ -1894,7 +1985,9 @@ private class AudioRenderer(
                 "api-legacy"
             }
             report(
-                "Audio: playback active audioType=${format.audioType} channel=${mappedChannel ?: "unknown"} " +
+                "Audio: playback active audioType=${format.audioType} " +
+                    "audioClass=${AudioTypeClassifier.classify(format.audioType).audioClass} " +
+                    "channel=${mappedChannel ?: "unknown"} " +
                     "trackState=${track.state} playState=${track.playState} session=${track.audioSessionId} " +
                     "usage=${trackAttributes?.usage ?: "unknown"} routeDeviceType=$routeType " +
                     "underruns=${track.underrunCount}",
@@ -1911,6 +2004,9 @@ private class AudioRenderer(
             // or discarding PCM, then use the configured start threshold again when music resumes.
             track.pause()
             playbackStarted = false
+            if (mappedChannel == AudioChannel.NAVIGATION) {
+                audioFocusCoordinator.setNavigationPlayback(track, false)
+            }
             // Pausing retains queued PCM. Count it toward the restart threshold so a
             // blocking write cannot fill the paused track before we call play().
             prebufferBytes = bufferProgress.queuedBytes(track.playbackHeadPosition)

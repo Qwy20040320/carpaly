@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "repository": "Qwy20040320/carpaly",
+  "artifactRoot": "artifacts",
+  "versionDirectoryPattern": "v{versionName}",
+  "resolution": "primary-standard-worktree-from-git-common-dir",
+  "requireIgnored": true,
+  "copyReportsListedInPublicAllowlist": true,
+  "generatedReportName": "DELIVERY_REPORT.md"
+}

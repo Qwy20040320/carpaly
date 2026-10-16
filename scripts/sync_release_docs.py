@@ -25,8 +25,10 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 if __package__:
+    from .android_versioning import signer_for_version
     from .validate_release_metadata import MetadataError, validate_metadata
 else:  # Support direct invocation as `python scripts/sync_release_docs.py`.
+    from android_versioning import signer_for_version
     from validate_release_metadata import MetadataError, validate_metadata
 
 
@@ -264,18 +266,21 @@ def _released_records(
 ) -> list[dict[str, Any]]:
     tag_shas = release_tag_commits(tags)
     verifications = verifications or {}
-    signer = str(ledger.get("releaseCertificateSha256", "")).lower()
     app_id = str(ledger.get("applicationId", ""))
-    records = [
-        _verified_release_record(
-            release,
-            repository,
-            verifications.get(str(release.get("tag_name", ""))),
-            signer,
-            app_id,
-        )
-        for release in public_releases(releases)
-    ]
+    records = []
+    for release in public_releases(releases):
+        tag = str(release.get("tag_name", ""))
+        verification = verifications.get(tag)
+        version_name = tag.removeprefix("v")
+        version_code = verification.get("versionCode") if isinstance(verification, Mapping) else None
+        if not isinstance(version_code, int):
+            matches = [
+                item for item in [*ledger.get("verifiedHistoricalDeliveries", []), *ledger.get("allocations", [])]
+                if item.get("versionName") == version_name
+            ]
+            version_code = matches[0].get("versionCode") if len(matches) == 1 else None
+        signer = signer_for_version(ledger, version_name, version_code) if isinstance(version_code, int) else None
+        records.append(_verified_release_record(release, repository, verification, signer or "", app_id))
     for record in records:
         record["tagSha"] = tag_shas.get(record["tag"])
     return records
@@ -366,6 +371,7 @@ def render_vehicle_feedback(metadata: Mapping[str, Any]) -> str:
         "USER_REPORTED_PASS": "用户反馈通过（未独立复现）",
         "USER_REPORTED_FAIL": "用户反馈失败",
         "USER_REPORTED_ISSUE": "用户反馈问题",
+        "HISTORICAL_NOT_REPRODUCED": "历史反馈；本轮未复现",
         "NOT_TESTED": "NOT_TESTED",
         "PASS": "PASS",
         "FAIL": "FAIL",
@@ -385,6 +391,7 @@ def render_english_vehicle_feedback(metadata: Mapping[str, Any]) -> str:
         "USER_REPORTED_PASS": "User reported pass (not independently reproduced)",
         "USER_REPORTED_FAIL": "User reported fail",
         "USER_REPORTED_ISSUE": "User reported issue",
+        "HISTORICAL_NOT_REPRODUCED": "Historical report; not reproduced this round",
         "NOT_TESTED": "NOT_TESTED",
         "PASS": "PASS",
         "FAIL": "FAIL",

@@ -25,6 +25,16 @@ foreach ($mode in @('CheckOnly','SkipTests','PrepareGitHub','PrepareDraft','Stat
     Assert-True ($entryText.Contains("`$${mode}")) "Missing release mode parameter/use: $mode"
 }
 Assert-True ($entryText -notmatch '(?i)gh\s+release\s+(create|upload)|AUTO_CREATE_TAG\s*=\s*''true''|prepare-release-draft\.sh') 'Local orchestrator contains a direct remote Release mutation path.'
+$builderPath = Join-Path $PSScriptRoot 'build-release-apk.ps1'
+$builderText = Get-Content -LiteralPath $builderPath -Raw
+$builderTokens = $null
+$builderParseErrors = $null
+[System.Management.Automation.Language.Parser]::ParseFile($builderPath, [ref]$builderTokens, [ref]$builderParseErrors) | Out-Null
+Assert-True ($builderParseErrors.Count -eq 0) 'The Release APK builder has PowerShell parse errors.'
+Assert-True ($builderText -match '\[string\]\s+\$OutputDir' -and $builderText -match '\[switch\]\s+\$CandidateOnly') 'The APK builder does not expose the orchestrator staging parameters.'
+Assert-True ($builderText -match 'Candidate-only APK output is restricted to the ignored \.private build-candidates directory') 'Candidate-only output is not restricted to the ignored private candidate directory.'
+Assert-True ($builderText -match 'if \(-not \$CandidateOnly\) \{ \$verifyArguments \+= ''-RecordDelivery'' \}') 'Candidate-only builds may mutate the delivered version ledger.'
+Assert-True ($builderText -match '(?s)if \(-not \$CandidateOnly\) \{.*?artifact_delivery\.py') 'Candidate-only builds may invoke public-root artifact delivery.'
 Assert-True ((ConvertTo-CarPalyFingerprint 'D9:B3:29:52:5F:C1:EF:21:C3:65:FA:B7:2C:10:36:75:27:CC:03:82:97:C4:F3:0E:AA:22:B2:20:74:29:13:9E') -eq $ledger.releaseCertificateSha256) 'Fingerprint normalization failed.'
 Assert-Throws { ConvertTo-CarPalyFingerprint 'not-a-fingerprint' | Out-Null } 'Malformed signer fingerprint was accepted.'
 Assert-True ((Get-CarPalySignerForVersion $ledger 40) -eq $ledger.signingEpochs[0].certificateSha256) 'Legacy signing epoch selection failed.'

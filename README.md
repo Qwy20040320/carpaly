@@ -50,7 +50,7 @@ GitHub 最新正式 Release：[v1.1.56](https://github.com/Qwy20040320/carpaly/r
 ### 当前候选版本
 
 <!-- CARPALY:CANDIDATE:START -->
-**v1.1.52 已由 GitHub 标记为已发布（正式版）。** 本地版本台账仍保留候选阶段记录；GitHub APK 验证状态为 `NOT_VERIFIED`，因此不在此处推导可验证下载链接。Release 正文仍含预发布措辞，状态不一致；自动同步不会改写人工正文。可验证 APK 下载尚未建立。 后续版本按台账高水位递增；`v1.1.6` 是未来序列目标，不代表已分配或发布。
+**本地候选：v1.1.57 / versionCode 45。** 尚无公开 Tag、Release 或下载链接。本地 APK 的哈希、版本和 d9 签名可核验，但它与整合后源码提交的可复现对应关系尚未建立。真实车辆功能仍为 NOT_TESTED；OTA 未启用。
 <!-- CARPALY:CANDIDATE:END -->
 
 ### 近期实车反馈（用户报告，非维护者复测）
@@ -184,9 +184,9 @@ GitHub 发布标签、日期、正式/预发布状态、实际附件及可验证
 ## APK 下载与安装
 
 <!-- CARPALY:DOWNLOADS:START -->
-- **最新正式 Release：** [v1.1.56](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.56)；APK 未通过验证记录核对，不提供直链。
-- **候选台账版本 v1.1.52 已在 GitHub 发布（正式版）：** APK 验证状态 `NOT_VERIFIED`；未通过验证记录时不提供 APK 直链。
-- **发布元数据冲突：** GitHub 状态与人工 Release 正文的预发布措辞不一致；正文保持原样。
+- **最新正式 Release 页面：** [v1.1.56](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.56)；APK 未通过当前验证记录核对，不提供直链。
+- **本地候选：** v1.1.57 / versionCode 45，尚无公开下载链接。
+- **发布元数据冲突：** GitHub 将 v1.1.52 标为正式 Release，但人工正文仍含预发布措辞；正文保持原样。
 - 预发布及历史附件仅在各自 Release 页面标示，不代表当前正式推荐版本。
 <!-- CARPALY:DOWNLOADS:END -->
 - **暂无覆盖全部车型、连接模式和功能的实车验证正式版本。**已有单车连接/音乐反馈，导航语音和顶部状态栏问题仍待解决。
@@ -325,19 +325,17 @@ The tested APK version is not recorded for this report; do not infer full-model 
 - Reverse-camera/360 takeover and Geely-specific HUD integration are not implemented.
 - Historical tags `v0.1.0`, `v0.1.1`, and `v0.2.16` are retained only as version-history mappings in this README; their GitHub Releases, public APK assets, and tags have been removed. Their commits remain reachable from project branches, while APK backups remain local and are not download links.
 <!-- CARPALY:ENGLISH_RELEASES:START -->
-Latest formal Release: [v1.1.56](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.56); no verified APK link is available.
+Latest formal Release: [v1.1.56](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.56); no APK link is provided because its asset has not been matched to the current verification record.
 
-Release metadata conflict: GitHub marks the latest item as formal, but its hand-written notes still describe a pre-release; the notes are preserved.
+The GitHub channel metadata for v1.1.52 conflicts with pre-release wording in its hand-written notes; the notes are preserved.
 
-Ledger candidate `v1.1.52` / code `40` is already published by GitHub as a formal Release; APK proof status is `NOT_VERIFIED`. GitHub state conflicts with pre-release wording in the hand-written notes; the notes are preserved.
-
-Vehicle notes below are user-reported only; no unverified feature is presented as independently tested.
+Local candidate: `v1.1.57` / code `45`; no public tag, Release, or download URL. Its APK metadata and signer are locally checkable, but source reproducibility against the integrated commit is not established. Vehicle behavior remains NOT_TESTED.
 <!-- CARPALY:ENGLISH_RELEASES:END -->
 
 ### Download and setup
 
 <!-- CARPALY:ENGLISH_DOWNLOADS:START -->
-See the [latest formal Release](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.56); no APK is linked until its verification record matches. Ledger candidate `v1.1.52` / code `40` is already published as a formal Release. Its hand-written notes conflict with GitHub channel metadata; the notes are preserved.
+See the [latest formal Release page](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.56). No direct APK link is provided until the asset is matched to its verification record. Local candidate `v1.1.57` / code `45` is not public.
 <!-- CARPALY:ENGLISH_DOWNLOADS:END -->
 
 Do not uninstall an existing install or clear app data to work around signer/version issues. This is not a claim of complete vehicle validation. The project requires Android API 25 or later. For source builds, use JDK 25, Gradle Wrapper 9.5, Android SDK Platform 37, and NDK 28.2.13676358, then run:

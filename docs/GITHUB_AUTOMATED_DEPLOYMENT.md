@@ -13,7 +13,7 @@ The active `Protect main - CarPaly` ruleset requires PRs, prevents deletion and 
 | `release-policy-audit` | `main` | empty | current workflow expects `RELEASE_POLICY_READ_TOKEN`, which is not configured |
 | `ota-manifest-publisher` | `main` | empty | no required reviewer/self-review protection observed; OTA publishing must stay blocked |
 
-Secret values were not read. Name presence is not proof that values are valid. In particular, the Android signing certificate still requires a separately authorized signer-only preflight; the fixed certificate remains `4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90`.
+Secret values were not read. Name presence is not proof that values are valid. Android Release signer validation is version-code-specific: code 36–40 uses the legacy certificate `4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90`; code 41 onward uses `d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e`. The protected Environment pin must match the version epoch being built and the signer-only preflight must still pass before any protected Release operation. This local policy correction does not change GitHub Environment values.
 
 ## Pages first static deployment
 

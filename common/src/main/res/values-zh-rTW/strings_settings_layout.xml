@@ -37,4 +37,7 @@
     <string name="settings_choose_iphone_title">選擇你的 iPhone</string>
     <string name="settings_choose_iphone_description">無線 CarPlay 需要先配對 iPhone 才能連線。</string>
     <string name="settings_choose_iphone_action">選擇 iPhone</string>
+    <string name="settings_geely_capability_diagnostics">GEELY 能力檢查</string>
+    <string name="settings_geely_capability_diagnostics_summary">僅顯示唯讀能力與權限狀態；不會呼叫 OEM 介面，也不代表車輛功能已驗證。</string>
+    <string name="settings_geely_refresh_capabilities">重新整理能力狀態</string>
 </resources>

@@ -14,6 +14,40 @@ internal enum class AudioChannel {
     NAVIGATION,
 }
 
+/** Protocol-level classification is kept separate from the compatibility routing decision. */
+internal enum class CarPlayAudioClass {
+    MUSIC,
+    NAVIGATION,
+    SIRI,
+    CALL,
+    SYSTEM,
+    UNKNOWN,
+}
+
+internal data class AudioTypeClassification(
+    val audioClass: CarPlayAudioClass,
+    val basis: String,
+)
+
+internal object AudioTypeClassifier {
+    fun classify(audioType: String?): AudioTypeClassification {
+        val audioClass = when (audioType?.trim()?.lowercase()) {
+            "media" -> CarPlayAudioClass.MUSIC
+            "navigation" -> CarPlayAudioClass.NAVIGATION
+            "speechrecognition" -> CarPlayAudioClass.SIRI
+            "telephony" -> CarPlayAudioClass.CALL
+            "system" -> CarPlayAudioClass.SYSTEM
+            else -> CarPlayAudioClass.UNKNOWN
+        }
+        val basis = if (audioClass == CarPlayAudioClass.UNKNOWN) {
+            "unmapped_or_missing_protocol_audio_type"
+        } else {
+            "protocol_audio_type"
+        }
+        return AudioTypeClassification(audioClass, basis)
+    }
+}
+
 internal enum class AudioContentType {
     MUSIC,
     SPEECH,

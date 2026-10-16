@@ -15,8 +15,11 @@ function Get-CarPalySignerForVersion {
         [Parameter(Mandatory = $true)][int] $VersionCode
     )
     $matches = @($Ledger.signingEpochs | Where-Object {
-        [int] $_.minVersionCode -le $VersionCode -and
-        ($null -eq $_.maxVersionCode -or [int] $_.maxVersionCode -ge $VersionCode)
+        $minimumVersionCode = $_.minimumVersionCode
+        $maximumVersionCode = $_.maximumVersionCode
+        $null -ne $minimumVersionCode -and
+        [int] $minimumVersionCode -le $VersionCode -and
+        ($null -eq $maximumVersionCode -or [int] $maximumVersionCode -ge $VersionCode)
     })
     if ($matches.Count -ne 1) { throw 'Version code does not map to one reviewed signing epoch.' }
     return ConvertTo-CarPalyFingerprint ([string] $matches[0].certificateSha256)

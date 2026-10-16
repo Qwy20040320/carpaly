@@ -236,7 +236,7 @@ class IphoneUsbHost(
         if (!usbManager.hasPermission(device)) {
             throw IphoneUsbException.PermissionDenied("USB permission has not been granted")
         }
-        val connection = usbManager.openDevice(device)
+        var connection = usbManager.openDevice(device)
             ?: throw IphoneUsbException.DeviceUnavailable("UsbManager could not open the iPhone")
         var claimedInterface: UsbInterface? = null
         try {
@@ -244,12 +244,7 @@ class IphoneUsbHost(
                 ?: throw IphoneUsbException.Protocol(
                     "Re-enumerated iPhone exposes no USBMUX CarPlay configuration",
                 )
-            if (!connection.setConfiguration(configuration)) {
-                Log.w(
-                    IphoneCarPlayConfiguration.TAG,
-                    "setConfiguration ${configuration.id} reported failure; claiming anyway",
-                )
-            }
+            connection = selectCarPlayConfiguration(connection, device, configuration)
             val usbMux = IphoneCarPlayConfiguration.usbMuxInterface(configuration)
                 ?: throw IphoneUsbException.Protocol("CarPlay configuration exposes no USBMUX interface")
             val endpoints = IphoneCarPlayConfiguration.usbMuxEndpoints(usbMux)
@@ -273,6 +268,61 @@ class IphoneUsbHost(
             throw error
         }
     }
+
+    /** Returns the open connection that owns the selected configuration and future USBMUX claim. */
+    private fun selectCarPlayConfiguration(
+        original: UsbDeviceConnection,
+        device: UsbDevice,
+        configuration: UsbConfiguration,
+    ): UsbDeviceConnection {
+        val interfaces = (0 until device.configurationCount).map(device::getConfiguration)
+            .flatMap { config -> (0 until config.interfaceCount).map(config::getInterface) }
+            .associateBy { it.id }
+        var current = original
+        try {
+            val outcome = UsbConfigurationSelection.select(
+                target = configuration.id,
+                interfaceIds = interfaces.keys.toList(),
+                setConfiguration = { current.setConfiguration(configuration) },
+                activeConfiguration = { activeConfiguration(current) },
+                detach = { id -> current.claimInterface(interfaces.getValue(id), true) },
+                reopen = {
+                    current.close()
+                    current = usbManager.openDevice(device)
+                        ?: throw IphoneUsbException.DeviceUnavailable("UsbManager could not reopen the iPhone")
+                },
+            ) ?: return current
+            runCatching { onDiagnostic(outcome.diagnostic()) }
+            if (outcome.wrongConfiguration) {
+                throw IphoneUsbException.DeviceUnavailable(
+                    "Android could not switch the iPhone to USB configuration ${configuration.id} " +
+                        "(still ${outcome.after}); a head-unit driver may hold it",
+                )
+            }
+            if (!outcome.selected) {
+                Log.w(IphoneCarPlayConfiguration.TAG,
+                    "setConfiguration ${configuration.id} reported failure; claiming anyway")
+            }
+            return current
+        } catch (error: Throwable) {
+            if (current !== original) current.close()
+            throw error
+        }
+    }
+
+    private fun activeConfiguration(connection: UsbDeviceConnection): Int? = runCatching {
+        val bytes = ByteArray(1)
+        val count = connection.controlTransfer(
+            USB_STANDARD_DEVICE_IN,
+            GET_CONFIGURATION_REQUEST,
+            0,
+            0,
+            bytes,
+            bytes.size,
+            CONTROL_TRANSFER_TIMEOUT_MILLIS,
+        )
+        if (count == 1) bytes[0].toInt() and 0xff else null
+    }.getOrNull()
 
     private fun requireConfiguredDevice(device: UsbDevice) {
         if (!matcher.matches(device.vendorId, device.productId)) {
@@ -314,6 +364,8 @@ class IphoneUsbHost(
 
     companion object {
         private const val USB_VENDOR_DEVICE_IN = 0xc0
+        private const val USB_STANDARD_DEVICE_IN = 0x80
+        private const val GET_CONFIGURATION_REQUEST = 0x08
         private const val CARPLAY_CONFIGURATION_REQUEST = 0x52
         private const val CARPLAY_CONFIGURATION_INDEX = 0x0004
         private const val VENDOR_RESPONSE_LENGTH = 1

@@ -23,19 +23,28 @@ if (-not $ReportPath) { $ReportPath = "$apk.verification.json" }
 $expectedPackage = 'com.shihab.diplay.hudtest'
 $expectedName = [string] $ledger.current.versionName
 $expectedCode = [int] $ledger.current.versionCode
-$signingEpochs = @($ledger.signingEpochs)
-$matchingEpochs = @($signingEpochs | Where-Object {
-    [int] $_.minVersionCode -le $expectedCode -and
-    ($null -eq $_.maxVersionCode -or [int] $_.maxVersionCode -ge $expectedCode)
+$epochMatches = @($ledger.signingEpochs | Where-Object {
+    [int]$expectedCode -ge [int]$_.minimumVersionCode -and
+    ($null -eq $_.maximumVersionCode -or [int]$expectedCode -le [int]$_.maximumVersionCode)
 })
-if ($matchingEpochs.Count -ne 1) {
-    throw 'Version code does not map to exactly one reviewed Release signing epoch.'
+if ($epochMatches.Count -ne 1) { throw 'Current versionCode does not map to exactly one reviewed signing epoch.' }
+$expectedEpoch = $epochMatches[0]
+$expectedSigner = ([string]$expectedEpoch.certificateSha256).ToLowerInvariant()
+if ($ledger.current.signingEpochId -ne $expectedEpoch.id -or
+    $ledger.releaseCertificateSha256 -ne $expectedSigner -or
+    $ledger.deliveryPolicy.releaseCertificateSha256 -ne $expectedSigner) {
+    throw 'The active signer fields do not match the current version signing epoch.'
 }
-$expectedSigner = ([string] $matchingEpochs[0].certificateSha256).ToLowerInvariant()
-if ($expectedSigner -notmatch '^[0-9a-f]{64}$') {
-    throw 'The expected Release signer fingerprint is malformed.'
+$previousCodes = @($ledger.allocations | Where-Object {
+    $_.versionName -ne $expectedName -or [int]$_.versionCode -ne $expectedCode
+} | ForEach-Object { [int]$_.versionCode })
+$previousCodes += @($ledger.verifiedHistoricalDeliveries | ForEach-Object { [int]$_.versionCode })
+if ([int]$ledger.highestObservedVersionCode -lt $expectedCode) {
+    $previousCodes += [int]$ledger.highestObservedVersionCode
+} elseif ([int]$ledger.highestObservedVersionCode -gt $expectedCode) {
+    throw 'The current version is below the ledger high-water mark.'
 }
-$baselineCode = [int] $ledger.highestObservedVersionCode
+$highestPreviousCode = if ($previousCodes.Count) { ($previousCodes | Measure-Object -Maximum).Maximum } else { 0 }
 $buildTools = Join-Path $AndroidSdkPath 'build-tools\36.0.0'
 $aapt = Join-Path $buildTools 'aapt.exe'
 $apksigner = Join-Path $buildTools 'apksigner.bat'
@@ -52,14 +61,26 @@ if ($expectedPackage -ne $ledger.applicationId -or
     $gradle -notmatch ('(?m)^\s*applicationId\s*=\s*"' + [regex]::Escape($expectedPackage) + '"\s*$')) {
     throw 'Project applicationId does not match the permanent user-install identity.'
 }
-if ($expectedCode -le $baselineCode -or
+if ($expectedCode -le $highestPreviousCode -or
     $gradle -notmatch ('(?m)^\s*versionCode\s*=\s*' + $expectedCode + '\s*$') -or
     $gradle -notmatch ('(?m)^\s*versionName\s*=\s*"' + [regex]::Escape($expectedName) + '"\s*$')) {
     throw 'Gradle version metadata is not the reserved, strictly increasing user version.'
 }
-if ($gradle -notmatch 'signerForVersionCode' -or $gradle -notmatch 'android-version-ledger\.json') {
-    throw 'Gradle does not select the Release signer from the reviewed version ledger.'
+if ($ledger.applicationId -ne $expectedPackage -or
+    $gradle -notmatch 'releaseSignerForVersion\(configuredVersionCode\)') {
+    throw 'The current Release signing epoch is not resolved by the Gradle signing preflight.'
 }
+$allocationMatches = @($ledger.allocations | Where-Object {
+    $_.versionName -eq $expectedName -and $_.versionCode -eq $expectedCode
+})
+$expectedUpgradePolicy = if ($expectedCode -eq 41) { 'fresh-install-required' } else { 'same-signer-upgrade-only' }
+if ($allocationMatches.Count -ne 1 -or
+    $allocationMatches[0].signerCertificateSha256 -ne $expectedSigner -or
+    $allocationMatches[0].signingEpochId -ne $expectedEpoch.id -or
+    $allocationMatches[0].upgradePolicy -ne $expectedUpgradePolicy) {
+    throw 'The current version has no unique, matching signing and upgrade allocation.'
+}
+$allocation = $allocationMatches[0]
 if (-not $AuthenticationAssetsRoot) {
     throw 'DIPLAY_AUTH_ASSETS_DIR is required to compare packaged runtime authentication files.'
 }
@@ -89,7 +110,7 @@ try {
     $versionCode = [int] $packageMatch.Groups[2].Value
     $versionName = $packageMatch.Groups[3].Value
     if ($packageName -ne $expectedPackage) { throw 'APK applicationId differs from the permanent application identity.' }
-    if ($versionName -ne $expectedName -or $versionCode -ne $expectedCode -or $versionCode -le $baselineCode) {
+    if ($versionName -ne $expectedName -or $versionCode -ne $expectedCode -or $versionCode -le $highestPreviousCode) {
         throw 'APK versionName/versionCode does not match the reserved monotonic version.'
     }
     $minSdkMatch = [regex]::Match($badging, "(?m)^sdkVersion:'([0-9]+)'")
@@ -154,12 +175,6 @@ try {
     $checks['USER_DATA_PRESERVATION'] = 'NOT_TESTED'
 
     $apkSha256 = (Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant()
-    $allocation = @($ledger.allocations | Where-Object { $_.versionName -eq $versionName -and $_.versionCode -eq $versionCode }) | Select-Object -First 1
-    if (-not $allocation) { throw 'APK version does not have a unique allocation in the version ledger.' }
-    if ($allocation.signerCertificateSha256 -and
-        ([string] $allocation.signerCertificateSha256).ToLowerInvariant() -ne $expectedSigner) {
-        throw 'Allocated version signer differs from its reviewed signing epoch.'
-    }
     if ($allocation.artifactSha256 -and $allocation.artifactSha256 -ne $apkSha256) {
         throw 'This version already has a delivered APK with different bytes; allocate a new version instead.'
     }
