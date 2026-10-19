@@ -1,13 +1,32 @@
 {
   "schemaVersion": 1,
   "applicationId": "com.shihab.diplay.hudtest",
-  "releaseCertificateSha256": "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90",
-  "highestObservedVersionCode": 38,
+  "releaseCertificateSha256": "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e",
+  "legacyReleaseCertificateSha256": "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90",
+  "signingEpochs": [
+    {
+      "id": "legacy-v1.1.4-through-v1.1.52",
+      "minimumVersionCode": 36,
+      "maximumVersionCode": 40,
+      "certificateSha256": "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90",
+      "upgradePolicy": "legacy-signer-only"
+    },
+    {
+      "id": "fresh-install-v1.1.53-plus",
+      "minimumVersionCode": 41,
+      "maximumVersionCode": null,
+      "certificateSha256": "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e",
+      "upgradePolicy": "fresh-install-required"
+    }
+  ],
+  "highestObservedVersionCode": 45,
   "deliveryPolicy": {
     "buildType": "release",
     "apkFileNamePattern": "CarPaly-XingyueL-v{versionName}.apk",
     "applicationId": "com.shihab.diplay.hudtest",
-    "releaseCertificateSha256": "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90",
+    "releaseCertificateSha256": "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e",
+    "legacyReleaseCertificateSha256": "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90",
+    "upgradePolicy": "same-signer-upgrade-only",
     "debugApkUserDeliverable": false,
     "overwriteDeliveredArtifact": false
   },
@@ -16,19 +35,62 @@
       "tag": "v1.1.4",
       "versionName": "1.1.4",
       "versionCode": 36,
-      "status": "published"
+      "status": "published",
+      "signerCertificateSha256": "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90",
+      "signingEpochId": "legacy-v1.1.4-through-v1.1.52",
+      "upgradePolicy": "legacy-signer-only"
     },
     {
       "tag": "v1.1.5",
       "versionName": "1.1.5",
       "versionCode": 37,
-      "status": "published"
+      "status": "published",
+      "signerCertificateSha256": "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90",
+      "signingEpochId": "legacy-v1.1.4-through-v1.1.52",
+      "upgradePolicy": "legacy-signer-only"
+    },
+    {
+      "tag": "v1.1.53",
+      "versionName": "1.1.53",
+      "versionCode": 41,
+      "status": "published",
+      "sourceCommit": "64703e7dced85b81963a85b8b3ff12a7efc56448",
+      "sourceProvenance": "PARTIAL_TAG_METADATA_MISMATCH",
+      "artifactSha256": "01212c62442b80f61d9fb9238f868d4f476bf460ededabb99ee038367dc9ed27",
+      "signerCertificateSha256": "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e",
+      "signingEpochId": "fresh-install-v1.1.53-plus",
+      "upgradePolicy": "fresh-install-required"
+    },
+    {
+      "tag": "v1.1.54",
+      "versionName": "1.1.54",
+      "versionCode": 42,
+      "status": "published",
+      "sourceCommit": "e3eca1dc5145cd293815d8f176d5c3812169271a",
+      "sourceProvenance": "TAG_AND_RELEASE_BODY_MATCH",
+      "artifactSha256": "f244fff2765881b7f7a1b66b1ed44202ca3356730e11636b210b5267da514d3c",
+      "signerCertificateSha256": "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e",
+      "signingEpochId": "fresh-install-v1.1.53-plus",
+      "upgradePolicy": "same-signer-upgrade-only"
+    },
+    {
+      "tag": "v1.1.56",
+      "versionName": "1.1.56",
+      "versionCode": 44,
+      "status": "published",
+      "sourceCommit": "6b206c9e6944255a159424522017dca984423e67",
+      "sourceProvenance": "TAG_AND_RELEASE_BODY_MATCH",
+      "artifactSha256": "835bb4ac5a7d7d57442fa2b949b8500a349cd0fb7911a6210e4e2a1d0ad8b99e",
+      "signerCertificateSha256": "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e",
+      "signingEpochId": "fresh-install-v1.1.53-plus",
+      "upgradePolicy": "same-signer-upgrade-only"
     }
   ],
   "current": {
-    "versionName": "1.1.52",
-    "versionCode": 40,
-    "channel": "test"
+    "versionName": "1.1.57",
+    "versionCode": 45,
+    "channel": "test",
+    "signingEpochId": "fresh-install-v1.1.53-plus"
   },
   "allocations": [
     {
@@ -36,14 +98,51 @@
       "versionCode": 39,
       "channel": "test",
       "status": "delivered",
-      "artifactSha256": "222801dbc5e96b668c22a078da38d2b4ed184724c0b088c35d7d04c32752754a"
+      "artifactSha256": "222801dbc5e96b668c22a078da38d2b4ed184724c0b088c35d7d04c32752754a",
+      "signerCertificateSha256": "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90",
+      "signingEpochId": "legacy-v1.1.4-through-v1.1.52",
+      "upgradePolicy": "legacy-signer-only"
     },
     {
       "versionName": "1.1.52",
       "versionCode": 40,
       "channel": "test",
       "status": "delivered",
-      "artifactSha256": "f5bea98180dadad4fecab77031f7373dc423b59c420bc9b085372b524c7e8c64"
+      "artifactSha256": "f5bea98180dadad4fecab77031f7373dc423b59c420bc9b085372b524c7e8c64",
+      "signerCertificateSha256": "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90",
+      "signingEpochId": "legacy-v1.1.4-through-v1.1.52",
+      "upgradePolicy": "legacy-signer-only"
+    },
+    {
+      "versionName": "1.1.55",
+      "versionCode": 43,
+      "channel": "test",
+      "status": "delivered",
+      "artifactSha256": "3e62340c45b576a5e83638c4b9e152b86ce78b650a48fc65bedff61e37ed23e1",
+      "signerCertificateSha256": "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e",
+      "upgradePolicy": "same-signer-upgrade-only",
+      "signingEpochId": "fresh-install-v1.1.53-plus",
+      "sourceCommitStatus": "SOURCE_UNVERIFIED"
+    },
+    {
+      "versionName": "1.1.57",
+      "versionCode": 45,
+      "channel": "test",
+      "status": "delivered",
+      "artifactSha256": "b0d1ffa688910752713eb96ab20f7c2c3c3a09afd52cd97f1178cbc0d515ace2",
+      "signerCertificateSha256": "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e",
+      "signingEpochId": "fresh-install-v1.1.53-plus",
+      "upgradePolicy": "same-signer-upgrade-only",
+      "sourceCommitStatus": "SOURCE_COMMIT_NOT_REPRODUCED"
+    }
+  ],
+  "unverifiedSourceVersions": [
+    {
+      "versionName": "1.1.55",
+      "versionCode": 43,
+      "status": "SOURCE_UNVERIFIED",
+      "tagExists": false,
+      "releaseExists": false
     }
   ]
 }

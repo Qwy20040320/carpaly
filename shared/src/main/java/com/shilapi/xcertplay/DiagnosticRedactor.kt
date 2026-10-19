@@ -1,7 +1,7 @@
 package com.shilapi.xcertplay
 
 /** Diagnostics describe state transitions; protocol payloads and credentials are never exported. */
-internal object DiagnosticRedactor {
+object DiagnosticRedactor {
     private val secret = Regex("(?i)(pass(word|phrase)?|token|private.?key|certificate|pair.?record|ssid|body=|payload=|hex=)")
     private val sensitiveAssignment = Regex("(?i)\\b(vin|imei|serial(?:_number)?|phone(?:_number)?|email|bssid|mac(?:_address)?|credential|authorization)\\s*[=:]")
     private val mac = Regex("(?i)(?<![0-9a-f])(?:[0-9a-f]{2}:){5}[0-9a-f]{2}(?![0-9a-f])")
@@ -14,6 +14,7 @@ internal object DiagnosticRedactor {
     private val namedDevice = Regex("(?i)(phone|device|peer|host)?name[=:]")
     private val ipv6 = Regex("(?i)(?:[0-9a-f]{1,4}:)*[0-9a-f]{0,4}::[0-9a-f:]*(?:%[a-z0-9_.-]+)?|(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}")
     private val localPath = Regex("(?i)(?:[a-z]:\\\\(?:users\\\\[^\\s\\\\]+\\\\)?[^\\s,;]+|/data/(?:user|data)/[^\\s,;]+|/storage/emulated/[^\\s,;]+)")
+
     fun redact(line: String): String? {
         if (line.contains("TRACE ") || line.contains("PHONE ") || line.contains('\n') || line.contains('\r')) return null
         if (secret.containsMatchIn(line) || sensitiveAssignment.containsMatchIn(line) || namedDevice.containsMatchIn(line)) return null

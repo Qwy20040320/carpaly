@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from scripts import build_ota_manifests, build_site
+from scripts.android_versioning import signer_for_version
 
 
 class SiteGenerationTests(unittest.TestCase):
@@ -29,7 +30,10 @@ class SiteGenerationTests(unittest.TestCase):
                 "sha256": "a" * 64,
                 "versionName": version,
                 "versionCode": 41 if version == "1.1.53" else 40,
-                "signerSha256": build_site.read_json(build_site.LEDGER_PATH)["releaseCertificateSha256"],
+                "signerSha256": signer_for_version(
+                    build_site.read_json(build_site.LEDGER_PATH), version,
+                    41 if version == "1.1.53" else 40,
+                ),
             }
         return record
 

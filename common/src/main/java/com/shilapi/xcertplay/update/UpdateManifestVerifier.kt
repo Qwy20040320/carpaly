@@ -35,7 +35,7 @@ internal object UpdateManifestVerifier {
     internal const val MANIFEST_BASE_URL = "https://qwy20040320.github.io/carpaly/updates/"
     internal const val APPLICATION_ID = "com.shihab.diplay.hudtest"
     internal const val RELEASE_SIGNER_SHA256 =
-        "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90"
+        "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e"
     private const val REPOSITORY = "Qwy20040320/carpaly"
     private const val MAX_MANIFEST_BYTES = 32 * 1024
     private const val MAX_APK_BYTES = 50L * 1024L * 1024L

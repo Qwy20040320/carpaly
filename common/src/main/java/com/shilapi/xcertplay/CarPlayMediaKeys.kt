@@ -58,6 +58,8 @@ internal object CarPlayMediaKeys {
     private var focusOwner: Any? = null
     private var focusEventRevision = 0L
     private var focusHeld = false
+    private val iphonePlaybackTransitions = CarPlayPlaybackTransitionGate()
+    private var iphonePlaybackState: Boolean? = null
     private var appContext: Context? = null
     private var mediaAudioActive = false
     private var nowPlaying = CarPlayNowPlaying()
@@ -102,9 +104,15 @@ internal object CarPlayMediaKeys {
 
     /** The iPhone started or stopped playing; may run on any thread. */
     private fun onIphonePlaying(expected: CarPlayController, playing: Boolean) {
-        if (playing) mainHandler.post {
+        mainHandler.post {
             synchronized(this) {
-                if (controller === expected) regainFocusLocked()
+                if (controller !== expected) return@synchronized
+                if (iphonePlaybackTransitions.update(playing)) {
+                    Log.i(TAG, "iPhone playback state playing=$playing")
+                }
+                iphonePlaybackState = playing
+                if (playing) regainFocusLocked()
+                publishPlaybackStateLocked()
             }
         }
     }
@@ -239,6 +247,8 @@ internal object CarPlayMediaKeys {
         }
         session = null
         mediaAudioActive = false
+        iphonePlaybackTransitions.reset()
+        iphonePlaybackState = null
         nowPlaying = CarPlayNowPlaying()
         artwork = null
         artworkCache.clear()
@@ -248,11 +258,13 @@ internal object CarPlayMediaKeys {
     }
 
     private fun publishPlaybackStateLocked() {
-        val playing = if (nowPlaying.elapsedMillis != null || nowPlaying.title != null) {
-            nowPlaying.playing
-        } else {
-            mediaAudioActive
-        }
+        val hasNowPlayingState = nowPlaying.elapsedMillis != null || nowPlaying.title != null
+        val playing = CarPlayPlaybackStatePolicy.isPlaying(
+            explicitControllerState = iphonePlaybackState,
+            hasNowPlayingState = hasNowPlayingState,
+            nowPlayingState = nowPlaying.playing,
+            audioTrackActive = mediaAudioActive,
+        )
         session?.setPlaybackState(
             PlaybackState.Builder()
                 .setActions(ACTIONS)

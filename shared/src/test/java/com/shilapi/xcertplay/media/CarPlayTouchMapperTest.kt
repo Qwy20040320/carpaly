@@ -52,6 +52,22 @@ class CarPlayTouchMapperTest {
         }
     }
 
+    @Test fun reducedHeadUnitViewportKeepsVideoAndTouchInTheSameAspectFit() {
+        val viewport = CarPlayVideoLayout.fit(canvasWidth = 1920, canvasHeight = 720, viewWidth = 1800, viewHeight = 656)
+        assertEquals(656f, viewport.height, 0.001f)
+        assertEquals(1920f / 720f, viewport.width / viewport.height, 0.0001f)
+        assertTrue(viewport.left > 0f)
+
+        val event = MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 900f, 328f, 0)
+        try {
+            val center = CarPlayTouchMapper.contacts(event, viewport).single()
+            assertEquals(0.5, center.x, 1e-6)
+            assertEquals(0.5, center.y, 1e-6)
+        } finally {
+            event.recycle()
+        }
+    }
+
     private fun contact(action: Int, x: Float, y: Float) = MotionEvent.obtain(0, 0, action, x, y, 0).let {
         try {
             CarPlayTouchMapper.contacts(it, content).single()

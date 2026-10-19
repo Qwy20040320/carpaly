@@ -194,8 +194,11 @@ class CarPlayHostActivity : ComponentActivity() {
             awaitingVpnConsent = false
             if (result.resultCode == RESULT_OK) {
                 vpnReady = true
+                appendLog("Wired startup system VPN consent result=granted")
                 maybeStartCarPlay()
             } else {
+                vpnReady = false
+                appendLog("Wired startup system VPN consent result=not_granted")
                 setStatus(getString(R.string.vpn_consent_was_denied))
             }
         }
@@ -365,6 +368,9 @@ class CarPlayHostActivity : ComponentActivity() {
     private var activeHeadUnitProfile: HeadUnitProfile? = null
     private var hevcEnabled = true
     private var hevcSoftwareDecoderEnabled = false
+    private val hevcDecoders by lazy { HevcSupport.decoders() }
+    private val sessionHevc: Boolean
+        get() = HevcSupport.usable(hevcEnabled, hevcSoftwareDecoderEnabled, hevcDecoders)
     private var advancedAudioChannelMappingSupported = false
     private var advancedAudioChannelMapping = false
     private var navigationStreamType = 14
@@ -386,6 +392,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private var sessionDock: CarPlayDock? = null
     private var hideTopBar = true
     private var hideBottomBar = true
+    private val runtimeTraceGate = CarPlayRuntimeTraceGate()
     private var safeAreaDrawOutside = true
     private var locationReportingEnabled = false
     private var locationPermissionAvailable = false
@@ -582,6 +589,9 @@ class CarPlayHostActivity : ComponentActivity() {
         getSystemService(android.hardware.display.DisplayManager::class.java)
             ?.registerDisplayListener(clusterDisplayListener, mainHandler)
         initializeSessionLog()
+        if (isIphoneUsbAttachment(intent)) {
+            appendLog("USB device-attach launch received; switching to wired startup")
+        }
         lastConfiguration = Configuration(resources.configuration)
         darkMode = savedInstanceState?.getBoolean("carplay_night_active")
             ?: nightModeOrNull(resources.configuration.uiMode) ?: false
@@ -747,7 +757,17 @@ class CarPlayHostActivity : ComponentActivity() {
         } else {
             vpnReady = false
             awaitingVpnConsent = true
-            vpnConsent.launch(consent)
+            appendLog("Wired startup waiting for Android VPN consent")
+            VpnConsentLaunchGuard.launch(
+                input = consent,
+                launch = { vpnConsent.launch(it) },
+                onUnavailable = {
+                    awaitingVpnConsent = false
+                    vpnReady = false
+                    appendLog("System VPN consent activity unavailable; wired startup remains blocked")
+                    setStatus(getString(R.string.vpn_consent_screen_unavailable))
+                },
+            )
         }
     }
 
@@ -777,6 +797,7 @@ class CarPlayHostActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         if (isIphoneUsbAttachment(intent)) {
+            appendLog("USB device-attach delivered to active host; switching to wired startup")
             if (wirelessEnabled) {
                 if (menuOpen) cancelSettingsEdits()
                 AirPlayPersistence.saveWirelessEnabled(this, false)
@@ -1409,13 +1430,32 @@ class CarPlayHostActivity : ComponentActivity() {
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             fun androidx.core.graphics.Insets.asContentInsets() = CarPlayContentInsets(left, top, right, bottom)
+            val statusVisible = insets.isVisible(WindowInsetsCompat.Type.statusBars())
+            val statusInsets = insets.getInsets(WindowInsetsCompat.Type.statusBars()).asContentInsets()
+            val navigationVisible = insets.isVisible(WindowInsetsCompat.Type.navigationBars())
+            val navigationInsets = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).asContentInsets()
+            val cutoutInsets = insets.getInsets(WindowInsetsCompat.Type.displayCutout()).asContentInsets()
+            // Some Geely head units draw an OEM status strip outside Android's reported insets.
+            // When the app requested immersive mode but Android reports no visible status bar,
+            // reserve the platform's declared status-bar height as a conservative viewport fallback.
+            val geelyOverlayFallbackTop = if (
+                activeHeadUnitProfile == HeadUnitProfile.GEELY_XINGYUE_L && hideTopBar &&
+                !statusVisible && statusInsets.top == 0
+            ) systemDimension("status_bar_height") else 0
             val safe = CarPlaySystemBarInsets.resolve(
-                statusBarsVisible = insets.isVisible(WindowInsetsCompat.Type.statusBars()),
-                statusBars = insets.getInsets(WindowInsetsCompat.Type.statusBars()).asContentInsets(),
-                navigationBarsVisible = insets.isVisible(WindowInsetsCompat.Type.navigationBars()),
-                navigationBars = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).asContentInsets(),
-                displayCutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout()).asContentInsets(),
+                statusBarsVisible = statusVisible,
+                statusBars = statusInsets,
+                navigationBarsVisible = navigationVisible,
+                navigationBars = navigationInsets,
+                displayCutout = cutoutInsets,
+                hiddenStatusBarFallbackTop = geelyOverlayFallbackTop,
             )
+            val insetTrace = "statusVisible=$statusVisible status=${statusInsets.left},${statusInsets.top}," +
+                "${statusInsets.right},${statusInsets.bottom} navigationVisible=$navigationVisible " +
+                "navigation=${navigationInsets.left},${navigationInsets.top},${navigationInsets.right}," +
+                "${navigationInsets.bottom} cutout=${cutoutInsets.left},${cutoutInsets.top}," +
+                "${cutoutInsets.right},${cutoutInsets.bottom} geelyOverlayFallbackTop=$geelyOverlayFallbackTop"
+            if (runtimeTraceGate.shouldReportInsets(insetTrace)) appendLog("Window insets: $insetTrace")
             view.setPadding(safe.left, safe.top, safe.right, safe.bottom)
             insets
         }
@@ -3449,7 +3489,7 @@ class CarPlayHostActivity : ComponentActivity() {
             "${getString(R.string.resolution_handshake_prefix)}${native.width} x ${native.height} -> " +
                 "${negotiated.widthPixels} x ${negotiated.heightPixels}"
         }
-        val transport = if (!hevcEnabled) {
+        val transport = if (!sessionHevc) {
             "H.264"
         } else {
             "HEVC (H.265, ${if (hevcSoftwareDecoderEnabled) "software" else "hardware"})"
@@ -3505,7 +3545,7 @@ class CarPlayHostActivity : ComponentActivity() {
         } else decoderCanvasSupport(display)
 
     private fun decoderCanvasSupport(display: AirPlayDisplayConfig): CanvasSupport = try {
-        val mime = if (hevcEnabled) MediaFormat.MIMETYPE_VIDEO_HEVC else MediaFormat.MIMETYPE_VIDEO_AVC
+        val mime = if (sessionHevc) MediaFormat.MIMETYPE_VIDEO_HEVC else MediaFormat.MIMETYPE_VIDEO_AVC
         // Match MediaCodec.createDecoderByType's first suitable decoder; do not silently force
         // an enlarged stream through a software decoder on a slower head unit.
         val decoder = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.firstOrNull {
@@ -3522,7 +3562,7 @@ class CarPlayHostActivity : ComponentActivity() {
                 display.widthPixels, display.heightPixels, display.fps.toDouble()) == true
             val reason = when {
                 !hardware -> "software_decoder"
-                hevcEnabled && hevcSoftwareDecoderEnabled -> "software_hevc_selected"
+                sessionHevc && hevcSoftwareDecoderEnabled -> "software_hevc_selected"
                 video == null -> "no_video_capabilities"
                 !sizeSupported -> "canvas_dimensions_unsupported"
                 !rateSupported -> "frame_rate_unsupported"
@@ -3538,6 +3578,15 @@ class CarPlayHostActivity : ComponentActivity() {
     } catch (error: Exception) {
         CanvasSupport(false, "capability_query_${error.javaClass.simpleName}",
             "Decoder capability query failed error=${error.javaClass.simpleName}")
+    }
+
+    private fun audioDecoderAvailable(mime: String): Boolean = try {
+        MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any { codec ->
+            !codec.isEncoder && codec.supportedTypes.any { type -> type.equals(mime, ignoreCase = true) }
+        }
+    } catch (error: Exception) {
+        appendLog("Audio decoder capability query failed mime=$mime error=${error.javaClass.simpleName}")
+        false
     }
 
     private fun createAirPlayConfig(size: DisplaySize): AirPlayConfig {
@@ -3659,7 +3708,7 @@ class CarPlayHostActivity : ComponentActivity() {
         }
         val longPixels = maxOf(display.widthPixels, display.heightPixels)
         val square = if (CarPlayRotation.enabled(this) && !inSplitScreen) {
-            CarPlayRotation.squareSide(longPixels, CarPlayRotation.picture(this), hevcEnabled, hevcSoftwareDecoderEnabled)
+            CarPlayRotation.squareSide(longPixels, CarPlayRotation.picture(this), sessionHevc, hevcSoftwareDecoderEnabled)
         } else null
         val canvas = if (square == null) display else {
             // The square is drawn across the screen's long side whatever its pixel count, so it reports that
@@ -3694,17 +3743,25 @@ class CarPlayHostActivity : ComponentActivity() {
             "surface=${size.width}x${size.height} resolution=${requestedResolutionPercent}% " +
             "base=${requestedResolutionDisplay.widthPixels}x${requestedResolutionDisplay.heightPixels} " +
             "candidate=${candidate.widthPixels}x${candidate.heightPixels} fps=$fps " +
-            "codec=${if (hevcEnabled) "HEVC" else "H.264"} softwareHevc=$hevcSoftwareDecoderEnabled"
+            "codec=${if (sessionHevc) "HEVC" else "H.264"} softwareHevc=$hevcSoftwareDecoderEnabled"
         val effectiveSummary = "Display effective percent=$uiScalePercent resolution=${displayScalePercent}% " +
             "canvas=${display.widthPixels}x${display.heightPixels} decision=${support.reason} " +
             "physical=${physical.widthMm}x${physical.heightMm}mm safeArea=${display.safeArea} " +
             "drawOutside=${display.safeAreaDrawOutside}"
         displayDiagnosticAttempt = DisplayDiagnosticSnapshot.begin(this, requestSummary, support.details, effectiveSummary)
         appendLog(requestSummary)
+        if (hevcEnabled && !sessionHevc) {
+            appendLog("HEVC requested but no usable decoder is available; this session uses H.264")
+        }
         appendLog(support.details)
         appendLog(effectiveSummary)
         val carBluetoothAudio = AirPlayPersistence.loadCarBluetoothAudio(this)
         if (carBluetoothAudio) logCarBluetoothAudio()
+        val audioOutputOpus = audioDecoderAvailable(MediaFormat.MIMETYPE_AUDIO_OPUS)
+        appendLog(
+            "Audio codec capability outputOpusDecoder=$audioOutputOpus " +
+                "source=MediaCodecList explicitDecoderFallback=runtime; decoder usability is not yet verified",
+        )
         return AirPlayConfig(
             deviceName = "DiPlay",
             deviceId = DiPlayBootstrap.deviceId(airPlayIdentity),
@@ -3713,7 +3770,7 @@ class CarPlayHostActivity : ComponentActivity() {
             main = declared,
             cluster = clusterDisplayConfig(),
             rightHandDrive = rightHandDrive,
-            hevc = hevcEnabled,
+            hevc = sessionHevc,
             microphone = microphoneAvailable,
             manufacturer = normalizedManufacturer(),
             model = normalizedModel(),
@@ -3722,6 +3779,7 @@ class CarPlayHostActivity : ComponentActivity() {
             videoInCar = com.shilapi.xcertplay.hud.BydOutputSettings.videoWhileParkedActive(this),
             mainBufferedAudio = AirPlayPersistence.loadMainBufferedAudio(this),
             disableAudioOutput = carBluetoothAudio,
+            audioOutputOpus = audioOutputOpus,
         )
     }
 
@@ -3950,6 +4008,7 @@ class CarPlayHostActivity : ComponentActivity() {
             mediaBufferMillis = AirPlayPersistence.loadMediaBufferMillis(this),
             onAudioDiagnostic = { message ->
                 AsyncDiagnosticLog.append(diagnosticLog, message)
+                UnifiedDiagnosticLog.recordLegacy(message)
             },
             onMediaAudioChanged = CarPlayMediaKeys::onMediaAudioChanged,
             callEchoCancellation = AirPlayPersistence.loadCallEchoCancellation(this),
@@ -4015,6 +4074,7 @@ class CarPlayHostActivity : ComponentActivity() {
                         return@runOnUiThread
                     }
                     if (controllerGeneration != restartGeneration || startupRetryStopped) return@runOnUiThread
+                    UnifiedDiagnosticLog.endConnectionSession("AIRPLAY_SESSION_ENDED")
                     startupRetryBudget.disconnected()
                     VideoFrameRateTracker.reset()
                     activeAirPlaySession = null
@@ -4052,6 +4112,7 @@ class CarPlayHostActivity : ComponentActivity() {
                 if (message.startsWith(CarPlayController.CONNECTION_DIAGNOSTIC_PREFIX + " ")) {
                     // Retain old-controller teardown evidence without accepting its UI/session state.
                     AsyncDiagnosticLog.append(diagnosticLog, message)
+                    UnifiedDiagnosticLog.recordLegacy(message)
                     return
                 }
                 runOnUiThread {
@@ -4079,6 +4140,7 @@ class CarPlayHostActivity : ComponentActivity() {
         }
         updateHotspotStatus(status)
         val description = status.describe()
+        appendLog("CarPlay controller stage=${status.javaClass.simpleName}")
         setConnectionStage(description)
         when (status) {
             is CarPlayStatus.Failed -> if (status.wifiResetRequired) {
@@ -4175,6 +4237,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private fun startCarPlay(size: DisplaySize) {
         if (CarPlayBackgroundSession.hasSession() && !CarPlayBackgroundSession.isOwner(this)) return
         if (shuttingDown.get() || menuOpen || handshakeResetInProgress || controller != null) return
+        UnifiedDiagnosticLog.beginConnectionSession()
         val controllerGeneration = restartGeneration
         val config = createRuntimeConfig()
         val effectiveSize = if (isMultiWindowActive() && !AirPlayPersistence.loadAdaptPipResolution(this) &&
@@ -4501,6 +4564,15 @@ class CarPlayHostActivity : ComponentActivity() {
         val view = videoView ?: return
         if (viewWidth <= 0 || viewHeight <= 0) return
         val content = contentRect(viewWidth, viewHeight)
+        val screenPosition = IntArray(2)
+        view.getLocationOnScreen(screenPosition)
+        val canvas = sessionDisplay
+        val geometryTrace = "viewport=${viewWidth}x$viewHeight screen=${screenPosition[0]},${screenPosition[1]} " +
+            "content=${content.left},${content.top},${content.width},${content.height} " +
+            "canvas=${canvas?.width ?: 0}x${canvas?.height ?: 0} coordinateBasis=shared-video-touch"
+        if (runtimeTraceGate.shouldReportGeometry(geometryTrace)) {
+            appendLog("Video/touch geometry: $geometryTrace")
+        }
         val fallback = fallbackVideoView
         if (fallback != null) {
             val bounds = CarPlaySurfaceBounds.from(content)
@@ -4546,22 +4618,36 @@ class CarPlayHostActivity : ComponentActivity() {
             recreate()
             return
         }
-        val size = activeDisplaySize ?: return
+        val size = activeDisplaySize
         val transportReady = if (wirelessEnabled) wirelessPermissionsReady else vpnReady
         val locationReady = !locationReportingEnabled || locationPermissionAvailable
-        if (
-            !transportReady ||
-            !locationReady ||
-            !microphonePermissionResolved ||
-            shuttingDown.get() ||
-            menuOpen ||
-            handshakeResetInProgress ||
-            pendingDisplaySize != null ||
-            controller != null
-        ) {
+        val blockReason = CarPlayStartupGate.blockingReason(
+            CarPlayStartupReadiness(
+                displayReady = size != null,
+                transportReady = transportReady,
+                locationReady = locationReady,
+                microphonePermissionResolved = microphonePermissionResolved,
+                menuOpen = menuOpen,
+                handshakeResetInProgress = handshakeResetInProgress,
+                displayResizePending = pendingDisplaySize != null,
+                controllerPresent = controller != null,
+            ),
+        )
+        if (blockReason != null) {
+            if (runtimeTraceGate.shouldReportStartupBlock(blockReason)) {
+                appendLog(
+                    "CarPlay startup gated reason=$blockReason transport=${if (wirelessEnabled) "wireless" else "wired"} " +
+                        "transportReady=$transportReady vpnReady=$vpnReady awaitingVpnConsent=$awaitingVpnConsent " +
+                        "awaitingWirelessPermissions=$awaitingWirelessPermissions locationReady=$locationReady " +
+                        "awaitingLocationPermission=$awaitingLocationPermission microphonePermissionResolved=$microphonePermissionResolved " +
+                        "displayReady=${size != null} resizePending=${pendingDisplaySize != null} " +
+                        "menuOpen=$menuOpen handshakeReset=$handshakeResetInProgress controllerPresent=${controller != null}",
+                )
+            }
             return
         }
-        startCarPlay(size)
+        runtimeTraceGate.shouldReportStartupBlock(null)
+        startCarPlay(size ?: return)
     }
 
     private fun reconnectAfterLoss(reason: String, startupFailure: WirelessStartupFailure? = null) {
@@ -4746,7 +4832,7 @@ class CarPlayHostActivity : ComponentActivity() {
         appendLog(
             "$prefix; resolution " +
                 "${displayScalePercent}% with " +
-                (if (hevcEnabled) "HEVC (H.265)" else "H.264") +
+                (if (sessionHevc) "HEVC (H.265)" else "H.264") +
                 ", MFI ${mfiTargetLabel(mfiTarget)}" +
                 ", Wi-Fi session ${hotspotModeLabel(wirelessHotspotMode)}",
         )
@@ -5034,10 +5120,12 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private fun appendLog(message: String) {
         AsyncDiagnosticLog.append(sessionLog, message)
+        UnifiedDiagnosticLog.recordLegacy(message)
     }
 
     private fun appendFileLog(message: String) {
         AsyncDiagnosticLog.append(sessionLog, message)
+        UnifiedDiagnosticLog.recordLegacy(message)
     }
 
     private fun initializeSessionLog() {
@@ -5051,6 +5139,10 @@ class CarPlayHostActivity : ComponentActivity() {
             )
         }
         sessionLog = activeLog
+        UnifiedDiagnosticLog.record(
+            level = "INFO", module = "SESSION", event = "HOST_LOG_INITIALIZED", result = "READY",
+            state = "ACTIVE", detail = "pid=${Process.myPid()} app private session log initialized",
+        )
     }
 
     private fun refreshLogView(nowMillis: Long) {

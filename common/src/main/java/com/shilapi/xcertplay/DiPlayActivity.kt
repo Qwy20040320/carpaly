@@ -90,7 +90,16 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 internal enum class SettingsCategory {
-    OVERVIEW, CONNECTION, DISPLAY, AUDIO, NAVIGATION, VEHICLE, LANGUAGE, ABOUT, APP_UPDATES, DIAGNOSTICS, ADVANCED,
+    OVERVIEW, CONNECTION, DISPLAY, AUDIO, NAVIGATION, VEHICLE, LANGUAGE, ABOUT, DIAGNOSTICS, ADVANCED;
+
+    companion object {
+        /** Older saved states used a standalone update category; keep them on the merged About page. */
+        internal fun restore(value: String?): SettingsCategory? = when (value) {
+            "APP_UPDATES" -> ABOUT
+            null -> null
+            else -> runCatching { valueOf(value) }.getOrNull()
+        }
+    }
 }
 
 /** A settings card. Every entry needs one category in [SettingsInformationArchitecture]; see AGENTS.md. */
@@ -118,8 +127,7 @@ internal object SettingsInformationArchitecture {
     val sectionsByCategory: Map<SettingsCategory, Set<SettingsSection>> = mapOf(
         SettingsCategory.OVERVIEW to emptySet(),
         SettingsCategory.LANGUAGE to setOf(SettingsSection.LANGUAGE),
-        SettingsCategory.ABOUT to emptySet(),
-        SettingsCategory.APP_UPDATES to setOf(SettingsSection.APP_UPDATES),
+        SettingsCategory.ABOUT to setOf(SettingsSection.APP_UPDATES),
         SettingsCategory.CONNECTION to setOf(
             SettingsSection.CONNECTION_SETUP,
             SettingsSection.AUTOMATIC_CONNECTION,
@@ -347,11 +355,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         pendingCarHotspotSetup = savedInstanceState?.getBoolean("pending_car_hotspot") ?: false
         bydVehicleAdvancedExpanded = savedInstanceState?.getBoolean("byd_vehicle_advanced") ?: false
-        settingsCategory = savedInstanceState?.getString("settings_category")
-            ?.let { runCatching { SettingsCategory.valueOf(it) }.getOrNull() }
+        settingsCategory = SettingsCategory.restore(savedInstanceState?.getString("settings_category"))
             ?: SettingsCategory.OVERVIEW
-        connectionSettingsReturnCategory = savedInstanceState?.getString("connection_settings_return_category")
-            ?.let { runCatching { SettingsCategory.valueOf(it) }.getOrNull() }
+        connectionSettingsReturnCategory = SettingsCategory.restore(
+            savedInstanceState?.getString("connection_settings_return_category"),
+        )
         setupStep = savedInstanceState?.getInt("setup_step") ?: SetupGuide.STEP_CAR
         setupFromSettings = savedInstanceState?.getBoolean("setup_from_settings") ?: false
         page = savedInstanceState?.getString("page") ?: intent.getStringExtra("page")
@@ -985,7 +993,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         SettingsCategory.ADVANCED -> R.drawable.ic_dp_advanced
         SettingsCategory.LANGUAGE -> R.drawable.ic_dp_language
         SettingsCategory.ABOUT -> R.drawable.ic_dp_about
-        SettingsCategory.APP_UPDATES -> R.drawable.ic_dp_about
     }
 
     private fun settingsCategoryTitle(category: SettingsCategory): String = getString(when (category) {
@@ -999,7 +1006,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         SettingsCategory.ADVANCED -> R.string.settings_advanced
         SettingsCategory.LANGUAGE -> R.string.language_section_title
         SettingsCategory.ABOUT -> R.string.about
-        SettingsCategory.APP_UPDATES -> R.string.settings_app_updates
     })
 
     private fun settingsCategoryContent(content: LinearLayout) {
@@ -1017,11 +1023,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.LANGUAGE))
             }
             SettingsCategory.ABOUT -> about(content)
-            SettingsCategory.APP_UPDATES -> {
-                settingsPageTitle(content, getString(R.string.settings_app_updates),
-                    getString(R.string.settings_app_updates_description))
-                renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.APP_UPDATES))
-            }
         }
     }
 
@@ -1048,7 +1049,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             SettingsCategory.VEHICLE to R.string.settings_vehicle_summary,
             SettingsCategory.LANGUAGE to R.string.settings_language_summary,
             SettingsCategory.ABOUT to R.string.about_diplay,
-            SettingsCategory.APP_UPDATES to R.string.settings_app_updates_description,
         )
         val twoColumns = isExpandedSettingsLayout && resources.configuration.let {
             SettingsLayoutPolicy.overviewHasTwoColumns(it.screenWidthDp, it.fontScale)
@@ -1211,11 +1211,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private fun openSettingsCategory(category: SettingsCategory, checkAutomatically: Boolean) {
         if (category == SettingsCategory.ABOUT) {
             page = "about"
+            settingsCategory = SettingsCategory.ABOUT
             maybeCheckForUpdatesAutomatically()
         } else {
             page = "settings"
             settingsCategory = category
-            if (category == SettingsCategory.APP_UPDATES && checkAutomatically) maybeCheckForUpdatesAutomatically()
         }
         render()
     }
@@ -1310,6 +1310,16 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private fun diagnosticsSettings(content: LinearLayout) {
         settingsPageTitle(content, getString(R.string.diagnostics), getString(R.string.settings_diagnostics_summary))
         renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.DIAGNOSTICS))
+        section(content, getString(R.string.settings_geely_capability_diagnostics), R.drawable.ic_dp_diagnostics) { card ->
+            card.addView(label(getString(R.string.settings_geely_capability_diagnostics_summary), 14, MUTED))
+            val snapshot = label(GeelyVehicleCapabilityRegistry.inspect(this).asDiagnosticText(), 13, MUTED)
+            snapshot.setTextIsSelectable(true)
+            snapshot.setPadding(0, dp(12), 0, dp(12))
+            card.addView(snapshot)
+            card.addView(button(getString(R.string.settings_geely_refresh_capabilities), false) {
+                snapshot.text = GeelyVehicleCapabilityRegistry.inspect(this).asDiagnosticText()
+            }, matchButton(12, 56))
+        }
     }
 
     internal data class SettingsSearchResult(val title: String, val category: SettingsCategory)
@@ -2043,15 +2053,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private fun about(content: LinearLayout) {
         content.addView(label(getString(R.string.app_name), 40, TEXT, true))
         content.addView(label(getString(R.string.carplay_at_home_in_your_car), 20, MUTED).apply { setPadding(0, dp(8), 0, dp(24)) })
-        section(content, getString(R.string.settings_app_updates)) { card ->
-            card.addView(label(getString(R.string.an_independent_carplay_receiver_for_android_head_units_wir), 17, TEXT))
-            card.addView(label(getString(R.string.settings_app_updates_description), 14, MUTED)
-                .apply { setPadding(0, dp(6), 0, dp(8)) })
-            card.addView(button(getString(R.string.update_check), false) {
-                openSettingsCategory(SettingsCategory.APP_UPDATES, checkAutomatically = false)
-                checkForUpdates()
-            }, matchButton(4, 56))
-        }
+        renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.ABOUT))
         section(content, getString(R.string.made_possible_by_open_source)) { card ->
             card.addView(label(getString(R.string.receiver_based_on_xcertplay_licensed_under_gpl_3_0_diplay), 16, MUTED))
         }
@@ -2067,6 +2069,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             getString(R.string.settings_auto_update_check_description), autoUpdateChecksEnabled()) { enabled ->
             getSharedPreferences("diplay", MODE_PRIVATE).edit()
                 .putBoolean(UpdateCheckPolicy.AUTO_CHECK_ENABLED_KEY, enabled).apply()
+            UnifiedDiagnosticLog.record(
+                level = "INFO", module = "UPDATE", event = "AUTO_CHECK_SETTING_CHANGED", result = "SAVED",
+                state = if (enabled) "ENABLED" else "DISABLED", detail = "periodic check preference changed by user",
+            )
             if (enabled) maybeCheckForUpdatesAutomatically()
         }
         card.addView(button(getString(R.string.update_channel_row, getString(updateChannelLabel(updateChannel()))), false) {
@@ -2199,7 +2205,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 getSharedPreferences("diplay", MODE_PRIVATE).edit()
                     .putString(UpdateCheckPolicy.UPDATE_CHANNEL_KEY, selected.name).apply()
                 dialog.dismiss()
-                checkForUpdates()
+                UnifiedDiagnosticLog.record(
+                    level = "INFO", module = "UPDATE", event = "CHANNEL_SELECTED", result = "SAVED",
+                    state = selected.name, detail = "user selected update channel",
+                )
+                checkForUpdates(source = "CHANNEL_SELECTION")
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
@@ -2216,11 +2226,16 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 lastCheckAtMillis = preferences.getLong(UpdateCheckPolicy.LAST_CHECK_AT_KEY, 0L),
                 nowMillis = now,
             )) {
-            checkForUpdates()
+            checkForUpdates(source = "AUTOMATIC")
         }
     }
 
-    private fun checkForUpdates() {
+    private fun checkForUpdates(source: String = "MANUAL") {
+        UnifiedDiagnosticLog.record(
+            level = "INFO", module = "UPDATE", event = "CHECK_STARTED", result = "PENDING",
+            state = "CHECKING", reason = source, detail = "channel=${updateChannel().name} currentVersion=${version()} " +
+                "currentVersionCode=${currentVersionCode()}",
+        )
         getSharedPreferences("diplay", MODE_PRIVATE).edit()
             .putLong(UpdateCheckPolicy.LAST_CHECK_AT_KEY, System.currentTimeMillis()).apply()
         updateStage = UpdateStage.CHECKING
@@ -2238,9 +2253,19 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                         if (release == null) {
                             updateMessage = getString(R.string.update_up_to_date)
                             updateStage = UpdateStage.IDLE
+                            UnifiedDiagnosticLog.record(
+                                level = "INFO", module = "UPDATE", event = "CHECK_COMPLETED", result = "CURRENT",
+                                state = "UP_TO_DATE", detail = "channel=${updateChannel().name} currentVersionCode=${currentVersionCode()}",
+                            )
                         } else {
                             updateRelease = release
                             updateStage = UpdateStage.AVAILABLE
+                            UnifiedDiagnosticLog.record(
+                                level = "INFO", module = "UPDATE", event = "UPDATE_AVAILABLE", result = "AVAILABLE",
+                                state = "VERIFIED", detail = "tag=${release.tagName} version=${release.versionName} " +
+                                    "versionCode=${release.versionCode} channel=${release.channel.name} prerelease=${release.isPrerelease} " +
+                                    "apkBytes=${release.sizeBytes}",
+                            )
                         }
                         if (isUpdatePageVisible() || (page == "home" && !CarPlayBackgroundSession.hasSession())) {
                             render()
@@ -2248,6 +2273,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     },
                     { failure ->
                         Log.w("DiPlay-Update", "update check failed", failure)
+                        UnifiedDiagnosticLog.record(
+                            level = "WARN", module = "UPDATE", event = "CHECK_FAILED", result = "FAILED",
+                            state = "FAILED", reason = failure.javaClass.simpleName,
+                            detail = "channel=${updateChannel().name} failureClass=${failure.javaClass.simpleName}",
+                        )
                         updateMessage = getString(
                             if (failure is UpdateManifestException &&
                                 failure.message.orEmpty().contains("not provisioned")) {
@@ -2268,6 +2298,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val json = UpdateClient.fetchManifest(channel, userAgent())
         val verified = UpdateManifestVerifier.verifyEnvelope(json, channel, currentVersionCode(), keys)
         UpdateManifestReplayGuard.accept(applicationContext, channel, verified)
+        UnifiedDiagnosticLog.record(
+            level = "INFO", module = "UPDATE", event = "MANIFEST_VERIFIED", result = "ACCEPTED",
+            state = "SIGNATURE_AND_REPLAY_CHECKS_PASSED", detail = "channel=${channel.name} " +
+                "releaseVersionCode=${verified.release?.versionCode ?: currentVersionCode()} " +
+                "currentVersionCode=${currentVersionCode()}",
+        )
         return verified.release
     }
 
@@ -2291,6 +2327,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         updateMessage = null
         updateDownloadProgress = 0L
         updateStage = UpdateStage.DOWNLOADING
+        UnifiedDiagnosticLog.record(
+            level = "INFO", module = "UPDATE", event = "DOWNLOAD_STARTED", result = "PENDING",
+            state = "DOWNLOADING", detail = "version=${release.versionName} versionCode=${release.versionCode} " +
+                "expectedBytes=${release.sizeBytes}",
+        )
         val generation = ++updateGeneration
         val cancellation = UpdateDownloadCancellation()
         updateDownloadCancellation = cancellation
@@ -2345,10 +2386,23 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                         updateApkFile = apk
                         updateMessage = getString(R.string.update_download_verified)
                         updateStage = UpdateStage.READY_TO_INSTALL
+                        UnifiedDiagnosticLog.record(
+                            level = "INFO", module = "UPDATE", event = "DOWNLOAD_VERIFIED", result = "VERIFIED",
+                            state = "READY_TO_INSTALL", detail = "version=${release.versionName} " +
+                                "versionCode=${release.versionCode} bytes=${apk.length()} sha256AndSigner=matched",
+                        )
                     },
                     { failure ->
                         Log.w("DiPlay-Update", "verified update download failed", failure)
                         val wasCancelled = cancellation.isCancelled()
+                        UnifiedDiagnosticLog.record(
+                            level = if (wasCancelled) "INFO" else "WARN", module = "UPDATE",
+                            event = if (wasCancelled) "DOWNLOAD_CANCELLED" else "DOWNLOAD_OR_VERIFY_FAILED",
+                            result = if (wasCancelled) "CANCELLED" else "FAILED",
+                            state = if (wasCancelled) "CANCELLED" else "AVAILABLE",
+                            reason = failure.javaClass.simpleName,
+                            detail = "version=${release.versionName} failureClass=${failure.javaClass.simpleName}",
+                        )
                         updateMessage = getString(when {
                             wasCancelled -> R.string.update_download_cancelled
                             failure is UpdateApkIncompatibilityException -> R.string.update_incompatible
@@ -2363,18 +2417,30 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun cancelUpdateDownload() {
+        UnifiedDiagnosticLog.record(
+            level = "INFO", module = "UPDATE", event = "DOWNLOAD_CANCEL_REQUESTED", result = "CANCEL_REQUESTED",
+            state = "DOWNLOADING", detail = "user requested cancellation",
+        )
         updateDownloadCancellation?.cancel()
     }
 
     private fun installDownloadedUpdate() {
         if (updateStage != UpdateStage.READY_TO_INSTALL) return
         if (CarPlayBackgroundSession.hasSession()) {
+            UnifiedDiagnosticLog.record(
+                level = "WARN", module = "UPDATE", event = "INSTALL_BLOCKED", result = "BLOCKED",
+                state = "CARPLAY_ACTIVE", reason = "active_session", detail = "installer not launched while CarPlay session is active",
+            )
             updateMessage = getString(R.string.update_carplay_must_stop)
             renderUpdateStatusIfVisible()
             return
         }
         when (TrustedVehicleMotion.UNKNOWN) {
             TrustedVehicleMotion.MOVING -> {
+                UnifiedDiagnosticLog.record(
+                    level = "WARN", module = "UPDATE", event = "INSTALL_BLOCKED", result = "BLOCKED",
+                    state = "MOVING", reason = "trusted_motion_state", detail = "installer not launched while vehicle reports moving",
+                )
                 updateMessage = getString(R.string.update_install_waiting_for_parked)
                 renderUpdateStatusIfVisible()
                 return
@@ -2441,6 +2507,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                             return@fold
                         }
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+                            UnifiedDiagnosticLog.record(
+                                level = "INFO", module = "UPDATE", event = "INSTALL_PERMISSION_REQUIRED", result = "WAITING_FOR_USER",
+                                state = "UNKNOWN_SOURCES_PERMISSION_MISSING", detail = "Android installer permission settings requested",
+                            )
                             updateMessage = getString(R.string.update_install_permission_required)
                             updateStage = UpdateStage.READY_TO_INSTALL
                             renderUpdateStatusIfVisible()
@@ -2456,14 +2526,28 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                             val uri = FileProvider.getUriForFile(this, "$packageName.update-apks", apk)
                             startActivity(UpdateApkInstallIntent.create(uri))
                             updateStage = UpdateStage.READY_TO_INSTALL
+                            UnifiedDiagnosticLog.record(
+                                level = "INFO", module = "UPDATE", event = "INSTALLER_LAUNCHED", result = "HANDED_TO_ANDROID",
+                                state = "WAITING_FOR_USER_CONFIRMATION", detail = "verified update package handed to system installer",
+                            )
                         }.onFailure { failure ->
                             Log.w("DiPlay-Update", "could not launch the Android package installer", failure)
+                            UnifiedDiagnosticLog.record(
+                                level = "WARN", module = "UPDATE", event = "INSTALLER_LAUNCH_FAILED", result = "FAILED",
+                                state = "READY_TO_INSTALL", reason = failure.javaClass.simpleName,
+                                detail = "Android installer could not be launched",
+                            )
                             updateMessage = getString(R.string.update_install_failed)
                             updateStage = UpdateStage.READY_TO_INSTALL
                         }
                     },
                     { failure ->
                         Log.w("DiPlay-Update", "refusing incompatible update APK", failure)
+                        UnifiedDiagnosticLog.record(
+                            level = "WARN", module = "UPDATE", event = "INSTALL_REVALIDATION_FAILED", result = "REFUSED",
+                            state = "UPDATE_REJECTED", reason = failure.javaClass.simpleName,
+                            detail = "downloaded package failed final integrity or compatibility revalidation",
+                        )
                         updateMessage = getString(
                             if (failure is UpdateApkIncompatibilityException) R.string.update_incompatible
                             else R.string.update_failed,
@@ -2479,7 +2563,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun isUpdatePageVisible(): Boolean = page == "about" ||
-        (page == "settings" && settingsCategory == SettingsCategory.APP_UPDATES)
+        (page == "settings" && settingsCategory == SettingsCategory.ABOUT)
 
     private fun renderUpdateStatusIfVisible() {
         if (isUpdatePageVisible() || (page == "home" && !CarPlayBackgroundSession.hasSession())) render()
@@ -4819,9 +4903,18 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun connect(wireless: Boolean) {
+        UnifiedDiagnosticLog.record(
+            level = "INFO", module = "SESSION", event = "CONNECT_REQUESTED", result = "REQUESTED",
+            state = "STARTUP", reason = "APP_ACTION", detail = "transport=${if (wireless) "wireless" else "wired"}",
+        )
         startupHotspotCancelled = true
         if (wireless && pendingCarHotspotSetup) { toast(getString(R.string.save_your_hotspot_details_in_connection_setup_first)); page = "connection"; render(); return }
         if (setupError != null) {
+            UnifiedDiagnosticLog.record(
+                level = "WARN", module = "SESSION", event = "CONNECT_BLOCKED", result = "BLOCKED",
+                state = "SETUP", reason = "AUTHENTICATION_SETUP_ERROR",
+                detail = "transport=${if (wireless) "wireless" else "wired"}",
+            )
             showAuthenticationSetupError()
             return
         }
@@ -4852,6 +4945,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         else open()
     }
     private fun openProjection() {
+        UnifiedDiagnosticLog.record(
+            level = "INFO", module = "SESSION", event = "HOST_ACTIVITY_LAUNCH_REQUESTED",
+            result = "LAUNCH_REQUESTED", state = "HOST_STARTING", reason = "APP_FLOW",
+            detail = "transport=${if (AirPlayPersistence.loadWirelessEnabled(this)) "wireless" else "wired"}",
+        )
         startActivity(Intent(this, CarPlayHostActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
     }
 
@@ -5009,16 +5107,22 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private fun exportDiagnostics(uri: Uri? = null) {
         if (exportInProgress) return
         exportInProgress = true
+        UnifiedDiagnosticLog.record(
+            level = "INFO", module = "DIAGNOSTICS", event = "EXPORT_STARTED", result = "PENDING",
+            state = "BACKGROUND_EXPORT", detail = "existing diagnostic export workflow started",
+        )
         exportButton?.apply { isEnabled = false; text = getString(R.string.saving_report) }
         val appContext = applicationContext
         val fileName = reportFileName()
         Thread({
+            val logsFlushed = AsyncDiagnosticLog.awaitIdle(2_000)
             val result = runCatching {
                 val report = buildString {
                     appendLine("CarPaly ${version()} · diagnostic report")
                     appendLine("Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}")
                     appendLine("Head unit: ${Build.MANUFACTURER} ${Build.MODEL}")
                     appendLine("Connection: ${if (AirPlayPersistence.loadWirelessEnabled(appContext)) "wireless" else "USB"}")
+                    appendLine("Unified runtime log flush before export: ${if (logsFlushed) "complete" else "timed out; bounded async writes may still finish"}")
                     appendLine("Authentication: local experimental beta identity; no remote fallback")
                     appendLine("CarPlay setup: ${if (setupError == null) "ready" else "authentication unavailable"}")
                     appendLine("Saved video preference (may differ from active session): ${if (AirPlayPersistence.loadHevcEnabled(appContext)) "HEVC" else "H.264"}; ${AirPlayPersistence.loadFps(appContext)} fps")
@@ -5027,6 +5131,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     appendLine("Session: ${if (CarPlayBackgroundSession.active) "active" else if (CarPlayBackgroundSession.hasSession()) "connecting" else "stopped"}")
                     appendLine(PhoneWakeDiagnostics.report(appContext))
                     appendLine("Head-unit board: ${Build.BOARD}; hardware: ${Build.HARDWARE}; build: ${Build.DISPLAY}")
+                    appendLine()
+                    appendLine("--- GEELY read-only capability gates (not runtime/OEM verification) ---")
+                    appendLine(GeelyVehicleCapabilityRegistry.inspect(appContext).asDiagnosticText())
                     appendLine()
                     appendLine("--- Current cluster display diagnostics (even when disabled) ---")
                     appendLine(ClusterMapPresentation.diagnosticReport(appContext))
@@ -5077,6 +5184,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     appendLine("--- Recent own-app process exits (Android 11+) ---")
                     appendLine(ProcessExitDiagnostics.report(appContext))
                     appendLine()
+                    appendLine("--- Last CarPaly crash ---")
+                    appendLine(CrashRecord.report(appContext))
+                    appendLine()
                     for (name in SessionLogFile.REPORT_NAMES) {
                         val file = File(appContext.filesDir, "logs/$name")
                         if (file.isFile) {
@@ -5093,6 +5203,13 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             }
             runOnUiThread {
                 exportInProgress = false
+                UnifiedDiagnosticLog.record(
+                    level = if (result.isSuccess) "INFO" else "WARN", module = "DIAGNOSTICS",
+                    event = "EXPORT_FINISHED", result = if (result.isSuccess) "SAVED" else "FAILED",
+                    state = if (result.isSuccess) "COMPLETE" else "ERROR",
+                    reason = result.exceptionOrNull()?.javaClass?.simpleName ?: "none",
+                    detail = "existing diagnostic export workflow finished",
+                )
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 exportButton?.apply { isEnabled = true; text = getString(R.string.save_diagnostic_report) }
                 if (result.isSuccess) {

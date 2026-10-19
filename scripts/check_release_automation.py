@@ -22,6 +22,8 @@ def main() -> int:
     intent = json.loads((ROOT / "config/release-intent.json").read_text(encoding="utf-8"))
     review_policy = json.loads((ROOT / "config/release-review-policy.json").read_text(encoding="utf-8"))
     review_gate = (ROOT / "scripts/release_review_gate.py").read_text(encoding="utf-8")
+    local_entry = (ROOT / "build-release.ps1").read_text(encoding="utf-8")
+    local_policy = (ROOT / "scripts/release_automation.py").read_text(encoding="utf-8")
     failures: list[str] = []
 
     if intent.get("schemaVersion") != 1 or intent.get("enabled") is not False:
@@ -113,6 +115,15 @@ def main() -> int:
 
     if "gh release upload" in draft or "draft=false" in draft or "--method PATCH" in draft:
         failures.append("Draft preparer must never upload assets or mutate a Release publication state")
+    if "gh release create" in local_entry or "gh release upload" in local_entry or "AUTO_CREATE_TAG = 'true'" in local_entry:
+        failures.append("The local orchestrator must not create tags/releases or upload binaries")
+    if "prepare-release-draft.sh" in local_entry:
+        failures.append("Local Draft mode must verify, not invoke the remote Draft mutator")
+    for mode in ("CheckOnly", "SkipTests", "PrepareGitHub", "PrepareDraft", "Status", "FullPrepare"):
+        if f"$switch) ${mode}" not in local_entry and f"${mode}" not in local_entry:
+            failures.append(f"Local Release orchestrator is missing mode {mode}")
+    if "unauthorized-auto-merge-requester" not in local_policy or "high-risk-changes-require-human-review" not in local_policy:
+        failures.append("Native Auto-merge policy must bind the authenticated requester and block high-risk changes")
     if "--draft" not in draft or "assets=0" not in draft or "PUBLISHED_IMMUTABLE" not in draft:
         failures.append("Draft preparer must create drafts, verify zero assets, and leave published Releases untouched")
     if "AUTO_CREATE_TAG" not in draft or "--target \"$RELEASE_COMMIT\"" not in draft:

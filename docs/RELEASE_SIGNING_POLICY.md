@@ -1,26 +1,34 @@
-# CarPaly permanent Release signing policy
+# CarPaly Android Release signing policy
 
-Every user-installable APK, whether an early candidate or a later stable version, must be built from the Android `release` variant and signed by the original v1.1.4 Release key. The pinned certificate SHA-256 is:
+All user-installable APKs use the Android `release` variant, package ID `com.shihab.diplay.hudtest`, and canonical name `CarPaly-XingyueL-v{versionName}.apk`. The version ledger is authoritative for signer selection.
 
-`4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90`
+## Approved signer epochs (`signingEpochs`)
 
-The package ID must remain `com.shihab.diplay.hudtest`. Future APK filenames must be exactly `CarPaly-XingyueL-v{versionName}.apk` (for example `CarPaly-XingyueL-v1.1.51.apk`). Do not create separate Debug/Test/Upgrade-Test user APKs, change package identity, replace the original keystore, overwrite a previously delivered artifact, or use uninstall/data clearing to work around an upgrade failure. Preserve existing historical Release records and APKs unchanged.
+| Version-code range | Certificate SHA-256 | Upgrade boundary |
+| --- | --- | --- |
+| 36–40 | `4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90` | Historical signer |
+| 41+ | `d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e` | Current signer epoch |
 
-The signing certificate is public; the private key, PKCS12/JKS keystore, key alias, store password, and key password are not. APK SHA-256 identifies one build and may differ between builds; the signing certificate and private key must remain fixed for Android in-place upgrade compatibility. v2/v3 APK signing validates file integrity but does not replace the same-signer requirement.
+No Android signing lineage between the 4d and d9 certificates has been verified. A code 40 installation cannot be assumed to upgrade in place to code 41. Code 41 is recorded as a fresh-install boundary. Code 42 onward can meet same-signer and increasing-version prerequisites only when the installed package is already d9-signed. These are compatibility prerequisites, not proof of an actual device installation or data migration.
 
-Release builds require `ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`. `:mobile:preReleaseBuild` depends on `verifyCarPalyReleaseSigning`, which loads the PKCS12 keystore, verifies the alias and key password, and compares the certificate to the fixed v1.1.4 fingerprint. The Release verifier checks the final APK signer against the same fingerprint. Missing or mismatched credentials fail closed; there is no Android Debug signer fallback and no automatic keystore generation. If the original credentials cannot be recovered in their authorized context, report `BLOCKED` and do not create an APK.
+Never re-sign a historical APK, create a replacement key, modify a delivered APK, change the package identity, uninstall an existing install, or clear user data to work around a signer mismatch.
 
-Use `scripts/build-release-apk.ps1` to build a user deliverable. It invokes `:mobile:assembleRelease`, requires the authorized external authentication assets and original signing inputs, verifies package/version/signature/runtime assets/ABI/ZIP integrity, refuses to overwrite existing outputs, and records the APK SHA-256 only after the final canonical filename is verified. The report does not claim installation, upgrade, or vehicle behavior unless separately tested.
+## Verification and credential handling
 
-The local `.private/release-signing` copy is not a usable credential source unless the original authorized Windows protection context can decrypt it. Do not brute-force it, copy it to another account, or use another project's key. Restore the original password in the authorized context or enter it locally through a secure credential mechanism; never paste it into chat, a command literal, source, or logs.
+`scripts/android_versioning.py`, Gradle's `:mobile:verifyCarPalyReleaseSigning`, and `scripts/verify-release-apk.ps1` must resolve the expected certificate by the current `versionCode`. Missing, overlapping, malformed, or mismatched epoch entries fail closed. The ledger's current signer fields must agree with that epoch.
 
-CI may compile Debug variants for internal checks, but it must not upload Debug APKs as downloadable workflow artifacts. The public GitHub workflow does not publish on tag push. Publishing remains a separate, explicit manual action; do not create version tags or Releases automatically. The public `mfi-public-release` environment has no required-reviewer rule, so it must not be used as a private signed-APK delivery channel.
+Local Release builds require the authorized Android signing inputs and runtime authentication assets. Do not put passwords, keystores, private keys, DPAPI files, or credential material in Git, command literals, logs, reports, or public Actions artifacts. Android APK signing and CarPlay/MFi authentication are separate systems. Preserve the existing authentication checks and assets; do not remove them or fabricate substitutes.
+
+The local `build-release.ps1` orchestrator may run preflight and tests. `-CheckOnly` does not build. `-SkipTests` must remain a non-ready private candidate and cannot be promoted as a release. The lower-level `scripts/build-release-apk.ps1` validates the Release variant, version, signer, APK structure, runtime asset pair, and checksum before delivery. It must refuse to overwrite an existing artifact and use the centralized ignored `artifacts/v{versionName}` location from a linked worktree.
+
+CI may compile Debug variants internally, but it must not upload Debug APKs as user-deliverable artifacts. Ordinary PR and push jobs must not map production signing Secrets. The protected publisher requires successful main CI and a same-commit reviewed release intent; this integration PR leaves `config/release-intent.json` disabled. No Tag, Release, APK upload, or OTA action is authorized by this change.
 
 ## Required gates
 
-- `SIGNING_CERTIFICATE_MATCH`: the APK and loaded keystore match the pinned v1.1.4 certificate.
-- `PACKAGE_NAME_MATCH`: the application ID remains `com.shihab.diplay.hudtest` with no suffix.
-- `VERSION_CODE_INCREMENT`: the reserved package version is greater than all observed prior versions.
-- `RELEASE_SIGNED_APK`: only a non-debuggable Release variant verified by `apksigner` qualifies as a user deliverable.
-- `SENSITIVE_FILE_SCAN`: no keystore, password, or unrelated credential enters source, APK, logs, or artifacts.
-- `USER_DATA_PRESERVATION`: report `NOT_TESTED` unless a permitted device completed a real `adb install -r` and verified preferences afterward.
+- `SIGNING_EPOCH_MATCH`: the keystore and resulting APK match the epoch selected by versionCode.
+- `PACKAGE_NAME_MATCH`: application ID remains `com.shihab.diplay.hudtest`.
+- `VERSION_CODE_INCREMENT`: unique allocation above the full observed high-water mark.
+- `RELEASE_SIGNED_APK`: non-debuggable Release APK verified by `apksigner`.
+- `SOURCE_PROVENANCE`: source commit and binary provenance are stated only when evidenced.
+- `SENSITIVE_FILE_SCAN`: no keystore, password, authentication material, private diagnostic data, or APK enters public source.
+- `VEHICLE_VALIDATION`: local build and simulations never count as real-vehicle validation.

@@ -6,6 +6,7 @@ enum class VehicleDataSource {
     ECARX,
     ONEOS,
     ANDROID_AUTOMOTIVE,
+    SIMULATED,
 }
 
 enum class VehicleDataUnit {
@@ -13,6 +14,7 @@ enum class VehicleDataUnit {
     FUEL_PERCENT,
     ENGINE_RPM,
     GEAR_POSITION,
+    CABIN_TEMPERATURE_CELSIUS,
 }
 
 enum class VehicleDataValidity {
@@ -117,6 +119,9 @@ class VehicleDataSample<T> private constructor(
                 it.isFinite() && it in 0.0..20_000.0
             } == true
             VehicleDataUnit.GEAR_POSITION -> value is GearPosition && value != GearPosition.UNKNOWN
+            VehicleDataUnit.CABIN_TEMPERATURE_CELSIUS -> (value as? Number)?.toDouble()?.let {
+                it.isFinite() && it in -50.0..100.0
+            } == true
         }
     }
 }

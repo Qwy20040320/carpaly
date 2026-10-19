@@ -17,6 +17,34 @@ class CarPlaySystemBarInsetsTest {
         )
     }
 
+    @Test fun hiddenStatusBarCanReserveAnExplicitOemOverlayFallback() {
+        assertEquals(
+            CarPlayContentInsets(top = 52, bottom = 24),
+            CarPlaySystemBarInsets.resolve(
+                statusBarsVisible = false,
+                statusBars = CarPlayContentInsets(),
+                navigationBarsVisible = true,
+                navigationBars = CarPlayContentInsets(bottom = 24),
+                displayCutout = CarPlayContentInsets(top = 18),
+                hiddenStatusBarFallbackTop = 52,
+            ),
+        )
+    }
+
+    @Test fun invalidOemFallbackDoesNotCreateNegativeInsets() {
+        assertEquals(
+            CarPlayContentInsets(),
+            CarPlaySystemBarInsets.resolve(
+                statusBarsVisible = false,
+                statusBars = CarPlayContentInsets(),
+                navigationBarsVisible = false,
+                navigationBars = CarPlayContentInsets(),
+                displayCutout = CarPlayContentInsets(),
+                hiddenStatusBarFallbackTop = -12,
+            ),
+        )
+    }
+
     @Test fun visibleBarsInsetViewportAndCutoutIsAlwaysRespected() {
         assertEquals(
             CarPlayContentInsets(left = 12, top = 48, right = 10, bottom = 32),

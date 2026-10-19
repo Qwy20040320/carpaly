@@ -8,6 +8,43 @@ import org.junit.Test
 
 class AudioChannelMappingTest {
     @Test
+    fun protocolAudioClassificationOnlyClaimsExplicitTypes() {
+        assertEquals(
+            AudioTypeClassification(CarPlayAudioClass.MUSIC, "protocol_audio_type"),
+            AudioTypeClassifier.classify("media"),
+        )
+        assertEquals(
+            AudioTypeClassification(CarPlayAudioClass.NAVIGATION, "protocol_audio_type"),
+            AudioTypeClassifier.classify("navigation"),
+        )
+        assertEquals(
+            AudioTypeClassification(CarPlayAudioClass.SIRI, "protocol_audio_type"),
+            AudioTypeClassifier.classify("speechRecognition"),
+        )
+        assertEquals(
+            AudioTypeClassification(CarPlayAudioClass.CALL, "protocol_audio_type"),
+            AudioTypeClassifier.classify("telephony"),
+        )
+        assertEquals(
+            AudioTypeClassification(CarPlayAudioClass.SYSTEM, "protocol_audio_type"),
+            AudioTypeClassifier.classify("system"),
+        )
+    }
+
+    @Test
+    fun ambiguousOrMissingProtocolTypesRemainUnknown() {
+        listOf(null, "", "default", "alert", "compatibility", "future-type").forEach { type ->
+            assertEquals(
+                AudioTypeClassification(
+                    CarPlayAudioClass.UNKNOWN,
+                    "unmapped_or_missing_protocol_audio_type",
+                ),
+                AudioTypeClassifier.classify(type),
+            )
+        }
+    }
+
+    @Test
     fun mobileCompatibleMappingMatchesTheOriginalRouting() {
         assertMapped(
             mode = AudioChannelMappingMode.MOBILE_COMPATIBLE,

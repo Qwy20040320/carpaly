@@ -21,6 +21,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.provider.Settings
 import android.util.Log
+import com.shilapi.xcertplay.CarPlayDiagnosticLogPolicy
 import com.shilapi.xcertplay.VideoFrameRateTracker
 import com.shilapi.xcertplay.airplay.AirPlayListenerIdentity
 import com.shilapi.xcertplay.airplay.AirPlayTcpAccepted
@@ -210,6 +211,7 @@ class CarPlayController(
     private val availabilityPollGeneration = AtomicInteger(0)
     private var permissionPollGeneration = 0
     private var reenumerationAttempts = 0
+    @Volatile private var wiredDeviceName: String? = null
     private var lastReportedStatus: CarPlayStatus? = null
     private var mfiResetLogged = false
 
@@ -752,10 +754,14 @@ class CarPlayController(
         com.shilapi.xcertplay.glance.CarPlayGlance.onFrame(frame)
         synchronized(playbackStatus) {
             val previousPlaying = playbackStatus.playing
-            playbackStatus.acceptUpdate(frame)?.let { it to (it.playing != previousPlaying) }
-        }?.let { (update, playingChanged) ->
+            playbackStatus.acceptUpdate(frame)?.let { Triple(it, previousPlaying, it.playing != previousPlaying) }
+        }?.let { (update, previousPlaying, playingChanged) ->
             nowPlayingListener?.invoke(update)
-            if (playingChanged) playbackListener?.invoke(update.playing)
+            if (playingChanged) {
+                debugLog("Media playback state=${if (update.playing) "PLAYING" else "PAUSED"} " +
+                    "source=IPHONE_MEDIA_STATUS previous=${if (previousPlaying) "PLAYING" else "PAUSED"}")
+                playbackListener?.invoke(update.playing)
+            }
         }
     }
 
@@ -967,7 +973,6 @@ class CarPlayController(
                         startPhone()
                     } catch (error: MfiCoprocessorNotFoundException) {
                         debugLog("mfi CH341 discovery failed: ${error.message}")
-                        Log.w(IphoneCarPlayConfiguration.TAG, error.message ?: "MFi discovery failed")
                         session.close()
                         waitForMfi()
                     } catch (error: Throwable) {
@@ -1077,11 +1082,7 @@ class CarPlayController(
             val started = try {
                 locationProvider?.start() == true
             } catch (error: Throwable) {
-                Log.w(
-                    IphoneCarPlayConfiguration.TAG,
-                    "Could not prewarm the Android location provider",
-                    error,
-                )
+                debugLog("Could not prewarm the Android location provider", error)
                 false
             }
             debugLog("location provider prewarmed=$started")
@@ -1773,17 +1774,27 @@ class CarPlayController(
                 when (phase) {
                     Phase.REENUMERATION, Phase.IPHONE -> {
                         val configuration = IphoneCarPlayConfiguration.find(result.device)
+                        val retryStaleMode = WiredConfigurationAction.retryModeOnSameNode(
+                            configurationFound = configuration != null,
+                            carPlayMode = configuration?.let(IphoneCarPlayConfiguration::isCarPlayMode) == true,
+                            previousSessionOnNode = WiredSessionMemory.startedOn(result.device.deviceName),
+                            transitionsTried = reenumerationAttempts,
+                        )
                         connectionDiagnostic(
                             "USB configuration ready=${configuration != null} " +
                                 "configurationId=${configuration?.id ?: "none"} " +
                                 "reenumerationAttempts=$reenumerationAttempts " +
+                                "staleCarPlayMode=$retryStaleMode " +
                                 "action=${when {
+                                    retryStaleMode -> "request-transition"
                                     configuration != null -> "reuse-descriptors"
                                     reenumerationAttempts < MAXIMUM_REENUMERATION_ATTEMPTS -> "request-transition"
                                     else -> "reject-missing-configuration"
                                 }}",
                         )
-                        if (configuration != null) {
+                        if (retryStaleMode) {
+                            beginReenumeration(result.device, fallbackToCurrentConfiguration = true)
+                        } else if (configuration != null) {
                             openDataPaths(result.device)
                         } else if (reenumerationAttempts < MAXIMUM_REENUMERATION_ATTEMPTS) {
                             beginReenumeration(result.device)
@@ -1832,7 +1843,7 @@ class CarPlayController(
         mainHandler.postDelayed(check, PERMISSION_POLL_INTERVAL_MILLIS)
     }
 
-    private fun beginReenumeration(device: UsbDevice) {
+    private fun beginReenumeration(device: UsbDevice, fallbackToCurrentConfiguration: Boolean = false) {
         phase = Phase.REENUMERATION
         reenumerationAttempts += 1
         connectionDiagnostic("USB transition requested count=$reenumerationAttempts")
@@ -1841,7 +1852,10 @@ class CarPlayController(
             when (transition) {
                 IphoneUsbHost.TransitionResult.ReenumerationRequested ->
                     onStatus(CarPlayStatus.WaitingForReenumeration)
-                is IphoneUsbHost.TransitionResult.Failed -> fail(transition.error)
+                is IphoneUsbHost.TransitionResult.Failed -> if (fallbackToCurrentConfiguration) {
+                    connectionDiagnostic("USB mode request refused; falling back to the existing configuration")
+                    openDataPaths(device)
+                } else fail(transition.error)
             }
         }
     }
@@ -1874,6 +1888,7 @@ class CarPlayController(
 
     private fun openDataPaths(device: UsbDevice) {
         phase = Phase.DATAPATHS
+        wiredDeviceName = device.deviceName
         debugLog("wired opening iPhone USB data paths")
         onStatus(CarPlayStatus.SelectingConfiguration)
         onStatus(CarPlayStatus.OpeningDataPaths)
@@ -1932,38 +1947,6 @@ class CarPlayController(
             )
             onStatus(CarPlayStatus.ConnectingControl)
             val carKitClient = LockdownCarKitClient(mux)
-            // Temporary lab capture, limited to accessory/authentication messages and two minutes.
-            try {
-                val relay = carKitClient.openService(pairRecord, config.label, "com.apple.syslog_relay")
-                Thread({
-                    try {
-                        relay.use {
-                            val deadline = System.nanoTime() + 120_000_000_000L
-                            val pending = StringBuilder()
-                            val relevant = Regex(" (accessoryd|ACCCarPlayService|iap2d|CarPlay)([\\[(])", RegexOption.IGNORE_CASE)
-                            while (!closed && System.nanoTime() < deadline) {
-                                val bytes = relay.recv(8192, 1000) ?: continue
-                                if (bytes.isEmpty()) break
-                                pending.append(bytes.toString(Charsets.UTF_8).replace('\u0000', '\n'))
-                                while (true) {
-                                    val end = pending.indexOf("\n")
-                                    if (end < 0) break
-                                    val line = pending.substring(0, end)
-                                    pending.delete(0, end + 1)
-                                    if (relevant.containsMatchIn(line)) debugLog("PHONE ${line.take(2000)}")
-                                }
-                                if (pending.length > 65536) pending.clear()
-                            }
-                        }
-                        debugLog("phone authentication diagnostic capture ended")
-                    } catch (error: Exception) {
-                        debugLog("phone authentication diagnostic capture ended: ${error.javaClass.simpleName}")
-                    }
-                }, "carplay-lab-phone-diagnostics").apply { isDaemon = true; start() }
-                debugLog("phone authentication diagnostic capture started")
-            } catch (error: Exception) {
-                debugLog("phone authentication diagnostics unavailable: ${error.message}")
-            }
             val carkit = try {
                 carKitClient.open(pairRecord, config.label)
             } catch (error: Throwable) {
@@ -2064,7 +2047,10 @@ class CarPlayController(
                 locationProvider = locationProvider,
                 vehicleStatusProvider = vehicleStatusProvider,
                 onIncoming = ::onRouteFrame,
-                onProgress = { message -> debugLog("wired $message") },
+                onProgress = { message ->
+                    if (message.startsWith("iap2 tx=0x4301")) wiredDeviceName?.let(WiredSessionMemory::started)
+                    debugLog("wired $message")
+                },
             )
             onStatus(
                 when (result.terminal) {
@@ -2276,11 +2262,14 @@ class CarPlayController(
                 "Timed out after ${RFCOMM_CONNECT_TIMEOUT_MILLIS}ms connecting RFCOMM to $address",
             )
         }
-        when (val failure = result.get()) {
-            null -> Unit
-            is IOException -> throw failure
-            else -> throw IOException("Could not connect RFCOMM to $address", failure)
+        val failure = result.get() ?: return
+        val category = com.shilapi.xcertplay.transport.BluetoothSocketFailure.category(failure)
+        connectionDiagnostic("Bluetooth RFCOMM failureCategory=$category failureClass=${failure.javaClass.simpleName}")
+        if (com.shilapi.xcertplay.transport.BluetoothSocketFailure.missingSocketManager(failure)) {
+            throw IOException("Android Bluetooth service cannot open RFCOMM sockets for apps", failure)
         }
+        if (failure is IOException) throw failure
+        throw IOException("Could not connect RFCOMM", failure)
     }
 
     /** Reads cached service metadata only; it does not start/cancel discovery or require SCAN. */
@@ -2355,7 +2344,7 @@ class CarPlayController(
     } catch (error: ReflectiveOperationException) {
         false
     } catch (error: RuntimeException) {
-        Log.w(IphoneCarPlayConfiguration.TAG, "Could not read Bluetooth connection state", error)
+        debugLog("Could not read Bluetooth connection state", error)
         false
     }
 
@@ -2379,7 +2368,7 @@ class CarPlayController(
                         devices.addAll(proxy.connectedDevices.orEmpty())
                     }
                 } catch (error: SecurityException) {
-                    Log.w(IphoneCarPlayConfiguration.TAG, "Could not read connected Bluetooth devices", error)
+                    debugLog("Could not read connected Bluetooth devices", error)
                 } finally {
                     adapter.closeProfileProxy(profileId, proxy)
                     latch.countDown()
@@ -2617,11 +2606,12 @@ class CarPlayController(
     }
 
     private fun debugLog(message: String) {
-        Log.i(IphoneCarPlayConfiguration.TAG, message)
+        val safeMessage = CarPlayDiagnosticLogPolicy.safeMessage(message) ?: return
+        Log.i(IphoneCarPlayConfiguration.TAG, safeMessage)
         try {
-            uiListener?.onDebugLog(message)
+            uiListener?.onDebugLog(safeMessage)
         } catch (error: Exception) {
-            Log.w(IphoneCarPlayConfiguration.TAG, "debug log callback failed", error)
+            Log.w(IphoneCarPlayConfiguration.TAG, "debug log callback failed error=${error.javaClass.simpleName}")
         }
     }
 
@@ -2642,13 +2632,12 @@ class CarPlayController(
         ((System.nanoTime() - startedNanos) / 1_000_000L).coerceAtLeast(0)
 
     private fun debugLog(message: String, error: Throwable) {
-        Log.w(IphoneCarPlayConfiguration.TAG, message, error)
+        val safeMessage = CarPlayDiagnosticLogPolicy.safeFailure(message, error) ?: return
+        Log.w(IphoneCarPlayConfiguration.TAG, safeMessage)
         try {
-            uiListener?.onDebugLog(
-                "$message: ${error.message ?: error.javaClass.simpleName}",
-            )
+            uiListener?.onDebugLog(safeMessage)
         } catch (callbackError: Exception) {
-            Log.w(IphoneCarPlayConfiguration.TAG, "debug log callback failed", callbackError)
+            Log.w(IphoneCarPlayConfiguration.TAG, "debug log callback failed error=${callbackError.javaClass.simpleName}")
         }
     }
 

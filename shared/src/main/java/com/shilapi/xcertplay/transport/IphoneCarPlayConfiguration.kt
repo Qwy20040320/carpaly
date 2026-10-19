@@ -49,6 +49,8 @@ object IphoneCarPlayConfiguration {
                 "x${usbInterface.endpointCount}"
         }
 
+    fun isCarPlayMode(configuration: UsbConfiguration): Boolean = hasAppleEthernet(configuration)
+
     fun usbMuxInterface(configuration: UsbConfiguration): UsbInterface? =
         (0 until configuration.interfaceCount).map(configuration::getInterface).firstOrNull {
             it.interfaceClass == USBMUX_CLASS &&

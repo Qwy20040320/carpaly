@@ -366,6 +366,39 @@ class PublisherTests(unittest.TestCase):
             self.assertIn("extractable authentication identity", state["release"]["body"])
             self.assertIn("RELEASE_DRAFT_STATUS=CREATED", result.stdout)
 
+    def test_local_verified_apk_metadata_is_recorded_without_upload(self):
+        folder, env, state_path = self.prepare(tag_missing=True)
+        env.update({
+            "RELEASE_APK_SHA256": "a" * 64,
+            "RELEASE_APK_FILE_NAME": "CarPaly-XingyueL-v1.1.51.apk",
+            "RELEASE_APK_BYTES": "123456",
+        })
+        with folder:
+            result = self.run_publisher(env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            state = self.read_state(state_path)
+            self.assertIn("Local APK SHA-256: " + "a" * 64, state["release"]["body"])
+            self.assertEqual(state["uploads"], 0)
+            self.assertTrue(state["release"]["draft"])
+
+    def test_existing_draft_without_local_apk_hash_is_not_rewritten(self):
+        release = {"id": 77, "tag_name": self.tag, "draft": True, "prerelease": True,
+                   "name": "Existing draft", "body": "<!-- carpaly-release-draft-v1: metadata-only; reviewed-assets-required -->\nExisting notes"}
+        folder, env, state_path = self.prepare(initial_release=release)
+        env.update({
+            "RELEASE_APK_SHA256": "b" * 64,
+            "RELEASE_APK_FILE_NAME": "CarPaly-XingyueL-v1.1.51.apk",
+            "RELEASE_APK_BYTES": "123456",
+        })
+        with folder:
+            result = self.run_publisher(env)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("lacks this local APK hash", result.stderr)
+            state = self.read_state(state_path)
+            self.assertEqual(state["release"], release)
+            self.assertEqual(state["patches"], 0)
+            self.assertEqual(state["uploads"], 0)
+
     def test_repeated_run_reuses_existing_draft_without_mutation(self):
         folder, env, state_path = self.prepare(tag_missing=True)
         with folder:
@@ -490,6 +523,7 @@ class PublisherTests(unittest.TestCase):
         self.assertNotIn("gh release upload", helper)
         self.assertNotIn("draft=false", helper)
         self.assertNotIn("--method PATCH", helper)
+        self.assertNotIn("gh release upload", helper)
         self.assertIn("api --paginate \"repos/$GH_REPO/releases/$release_id/assets?per_page=100\"", helper)
         self.assertIn("carpaly-release-draft-v1: metadata-only", helper)
         release_job = workflow.split("  authenticated_release:", 1)[1].split("  prepare_release_draft:", 1)[0]

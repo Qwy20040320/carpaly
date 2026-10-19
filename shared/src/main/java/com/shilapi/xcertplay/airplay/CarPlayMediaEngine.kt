@@ -1,6 +1,7 @@
 package com.shilapi.xcertplay.airplay
 
 import android.util.Log
+import com.shilapi.xcertplay.media.AudioTypeClassifier
 import com.shilapi.xcertplay.transport.BlockingDuplexByteStream
 import java.io.Closeable
 import java.io.File
@@ -11,6 +12,8 @@ import java.math.BigInteger
 import java.util.Collections
 import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ScheduledThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 
 /** Identity of one CarPlay audio stream: the stream type plus its CarPlay audio type. */
 data class AudioStreamId(val type: Int, val audioType: String)
@@ -86,6 +89,13 @@ class CarPlayMediaEngine(
     private val pendingIapTunnels = ConcurrentHashMap<AirPlaySession, PendingIapTunnel>()
     private val videoSettingsChannels = ConcurrentHashMap<AirPlaySession, VideoSettingsChannel>()
     private val bufferedStreams = ConcurrentHashMap<AirPlaySession, BufferedStream>()
+    private val microphoneScheduler by lazy {
+        ScheduledThreadPoolExecutor(1) { task -> Thread(task, "carplay-mic-start").apply { isDaemon = true } }.apply {
+            removeOnCancelPolicy = true
+            setKeepAliveTime(5L, TimeUnit.SECONDS)
+            allowCoreThreadTimeOut(true)
+        }
+    }
 
     private class BufferedStream(val stream: BufferedAudioStream, val connectionId: Any?)
 
@@ -155,7 +165,9 @@ class CarPlayMediaEngine(
     }
 
     override fun onAudio(session: AirPlaySession, type: Int, stream: Map<String, Any?>): Map<String, Any?>? {
-        val audioType = stream["audioType"]?.toString()?.lowercase() ?: "default"
+        val protocolAudioType = stream["audioType"]?.toString()?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+        val audioType = protocolAudioType ?: "unknown"
+        val audioClassification = AudioTypeClassifier.classify(protocolAudioType)
         // Concurrent streams may share a type (e.g. music, guidance and Siri can all arrive as
         // type 100); only the same (type, audioType) pair replaces a previous stream.
         val streamKey = StreamKey(session, type, audioType)
@@ -174,7 +186,9 @@ class CarPlayMediaEngine(
         )
         Log.i(
             TAG,
-            "airplay audio format type=$type audioType=$audioType codec=${format.codec} " +
+            "airplay audio format type=$type audioType=${protocolAudioType ?: "missing"} " +
+                "audioClass=${audioClassification.audioClass} classificationBasis=${audioClassification.basis} " +
+                "codec=${format.codec} " +
                 "rate=${format.sampleRate} channels=${format.channels} " +
                 "formatBits=0x${java.lang.Long.toHexString((stream["audioFormat"] as? Number)?.toLong() ?: 0L)} " +
                 "micPort=${(stream["dataPort"] as? Number)?.toInt() ?: 0}",
@@ -184,6 +198,7 @@ class CarPlayMediaEngine(
         val meta = AudioMeta(type, format, connectionId, latencyMs)
         val microphone = microphoneConfig(session, type, stream, format)
         if (microphone != null) pendingMicrophone[streamKey] = microphone
+        val microphoneStart = microphone?.let { config -> MicrophoneStart { sink.onMicrophoneStarted(streamId, config) } }
 
         val capture = audioCaptureDirectory?.let { AudioPacketCapture(it, type) }
         if (capture != null) audioCaptures[streamKey] = capture
@@ -194,7 +209,7 @@ class CarPlayMediaEngine(
                     meta.firstSample = firstSample
                     meta.originNs = System.nanoTime()
                     sink.onAudioStarted(streamId, format, firstSample)
-                    microphone?.let { sink.onMicrophoneStarted(streamId, it) }
+                    microphoneStart?.onDownlink()
                 }
 
                 override fun onRtp(rtp: ByteArray, sample: Int) =
@@ -212,6 +227,16 @@ class CarPlayMediaEngine(
         )
         streams[streamKey] = audio
         audioMeta[streamKey] = meta
+        if (microphoneStart != null && MicrophoneStart.startsWithoutDownlink(audioType)) {
+            microphoneStart.scheduleSilentStart(microphoneScheduler, MicrophoneStart.SILENT_START_MILLIS) { startNow ->
+                var started = false
+                pendingMicrophone.computeIfPresent(streamKey) { _, pending ->
+                    if (pending === microphone) started = startNow()
+                    pending
+                }
+                if (started) session.logDebug("Audio: microphone started without downlink audioType=$audioType")
+            }
+        }
         return linkedMapOf(
             "type" to type,
             "dataPort" to dataPort,

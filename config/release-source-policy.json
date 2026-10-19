@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "minimumSourceVersion": "1.1.56",
+  "minimumSourceVersionCode": 44,
+  "minimumSourceCommit": "6b206c9e6944255a159424522017dca984423e67",
+  "provenance": "verified-public-tag-and-release",
+  "requireCleanMainBuild": true
+}

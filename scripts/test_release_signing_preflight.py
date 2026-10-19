@@ -13,7 +13,7 @@ from unittest.mock import patch
 from scripts import release_signing_preflight as preflight
 
 
-EXPECTED = "4d26d1c861b41a2cee4515e31f5f5c7eb13b9dd06e7485aa1687bc1d2ac73d90"
+EXPECTED = "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e"
 OTHER = "0" * 64
 SECRET = "never-print-this-secret"
 
