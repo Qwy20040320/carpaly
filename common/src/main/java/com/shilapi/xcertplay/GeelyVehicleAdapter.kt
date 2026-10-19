@@ -16,6 +16,8 @@ enum class GeelyKx11Profile(val key: String) {
     KX11_2023("kx11_2023"),
     KX11_2024("kx11_2024"),
     KX11_2024_TIANJI("kx11_2024_tianji"),
+    /** Explicit user/build-identity candidate; no KX11_A2-only OEM behavior is enabled. */
+    KX11_2024_TIANJI_A2("kx11_2024_tianji_a2"),
     KX11_2025("kx11_2025"),
     KX11_2026("kx11_2026"),
     KX11_GENERIC("kx11_generic");
@@ -70,6 +72,7 @@ object GeelyVehicleAdapter {
         GeelyKx11Profile.KX11_2023 -> "KX11 2023"
         GeelyKx11Profile.KX11_2024 -> "KX11 2024"
         GeelyKx11Profile.KX11_2024_TIANJI -> "KX11 2024 天际版"
+        GeelyKx11Profile.KX11_2024_TIANJI_A2 -> "KX11 2024 Tianji A2 (candidate)"
         GeelyKx11Profile.KX11_2025 -> "KX11 2025"
         GeelyKx11Profile.KX11_2026 -> "KX11 2026"
         GeelyKx11Profile.KX11_GENERIC -> "KX11 Generic"
@@ -124,6 +127,7 @@ object GeelyVehicleAdapter {
     )
 
     private fun yearProfile(joined: String): GeelyKx11Profile? = when {
+        "kx11_a2" in joined || "kx11-a2" in joined -> GeelyKx11Profile.KX11_2024_TIANJI_A2
         "tianji" in joined || "天际" in joined -> GeelyKx11Profile.KX11_2024_TIANJI
         "2021" in joined -> GeelyKx11Profile.KX11_2021
         "2022" in joined -> GeelyKx11Profile.KX11_2022

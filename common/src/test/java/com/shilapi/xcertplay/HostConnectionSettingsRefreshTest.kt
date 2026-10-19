@@ -10,6 +10,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.Implements
@@ -26,6 +27,8 @@ class HostConnectionSettingsRefreshTest {
     private val app get() = RuntimeEnvironment.getApplication()
 
     @Before fun setUp() {
+        // Config.NONE omits AndroidX's merged not-exported receiver permission from this fixture.
+        shadowOf(app).grantPermissions("${app.packageName}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION")
         app.getSharedPreferences("xcertplay_airplay", Context.MODE_PRIVATE).edit().clear().commit()
     }
 

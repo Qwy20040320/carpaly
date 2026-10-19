@@ -19,7 +19,7 @@
       "upgradePolicy": "fresh-install-required"
     }
   ],
-  "highestObservedVersionCode": 45,
+  "highestObservedVersionCode": 46,
   "deliveryPolicy": {
     "buildType": "release",
     "apkFileNamePattern": "CarPaly-XingyueL-v{versionName}.apk",
@@ -87,8 +87,8 @@
     }
   ],
   "current": {
-    "versionName": "1.1.57",
-    "versionCode": 45,
+    "versionName": "1.1.58",
+    "versionCode": 46,
     "channel": "test",
     "signingEpochId": "fresh-install-v1.1.53-plus"
   },
@@ -134,6 +134,16 @@
       "signingEpochId": "fresh-install-v1.1.53-plus",
       "upgradePolicy": "same-signer-upgrade-only",
       "sourceCommitStatus": "SOURCE_COMMIT_NOT_REPRODUCED"
+    },
+    {
+      "versionName": "1.1.58",
+      "versionCode": 46,
+      "channel": "test",
+      "status": "reserved",
+      "artifactSha256": null,
+      "signerCertificateSha256": "d9b329525fc1ef21c365fab72c10367527cc038297c4f30eaa22b2207429139e",
+      "signingEpochId": "fresh-install-v1.1.53-plus",
+      "upgradePolicy": "same-signer-upgrade-only"
     }
   ],
   "unverifiedSourceVersions": [

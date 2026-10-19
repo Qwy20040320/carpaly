@@ -19,6 +19,8 @@
     <!-- The centre card also follows whichever launcher is the default home. -->
     <queries>
         <package android:name="com.byd.carsettings" />
+        <!-- Read-only visibility for capability diagnostics; the app never binds by default. -->
+        <package android:name="com.geely.inputservice" />
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.HOME" />

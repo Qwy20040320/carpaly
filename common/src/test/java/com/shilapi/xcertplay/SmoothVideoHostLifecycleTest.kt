@@ -56,6 +56,8 @@ class SmoothVideoHostLifecycleTest {
     @Before fun setUp() {
         CarPlayBackgroundSession.clear()
         activity = Robolectric.buildActivity(CarPlayHostActivity::class.java).get()
+        // AndroidX uses this app-scoped permission to emulate NOT_EXPORTED on API < 33.
+        shadowOf(activity).grantPermissions("${activity.packageName}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION")
         AirPlayPersistence.saveAdaptPipResolution(activity, false)
         AirPlayPersistence.saveMfiTarget(activity, MfiTarget.USB_CH341)
         // Host startup without vendor-service workers or real transports.
