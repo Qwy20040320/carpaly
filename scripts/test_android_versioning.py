@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -182,7 +183,7 @@ class AndroidVersioningTests(unittest.TestCase):
         else:
             self.assertEqual(version, check_project(root))
 
-    def test_roll_back_to_code44_is_rejected_when_code45_is_reserved(self):
+    def test_roll_back_to_code44_is_rejected_when_code46_is_reserved(self):
         project = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory(prefix="carpaly-version-rollback-") as temporary:
             root = Path(temporary)
@@ -209,9 +210,8 @@ class AndroidVersioningTests(unittest.TestCase):
             }
             (root / "config/android-version-ledger.json").write_text(json.dumps(ledger), encoding="utf-8")
             gradle = (root / "mobile/build.gradle.kts").read_text(encoding="utf-8")
-            gradle = gradle.replace('versionCode = 45', 'versionCode = 44').replace(
-                'versionName = "1.1.57"', 'versionName = "1.1.56"'
-            )
+            gradle = re.sub(r"(?m)^(\s*versionCode\s*=\s*)\d+", r"\g<1>44", gradle)
+            gradle = re.sub(r'(?m)^(\s*versionName\s*=\s*)"[^"]+"', r'\g<1>"1.1.56"', gradle)
             (root / "mobile/build.gradle.kts").write_text(gradle, encoding="utf-8")
             subprocess.run(["git", "init", "--quiet"], cwd=root, check=True)
             subprocess.run(["git", "config", "user.name", "CarPaly Test"], cwd=root, check=True)

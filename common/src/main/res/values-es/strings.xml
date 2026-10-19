@@ -732,4 +732,5 @@
     <string name="head_unit_profile_description">El perfil Xingyue L usa la geometría publicada de la pantalla central de 1920 × 720, 300 mm de ancho físico, pantalla completa, H.264 y 60 fps. No accede a datos del vehículo, al cuadro de instrumentos ni a los mandos. Vuelve a conectar CarPlay tras cambiarlo.</string>
     <string name="geely_kx11_candidate_profile">Perfil candidato Geely KX11</string>
     <string name="geely_kx11_detection_evidence">Detección KX11: %1$s · %2$s</string>
+    <string name="open_wifi_settings_for_carplay">Abrir ajustes de Wi-Fi</string>
 </resources>

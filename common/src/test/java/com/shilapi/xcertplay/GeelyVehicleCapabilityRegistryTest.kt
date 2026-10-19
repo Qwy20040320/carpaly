@@ -85,6 +85,42 @@ class GeelyVehicleCapabilityRegistryTest {
         assertTrue(report.contains("VEHICLE_CONTROL=DISABLED_NO_AUTHORIZED_WRITE_API"))
     }
 
+    @Test fun oneOsProbeDistinguishesMissingPermissionFromStaticVisibility() {
+        val profile = GeelyKx11Profile.KX11_2024_TIANJI_A2
+        val missing = GeelyVehicleCapabilityRegistry.evaluate(
+            profile = profile,
+            oneOsPermission = GeelyPermissionObservation.NOT_REQUESTED,
+            climatePermission = GeelyPermissionObservation.NOT_REQUESTED,
+            presentationDisplayCount = null,
+            oneOsInputService = GeelyInputServiceProbeResult(GeelyInputServiceProbeState.NOT_FOUND),
+        )
+        val permissionRequired = GeelyVehicleCapabilityRegistry.evaluate(
+            profile = profile,
+            oneOsPermission = GeelyPermissionObservation.NOT_REQUESTED,
+            climatePermission = GeelyPermissionObservation.NOT_REQUESTED,
+            presentationDisplayCount = null,
+            oneOsInputService = GeelyInputServiceProbeResult(
+                GeelyInputServiceProbeState.PERMISSION_REQUIRED,
+                "geely.oneos.permission.SERVICE",
+            ),
+        )
+        val visibleOnly = GeelyVehicleCapabilityRegistry.evaluate(
+            profile = profile,
+            oneOsPermission = GeelyPermissionObservation.NOT_REQUESTED,
+            climatePermission = GeelyPermissionObservation.NOT_REQUESTED,
+            presentationDisplayCount = null,
+            oneOsInputService = GeelyInputServiceProbeResult(GeelyInputServiceProbeState.STATIC_EVIDENCE_ONLY),
+        )
+
+        assertEquals(GeelyCapabilityState.OEM_SERVICE_NOT_FOUND,
+            missing.finding(GeelyCapability.ONEOS_INPUT_SERVICE).state)
+        assertEquals(GeelyCapabilityState.OEM_SERVICE_PERMISSION_REQUIRED,
+            permissionRequired.finding(GeelyCapability.ONEOS_INPUT_SERVICE).state)
+        assertEquals(GeelyCapabilityState.STATIC_EVIDENCE_ONLY,
+            visibleOnly.finding(GeelyCapability.ONEOS_INPUT_SERVICE).state)
+        assertTrue(visibleOnly.finding(GeelyCapability.ONEOS_INPUT_SERVICE).evidence.contains("no service binding"))
+    }
+
     private fun GeelyCapabilitySnapshot.finding(capability: GeelyCapability) =
         findings.first { it.capability == capability }
 }

@@ -1,8 +1,11 @@
 package com.shilapi.xcertplay
 
 import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.content.res.ColorStateList
@@ -18,6 +21,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.media.MediaCodecList
 import android.media.MediaFormat
+import android.net.wifi.WifiManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -25,6 +29,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.Process
 import android.os.SystemClock
+import android.provider.Settings
 import android.text.Editable
 import android.text.InputType
 import android.text.TextUtils
@@ -127,6 +132,12 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private var connectionPanel: View? = null
     private var wifiRecoveryButton: View? = null
+    private var wifiSettingsButton: View? = null
+    private var wifiSettingsAutoOpened = false
+    private var wifiSettingsPanelAwaitingResult = false
+    private var wifiEnableRequestAttempted = false
+    private var wifiStateReceiverRegistered = false
+    private var lastWifiRadioState = WirelessWifiRadioState.UNKNOWN
     private var reconnectAttempts = 0
     private val siriKey = WheelSiriKey()
     private val siriKeyPresses = WheelKeyPresses()
@@ -137,6 +148,20 @@ class CarPlayHostActivity : ComponentActivity() {
     private var startupFailureGeneration = -1
     private lateinit var airPlayIdentity: AirPlayIdentity
     private var languagePreferenceAtCreate = AppLocale.SYSTEM
+
+    private val wifiStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != WifiManager.WIFI_STATE_CHANGED_ACTION) return
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                val state = WirelessWifiStartup.radioState(this@CarPlayHostActivity)
+                if (state != lastWifiRadioState) {
+                    appendLog("Wireless startup Wi-Fi radio state=${state.name.lowercase()}")
+                }
+                maybeStartCarPlay()
+            }
+        }
+    }
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(AppLocale.wrap(newBase))
@@ -201,6 +226,12 @@ class CarPlayHostActivity : ComponentActivity() {
                 appendLog("Wired startup system VPN consent result=not_granted")
                 setStatus(getString(R.string.vpn_consent_was_denied))
             }
+        }
+    private val wifiSettingsPanel =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            wifiSettingsPanelAwaitingResult = false
+            appendLog("Wireless startup Wi-Fi settings returned")
+            maybeStartCarPlay()
         }
     private val wirelessPermissions =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -404,6 +435,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private var remoteMfiServer = ""
     private var remoteMfiToken = ""
     private var wirelessPermissionsReady = false
+    private var wirelessRadioReady = false
     private var wirelessHotspotMode = WirelessHotspotMode.WIFI_P2P
     private var manualHotspotSsid = ""
     private var existingWifiSsid = ""
@@ -790,6 +822,105 @@ class CarPlayHostActivity : ComponentActivity() {
             checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED
         }
 
+    private fun refreshWirelessRadioReadiness(): Boolean {
+        if (!wirelessEnabled || !wirelessPermissionsReady) {
+            wirelessRadioReady = !wirelessEnabled
+            wifiSettingsButton?.visibility = View.GONE
+            return wirelessRadioReady
+        }
+
+        val state = WirelessWifiStartup.radioState(this)
+        if (state != lastWifiRadioState) {
+            appendLog("Wireless startup Wi-Fi radio state=${state.name.lowercase()}")
+            lastWifiRadioState = state
+        }
+        val action = WirelessWifiStartup.action(
+            wireless = wirelessEnabled,
+            mode = wirelessHotspotMode,
+            state = state,
+            appMayControlRadio = WirelessWifiStartup.appMayControlRadio(this),
+        )
+        when (action) {
+            WirelessWifiStartupAction.CONTINUE -> {
+                wirelessRadioReady = true
+                wifiSettingsAutoOpened = false
+                wifiEnableRequestAttempted = false
+                wifiSettingsButton?.visibility = View.GONE
+                return true
+            }
+            WirelessWifiStartupAction.WAIT_FOR_WIFI -> {
+                wirelessRadioReady = false
+                wifiSettingsButton?.visibility = View.VISIBLE
+                setConnectionStage(getString(R.string.turn_on_wi_fi_in_the_head_unit_s_settings_to_connect))
+                return false
+            }
+            WirelessWifiStartupAction.REQUEST_PRIVILEGED_ENABLE -> {
+                wirelessRadioReady = false
+                wifiSettingsButton?.visibility = View.VISIBLE
+                if (!wifiEnableRequestAttempted) {
+                    wifiEnableRequestAttempted = true
+                    if (WirelessWifiStartup.requestEnableIfAuthorized(this)) {
+                        appendLog("Wireless startup requested Wi-Fi enable through authorized platform role")
+                        setConnectionStage(getString(R.string.turn_on_wi_fi_in_the_head_unit_s_settings_to_connect))
+                        return false
+                    }
+                    appendLog("Wireless startup platform Wi-Fi enable was unavailable; falling back to user settings")
+                }
+                showWirelessWifiSettings(automatic = true)
+                return false
+            }
+            WirelessWifiStartupAction.OPEN_USER_SETTINGS -> {
+                wirelessRadioReady = false
+                wifiSettingsButton?.visibility = View.VISIBLE
+                setConnectionStage(getString(R.string.turn_on_wi_fi_in_the_head_unit_s_settings_to_connect))
+                showWirelessWifiSettings(automatic = true)
+                return false
+            }
+        }
+    }
+
+    private fun showWirelessWifiSettings(automatic: Boolean) {
+        if (!hostAppearanceResumed) return
+        if (automatic && wifiSettingsAutoOpened) return
+        if (wifiSettingsPanelAwaitingResult) return
+        if (automatic) wifiSettingsAutoOpened = true
+
+        val panelIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            Intent(Settings.Panel.ACTION_WIFI)
+        } else {
+            Intent(Settings.ACTION_WIFI_SETTINGS)
+        }
+        wifiSettingsPanelAwaitingResult = true
+        try {
+            wifiSettingsPanel.launch(panelIntent)
+            appendLog("Wireless startup opened Android Wi-Fi settings panel")
+        } catch (_: ActivityNotFoundException) {
+            launchFallbackWifiSettings()
+        } catch (_: RuntimeException) {
+            wifiSettingsPanelAwaitingResult = false
+            wifiSettingsButton?.visibility = View.VISIBLE
+            appendLog("Wireless startup could not open Wi-Fi settings while activity was not ready")
+        }
+    }
+
+    private fun launchFallbackWifiSettings() {
+        wifiSettingsPanelAwaitingResult = false
+        try {
+            wifiSettingsPanelAwaitingResult = true
+            wifiSettingsPanel.launch(Intent(Settings.ACTION_WIFI_SETTINGS))
+            appendLog("Wireless startup opened Android Wi-Fi settings fallback")
+        } catch (_: ActivityNotFoundException) {
+            wifiSettingsPanelAwaitingResult = false
+            wifiSettingsButton?.visibility = View.VISIBLE
+            setConnectionStage(getString(R.string.turn_on_wi_fi_in_the_head_unit_s_settings_to_connect))
+            appendLog("Wireless startup Wi-Fi settings activity unavailable")
+        } catch (_: RuntimeException) {
+            wifiSettingsPanelAwaitingResult = false
+            wifiSettingsButton?.visibility = View.VISIBLE
+            appendLog("Wireless startup could not open fallback Wi-Fi settings")
+        }
+    }
+
     private fun requiredWirelessPermissions(): List<String> =
         WirelessPermissions.required(wirelessHotspotMode, Build.VERSION.SDK_INT)
 
@@ -822,6 +953,15 @@ class CarPlayHostActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         isActivityStarted = true
+        if (!wifiStateReceiverRegistered) {
+            ContextCompat.registerReceiver(
+                this,
+                wifiStateReceiver,
+                IntentFilter(WifiManager.WIFI_STATE_CHANGED_ACTION),
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+            wifiStateReceiverRegistered = true
+        }
         logThemeState(ThemeModeDiagnostics.Source.START, resources.configuration)
         mainHandler.removeCallbacks(pollConfiguration)
         mainHandler.post(pollConfiguration)
@@ -1301,6 +1441,10 @@ class CarPlayHostActivity : ComponentActivity() {
         closePicturePanel()
         // The controller, USB/iAP2 link, and VPN attachment intentionally outlive the UI.
         isActivityStarted = false
+        if (wifiStateReceiverRegistered) {
+            runCatching { unregisterReceiver(wifiStateReceiver) }
+            wifiStateReceiverRegistered = false
+        }
         logThemeState(ThemeModeDiagnostics.Source.STOP, resources.configuration)
         mainHandler.removeCallbacks(pollConfiguration)
         super.onStop()
@@ -1508,6 +1652,14 @@ class CarPlayHostActivity : ComponentActivity() {
             gravity = Gravity.CENTER
         }
         panel.addView(instructions)
+        val wifiSettings = Button(this).apply {
+            text = getString(R.string.open_wifi_settings_for_carplay)
+            isAllCaps = false
+            visibility = View.GONE
+            setOnClickListener { showWirelessWifiSettings(automatic = false) }
+            wifiSettingsButton = this
+        }
+        panel.addView(wifiSettings, LinearLayout.LayoutParams(dp(300), dp(64)).apply { bottomMargin = dp(12) })
         val recovery = Button(this).apply {
             text = getString(R.string.reset_carplay_wi_fi)
             isAllCaps = false
@@ -4609,6 +4761,11 @@ class CarPlayHostActivity : ComponentActivity() {
             return
         }
         if (controller == null && adoptBackgroundSession()) return
+        val radioReady = if (wirelessEnabled && wirelessPermissionsReady) {
+            refreshWirelessRadioReadiness()
+        } else {
+            !wirelessEnabled
+        }
         // The video view is chosen once per activity; a changed Smooth video setting needs a new one.
         if (controller == null && AirPlayPersistence.loadSmoothVideo(this) != smoothVideo) {
             appendLog("Smooth video setting changed; rebuilding the video view")
@@ -4619,7 +4776,7 @@ class CarPlayHostActivity : ComponentActivity() {
             return
         }
         val size = activeDisplaySize
-        val transportReady = if (wirelessEnabled) wirelessPermissionsReady else vpnReady
+        val transportReady = if (wirelessEnabled) wirelessPermissionsReady && radioReady else vpnReady
         val locationReady = !locationReportingEnabled || locationPermissionAvailable
         val blockReason = CarPlayStartupGate.blockingReason(
             CarPlayStartupReadiness(

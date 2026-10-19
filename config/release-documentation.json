@@ -17,24 +17,22 @@
   },
   "candidate": {
     "status": "local_candidate",
-    "versionName": "1.1.57",
-    "summaryZh": "v1.1.57/code 45 是本地 Release 候选：保留 OPUS 解码器兼容回退、改进有线启动与连接诊断，并增强协议音频分类及日志脱敏。现存候选 APK 的 d9 签名已核验，但与整合提交的可复现源码对应关系尚未建立；实车功能尚未测试。",
-    "summaryEn": "v1.1.57/code 45 is a local Release candidate retaining OPUS decoder compatibility fallback, improving wired-startup diagnostics, and strengthening protocol-audio classification and log redaction. The existing APK's d9 signer was checked, but reproducible source provenance against the integration commit is not established; real-vehicle behavior remains untested.",
+    "versionName": "1.1.58",
+    "summaryZh": "v1.1.58/code 46 已在本地版本台账预留；截至 2026-10-19，GitHub 最新正式 Release 仍为 v1.1.56，尚无 v1.1.58 Tag 或 Release，本轮未构建 Release APK。本轮加入 Android 11 普通应用可用的 Wi-Fi 启动门控：缺少系统/设备所有者权限时引导用户打开官方 Wi-Fi 面板，并在无线状态变化后重试连接；新增只读 OneOS InputService 服务/权限探测和 KX11_A2 候选车型 Profile，不绑定 Binder、不映射未知按键，也不发送车辆控制命令。接口与车辆行为均未实车验证；OTA 未启用。",
+    "summaryEn": "v1.1.58/code 46 is reserved in the local version ledger; as checked on 2026-10-19, GitHub's latest formal Release remains v1.1.56 and no v1.1.58 tag or Release exists. No Release APK was built in this round. This round adds an Android 11-compatible Wi-Fi startup gate: ordinary apps without system/device-owner authority are directed to the official Wi-Fi panel and connection is retried after radio state changes. It also adds a read-only OneOS InputService availability/permission probe and a candidate KX11_A2 profile; it does not bind the Binder service, map unknown keys, or send vehicle commands. OEM interfaces and vehicle behavior remain unverified in a real vehicle; OTA is disabled.",
     "vehicleStatus": "NOT_TESTED",
     "releaseClaims": [],
     "releaseNotesZh": [
-      "v1.1.57/code 45 是本地候选，不代表 GitHub Release；现存 APK 的哈希、包名、版本和 d9 签名已核验，但与本次整合提交的可复现源码对应关系尚未建立。",
-      "本轮将应用更新完整控件整合到关于页面，保留既有更新业务逻辑、持久化和单一诊断导出入口。",
-      "增加应用私有、脱敏、限量滚动的结构化运行日志，并对重复旧诊断行限流；不记录协议载荷或原始音频。",
-      "保留 V1.1.55 的 OPUS 输出能力探测修复。音乐自动暂停仍是历史反馈；V1.1.54 日志未复现，根因未知，本轮未修改音频状态机。",
-      "本轮代码未在真实车辆上验证；CarPlay、OPUS 实际解码与扬声器路由、音乐自动暂停、导航语音、顶部状态栏、HUD、仪表、方向盘及车辆数据均保持 NOT_TESTED。OTA 未启用。"
+      "v1.1.58/code 46 已在本地版本台账预留；截至 2026-10-19，GitHub 尚无对应 Tag 或 Release；本轮未构建 Release APK，OTA 未启用。",
+      "增加 Android 11 Wi-Fi 启动门控：普通应用权限不足时打开系统 Wi-Fi 面板，不绕过平台限制；无线状态变化后重新检查连接条件。",
+      "增加只读 OneOS InputService 服务/权限可用性探测及 KX11_A2 候选 Profile；不建立 OEM Binder 会话、不猜测方向盘键码、不发送车辆写入命令。",
+      "Wi-Fi 与 Profile 的纯逻辑测试通过；全量 Android 单元测试、Lint 和内部 Debug assemble 本轮已运行。所有真实 OEM、CarPlay、音频、显示、方向盘和车辆数据功能仍需目标车辆验证。"
     ],
     "releaseNotesEn": [
-      "v1.1.57/code 45 is a local candidate, not a GitHub Release. The existing APK hash, package, version, and d9 signer were checked, but reproducible source provenance against this integration commit has not been established.",
-      "The full app-update controls now live in About, reusing the existing update logic, persistence, and single diagnostic-export flow.",
-      "Adds a private, redacted, size-bounded structured runtime log with duplicate-line rate limiting; it does not record protocol payloads or raw audio.",
-      "Retains the V1.1.55 OPUS output capability detection fix. Media auto-pause remains a historical report; V1.1.54 logs did not reproduce it, its cause is unknown, and this round did not change the audio state machine.",
-      "This source has not been tested in a real vehicle. CarPlay, actual OPUS decoding and speaker routing, media auto-pause, navigation audio, OEM status bar, HUD, cluster, steering-wheel, and vehicle-data behavior remain NOT_TESTED. OTA remains disabled."
+      "v1.1.58/code 46 is reserved in the local version ledger; as checked on 2026-10-19, no corresponding GitHub tag or Release exists. No Release APK was built in this round, and OTA remains disabled.",
+      "Adds an Android 11 Wi-Fi startup gate: ordinary apps lacking platform authority are directed to the system Wi-Fi panel; no platform restriction is bypassed, and connection readiness is rechecked after radio state changes.",
+      "Adds read-only OneOS InputService availability/permission discovery and a candidate KX11_A2 profile; it does not bind an OEM Binder service, guess steering key codes, or issue vehicle writes.",
+      "Pure Wi-Fi/profile tests passed; the full Android unit-test, Lint, and internal Debug assemble CI command ran in this round. Real-vehicle CarPlay, OEM, audio, display, steering-wheel, and vehicle-data behavior remains unverified."
     ]
   },
   "vehicleFeedback": [

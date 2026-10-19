@@ -20,6 +20,10 @@ internal enum class GeelyCapabilityState {
     NO_PRESENTATION_DISPLAY,
     DISPLAY_QUERY_UNAVAILABLE,
     DISABLED_NO_AUTHORIZED_WRITE_API,
+    OEM_SERVICE_NOT_FOUND,
+    OEM_SERVICE_UNAVAILABLE,
+    OEM_SERVICE_PERMISSION_REQUIRED,
+    SERVICE_QUERY_UNAVAILABLE,
 }
 
 internal enum class GeelyCapability {
@@ -32,6 +36,7 @@ internal enum class GeelyCapability {
     MULTI_DISPLAY,
     CLIMATE_STATUS,
     VEHICLE_CONTROL,
+    ONEOS_INPUT_SERVICE,
 }
 
 internal data class GeelyCapabilityFinding(
@@ -78,6 +83,7 @@ internal object GeelyVehicleCapabilityRegistry {
             oneOsPermission = permissionObservation(context, ONEOS_SERVICE_PERMISSION),
             climatePermission = permissionObservation(context, CAR_CLIMATE_CONTROL_PERMISSION),
             presentationDisplayCount = displayCount,
+            oneOsInputService = GeelyInputServiceProbe.inspect(context),
         )
     }
 
@@ -87,6 +93,9 @@ internal object GeelyVehicleCapabilityRegistry {
         oneOsPermission: GeelyPermissionObservation,
         climatePermission: GeelyPermissionObservation,
         presentationDisplayCount: Int?,
+        oneOsInputService: GeelyInputServiceProbeResult = GeelyInputServiceProbeResult(
+            GeelyInputServiceProbeState.NOT_QUERIED,
+        ),
     ): GeelyCapabilitySnapshot {
         val steeringState = when {
             profile == null -> GeelyCapabilityState.PROFILE_NOT_SELECTED
@@ -127,6 +136,23 @@ internal object GeelyVehicleCapabilityRegistry {
             else GeelyCapabilityState.STATIC_EVIDENCE_ONLY
         val staticEvidence = if (profile == null) "select a KX11 profile for this capability report"
             else "third-party APK evidence only; current service and permission grant are not verified"
+        val inputServiceState = when {
+            profile == null -> GeelyCapabilityState.PROFILE_NOT_SELECTED
+            oneOsInputService.state == GeelyInputServiceProbeState.NOT_FOUND -> GeelyCapabilityState.OEM_SERVICE_NOT_FOUND
+            oneOsInputService.state == GeelyInputServiceProbeState.DISABLED ||
+                oneOsInputService.state == GeelyInputServiceProbeState.NOT_EXPORTED ->
+                GeelyCapabilityState.OEM_SERVICE_UNAVAILABLE
+            oneOsInputService.state == GeelyInputServiceProbeState.PERMISSION_REQUIRED ->
+                GeelyCapabilityState.OEM_SERVICE_PERMISSION_REQUIRED
+            oneOsInputService.state == GeelyInputServiceProbeState.STATIC_EVIDENCE_ONLY ->
+                GeelyCapabilityState.STATIC_EVIDENCE_ONLY
+            else -> GeelyCapabilityState.SERVICE_QUERY_UNAVAILABLE
+        }
+        val inputServiceEvidence = if (profile == null) {
+            "select a KX11 profile before querying the OneOS input component"
+        } else {
+            "${oneOsInputService.diagnosticEvidence()}; no service binding or listener registration was attempted"
+        }
 
         return GeelyCapabilitySnapshot(
             profileKey = profile?.key,
@@ -144,6 +170,7 @@ internal object GeelyVehicleCapabilityRegistry {
                     GeelyCapabilityState.DISABLED_NO_AUTHORIZED_WRITE_API,
                     "all unverified vehicle write/control operations remain disabled",
                 ),
+                GeelyCapabilityFinding(GeelyCapability.ONEOS_INPUT_SERVICE, inputServiceState, inputServiceEvidence),
             ),
         )
     }

@@ -54,6 +54,20 @@ class HeadUnitProfileTest {
 
     @Test fun `candidate labels identify manual selection without claiming compatibility`() {
         assertEquals("KX11 2024 天际版", GeelyVehicleAdapter.label(GeelyKx11Profile.KX11_2024_TIANJI))
+        assertEquals("KX11 2024 Tianji A2 (candidate)",
+            GeelyVehicleAdapter.label(GeelyKx11Profile.KX11_2024_TIANJI_A2))
         assertEquals("KX11 Generic", GeelyVehicleAdapter.label(GeelyKx11Profile.KX11_GENERIC))
+    }
+
+    @Test fun `explicit KX11 A2 identity is a candidate and does not infer OEM compatibility`() {
+        val detection = GeelyVehicleAdapter.detect(GeelyVehicleEvidence(
+            manufacturer = "ECARX", brand = "Geely", product = "KX11_A2", model = "Xingyue L",
+            fingerprint = "geely/kx11_a2/user", display = "Galaxy OS", androidApi = 30,
+        ))
+
+        assertEquals(GeelyDetectionConfidence.IDENTIFIED, detection.confidence)
+        assertEquals(GeelyKx11Profile.KX11_2024_TIANJI_A2, detection.profile)
+        // The profile is identification metadata only; it enables no vehicle operation.
+        assertTrue(detection.evidence.any { it.contains("KX11") })
     }
 }

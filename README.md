@@ -52,7 +52,7 @@ GitHub 最新正式 Release：[v1.1.56](https://github.com/Qwy20040320/carpaly/r
 ### 当前候选版本
 
 <!-- CARPALY:CANDIDATE:START -->
-**本地候选：v1.1.57 / versionCode 45。** 尚无公开 Tag、Release 或下载链接。本地 APK 的哈希、版本和 d9 签名可核验，但它与整合后源码提交的可复现对应关系尚未建立。真实车辆功能仍为 NOT_TESTED；OTA 未启用。
+**本地版本台账候选：v1.1.58 / versionCode 46。** 截至 2026-10-19，GitHub 最新正式 Release 仍为 v1.1.56，尚无 v1.1.58 Tag 或 Release；本轮未构建 Release APK。改动包含受 Android 平台权限约束的 Wi-Fi 启动门控、只读 OneOS InputService 服务/权限探测及 KX11_A2 车型 Profile；未绑定 OEM Binder、猜测按键码或发送车辆写入命令。目标车辆与全部 OEM 行为仍为 NOT_TESTED；OTA 未启用。
 <!-- CARPALY:CANDIDATE:END -->
 
 ### 近期实车反馈（用户报告，非维护者复测）
@@ -187,7 +187,7 @@ GitHub 发布标签、日期、正式/预发布状态、实际附件及可验证
 
 <!-- CARPALY:DOWNLOADS:START -->
 - **最新正式 Release 页面：** [v1.1.56](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.56)；APK 未通过当前验证记录核对，不提供直链。
-- **本地候选：** v1.1.57 / versionCode 45，尚无公开下载链接。
+- **本地版本台账候选：** v1.1.58 / versionCode 46，本轮未构建 Release APK；截至 2026-10-19，GitHub 尚无对应 Tag 或 Release。
 - **发布元数据冲突：** GitHub 将 v1.1.52 标为正式 Release，但人工正文仍含预发布措辞；正文保持原样。
 - 预发布及历史附件仅在各自 Release 页面标示，不代表当前正式推荐版本。
 <!-- CARPALY:DOWNLOADS:END -->
@@ -331,13 +331,13 @@ Latest formal Release: [v1.1.56](https://github.com/Qwy20040320/carpaly/releases
 
 The GitHub channel metadata for v1.1.52 conflicts with pre-release wording in its hand-written notes; the notes are preserved.
 
-Local candidate: `v1.1.57` / code `45`; no public tag, Release, or download URL. Its APK metadata and signer are locally checkable, but source reproducibility against the integrated commit is not established. Vehicle behavior remains NOT_TESTED.
+Local ledger candidate: `v1.1.58` / code `46`; as checked on 2026-10-19, the latest formal GitHub Release remains v1.1.56 and no v1.1.58 tag or Release exists. No Release APK was built in this round. Changes include a platform-permission-aware Wi-Fi startup gate, read-only OneOS InputService discovery, and a candidate KX11_A2 profile; no OEM Binder binding, guessed key mapping, or vehicle write is performed. Target-vehicle and OEM behavior remain NOT_TESTED; OTA remains disabled.
 <!-- CARPALY:ENGLISH_RELEASES:END -->
 
 ### Download and setup
 
 <!-- CARPALY:ENGLISH_DOWNLOADS:START -->
-See the [latest formal Release page](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.56). No direct APK link is provided until the asset is matched to its verification record. Local candidate `v1.1.57` / code `45` is not public.
+See the [latest formal Release page](https://github.com/Qwy20040320/carpaly/releases/tag/v1.1.56). No direct APK link is provided until the asset is matched to its verification record. Local ledger candidate `v1.1.58` / code `46` has no Release APK built in this round; as checked on 2026-10-19, no matching public tag or Release exists.
 <!-- CARPALY:ENGLISH_DOWNLOADS:END -->
 
 Do not uninstall an existing install or clear app data to work around signer/version issues. This is not a claim of complete vehicle validation. The project requires Android API 25 or later. For source builds, use JDK 25, Gradle Wrapper 9.5, Android SDK Platform 37, and NDK 28.2.13676358, then run:
